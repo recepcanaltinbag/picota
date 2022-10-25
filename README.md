@@ -1,8 +1,9 @@
 <p align="center">
 <img src="logo/picota_logo.png" alt="Picota logo" width="150"/>
-</p><p align="center">
-An extendible [P]()ipeline for de-novo [I]()dentification of [CO]()mposite [T]()ransposons from [A]()ssembly graphs
 </p>
+
+An extendible [P]()ipeline for [I]()dentification of [CO]()mposite [T]()ransposons from [A]()ssembly graphs
+
 
 
 - [PICOTA](#picota)
