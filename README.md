@@ -127,7 +127,6 @@ PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and 
 | optional | `--keep_temp_files` | `default=False`, to keep temp assembly files, otherwise just gfa and fasta file will be stayed |
 | optional | `--skip_filtering` | `default=False`, to skip filtering process |
 | optional | `--meta` | `default=''`, if you use metagenomic data |
-
 | optional | `--path_of_spades` | `default='spades.py'`, spades.py path if you dont have spades.py in PATH |
 | optional | `--path_of_fastp` | `default='fastp'`, fastp path if you dont have fastp in PATH |
 
