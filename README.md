@@ -168,6 +168,8 @@ PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and 
 
 ### 'scoring' module: Scoring Candidates
 
+PICOTA needs [prodigal](https://github.com/hyattpd/Prodigal) to find CDS regions and [BLAST+](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/) for (`blastn`) and (`madeblastdb`) programs for sequence search.
+
 
 |__type__ |__command__ |__description__ |
 | --- | --- | --- |
