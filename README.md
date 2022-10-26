@@ -150,7 +150,36 @@ PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and 
 
 ### 'db' module: Downloading Databases
 
+|__type__ |__command__ |__description__ |
+| --- | --- | --- |
+| required | `name` | choices=[`antibiotics`, `xenobiotics`,`insertion_sequences`], select which db you want to download |
+| optional | `--db_folder` | `default='DBs'`, folder of DBs, I recommend to use default naming, because scoring module will need this folder, you have to specify if needed in its input |
+| optional | `--link_of_antibiotics` | `default='https://card.mcmaster.ca/latest/data'`, link of Antibiotics db to download |
+| optional | `--link_of_is` | `default='https://github.com/thanhleviet/ISfinder-sequences/raw/master/IS.fna'`, link of ISs db to download |
+| optional | `--input_pathway_list` | `default='xenobiotics_pathway_list'`, a file with KEGG ko numbers splitted by newline for xenobiotics pathway |
+| optional | `--kegg_db_temp_folder` | `default='kegg_db_temp'`, temp folder for KEGG files |
+| optional | `--metabolism_folder` | `default='Xenobiotics'`, metabolism_folder for KEGG files |
+| optional | `--max_number_of_attends` | `default=50`, maximum number of attend for KEGG download |
+| optional | `--antibiotics_folder` | `default='Antibiotics'`, antibiotics out folder |
+| optional | `--model_type` | `default='nucleotide_fasta_protein_homolog_model'`, antibiotics model for CARD DB |
+| optional | `--is_folder` | `default='InsertionSequences'`, IS folder |
+| optional | `--is_file_name` | `default='IS.database.fasta'`, IS file name |
+
+
 ### 'scoring' module: Scoring Candidates
+
+
+|__type__ |__command__ |__description__ |
+| --- | --- | --- |
+| required | `analysis_folder` | Folder path of cycle fasta files, output of analysis module |
+| required | `out_folder` | out folder for the pipeline |
+| optional | `--path_of_prodigal` | `default='prodigal'`, prodigal path if you dont have prodigal in PATH |
+| optional | `--path_of_blastn` | `default='blastn'`, blastn path if you dont have blastn in PATH |
+| optional | `--path_of_makeblastdb` | `default='makeblastdb'`, makeblastdb path if you dont have makeblastdb in PATH |
+| optional | `--mean_of_comptns` | `default=12312`, Mean length of Composite Transposons |
+| optional | `--std_of_comptns` | `default=1871`, Standard deviation of Composite Transposons |
+
+
 
 ### 'all' module: All In One Command
 
