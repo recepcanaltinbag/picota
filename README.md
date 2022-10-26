@@ -114,7 +114,40 @@ PICOTA needs [SRA Toolkit](https://github.com/ncbi/sra-tools/wiki/02.-Installing
 PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and [SPAdes](https://github.com/ablab/spades) to generate assembly graph (`.gfa file`)
 
 
+|__type__ |__command__ |__description__ |
+| --- | --- | --- |
+| required | `rawread_folder` | folder path of raw reads |
+| required | `out_folder` | out folder for the pipeline, sra files will be downloaded in `gfa_files` and `contig_files` folder in out folder |
+| optional | `--batch` | `default=False`, if given, batch analysis will be made (PICOTA assumes there are folders which have fastq file inside in the given rawread_folder.), else in default, raw read folder contains fastq files (not folders). Using this option is good when you want to analysis more than one genome |
+| optional | `--threads` | `default=2`, number of threads for assembly process |
+| optional | `--k_mer_list` | `default=79,99`, Longer list make analysis longer, you can add different k-mers to the list with comma. They must be odd and maximum 127. |
+| optional | `--quiet` | `default=False`, activate this if you want quiet mode for assembly |
+| optional | `--reads_to_process` | `default=5000000`, fastp option, you can increase if you need more reads to process |
+| optional | `--fastp_q` | `default=20`, fastp option, quality threshold for the raw reads |
+| optional | `--keep_temp_files` | `default=False`, to keep temp assembly files, otherwise just gfa and fasta file will be stayed |
+| optional | `--skip_filtering` | `default=False`, to skip filtering process |
+| optional | `--meta` | `default=''`, if you use metagenomic data |
+
+| optional | `--path_of_spades` | `default='spades.py'`, spades.py path if you dont have spades.py in PATH |
+| optional | `--path_of_fastp` | `default='fastp'`, fastp path if you dont have fastp in PATH |
+
+
 ### 'analysis' module: Analysis of Assembly Graph
+
+|__type__ |__command__ |__description__ |
+| --- | --- | --- |
+| required | `gfa_folder` | folder path of `.gfa` files |
+| required | `out_folder` | out folder for the pipeline, sra files will be downloaded in `analysis` folder in out folder |
+| optional | `--find_all_path` | `default=True`, finding all possible paths is best, but sometimes it can take too long running time, I recommend to try default unless you need very high speed |
+| optional | `--path_limit` | `default=15`, High number of path limit will slow the analysis, I recommend a value between 10-25, because if the path is longer than 25, it is probably not a composite transposon unless the average node lenghts are very small |
+| optional | `--min_size_of_cycle` | `default=1500`, min size for composite transposons (assumption in cyclic form) |
+| optional | `--max_size_of_cycle` | `default=100000`, max size for composite transposons (assumption in cyclic form) |
+| optional | `--name_prefix_cycle` | `default=''`, prefix of cycles in output fasta file |
+| optional | `--min_component_number` | `default=1`, min size of components |
+| optional | `--max_component_number` | `default=25`, min size of components |
+| optional | `--k_mer_sim` | `default=200`, splitting k_mers when looking similarities, kind of ANI |
+| optional | `--threshold_sim` | `default=80`, threshold in similarity elimination |
+
 
 ### 'db' module: Downloading Databases
 
