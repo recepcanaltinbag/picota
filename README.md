@@ -178,6 +178,18 @@ PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and 
 | optional | `--path_of_makeblastdb` | `default='makeblastdb'`, makeblastdb path if you dont have makeblastdb in PATH |
 | optional | `--mean_of_comptns` | `default=12312`, Mean length of Composite Transposons |
 | optional | `--std_of_comptns` | `default=1871`, Standard deviation of Composite Transposons |
+| optional | `--total_score_type` | `default=0`, choices=[`0`, `1`,`2`] Can be 0,1 or 2. To select the main scoring system in the alimination process |
+| optional | `--threshold_final_score` | `default=50`, Lower scores than `50` will be eliminated in final results |
+| optional | `--max_z` | `default=20`, Maximum Z score, it is needed to calculate inverse normalization of z-scores |
+| optional | `--dist_type` | `default=1`, choices=[`0`, `1`]  dist type 1 related with negative z scores is 0,  dist type 0 is normal dist of z scores, 1 is more accurate because lower lenghts means low number of genes, so score will be lower anyway |
+| optional | `--splitted_cycle_folder` | `default='splitted_cycle'`, splitted cycles, it is temp folder for prodigal |
+| optional | `--prodigal_out_folder` | `default='prodigal'`, prodigal out folder, it is temp folder |
+| optional | `--out_blast_folder` | `default='blast_files'`, blast folder for temp blast files and dbs |
+| optional | `--picota_out_folder` | `default='picota_out'`, picota out folder for temp picota files |
+| optional | `--path_to_antibiotics` | `default='DBs/Antibiotics/nucleotide_fasta_protein_homolog_model.fasta'`, path of fasta files for antibitoics |
+| optional | `--path_to_xenobiotics` | `default='DBs/Xenobiotics/allXenobiotics.fasta'`, path of fast files for xenobiotics |
+| optional | `--path_to_ises` | `default='DBs/InsertionSequences/IS.database.fasta'`, path of fast files for insertion sequences |
+
 
 
 
