@@ -306,7 +306,7 @@ There are many tools to find the transposons but there is a few tools related to
 To capture the composite transposons in incomplete genomes, assembly graphs built from the raw reads can be very helpful unlike using fasta sequences since the links that are between different parts of genomics sequences are lost in fasta files. Graph algorithms can be used to find transposon motifs, previously known transposons and possible novel composite transposons can be identified even *de-novo*. Then, the candidates can be investigated in existing gene databases for functional analysis. 
 
 <p align="center">
-<img src="logo/1_problem.png" alt="Picota logo" width="850"/>
+<img src="logo/2_flowchart.png" alt="Picota logo" width="850"/>
 </p>
 
 ### Assembly Graph Analysis
