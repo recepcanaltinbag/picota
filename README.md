@@ -136,7 +136,7 @@ PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and 
 |__type__ |__command__ |__description__ |
 | --- | --- | --- |
 | required | `gfa_folder` | folder path of `.gfa` files |
-| required | `out_folder` | out folder for the pipeline, sra files will be downloaded in `analysis` folder in out folder |
+| required | `out_folder` | out folder for the pipeline, result will be in `analysis` folder in out folder |
 | optional | `--find_all_path` | `default=True`, finding all possible paths is best, but sometimes it can take too long running time, I recommend to try default unless you need very high speed |
 | optional | `--path_limit` | `default=15`, High number of path limit will slow the analysis, I recommend a value between 10-25, because if the path is longer than 25, it is probably not a composite transposon unless the average node lenghts are very small |
 | optional | `--min_size_of_cycle` | `default=1500`, min size for composite transposons (assumption in cyclic form) |
@@ -174,7 +174,7 @@ PICOTA needs [prodigal](https://github.com/hyattpd/Prodigal) to find CDS regions
 |__type__ |__command__ |__description__ |
 | --- | --- | --- |
 | required | `analysis_folder` | Folder path of cycle fasta files, output of analysis module |
-| required | `out_folder` | out folder for the pipeline |
+| required | `out_folder` | out folder for the pipeline, the result will be in `picota_out` |
 | optional | `--path_of_prodigal` | `default='prodigal'`, prodigal path if you dont have prodigal in PATH |
 | optional | `--path_of_blastn` | `default='blastn'`, blastn path if you dont have blastn in PATH |
 | optional | `--path_of_makeblastdb` | `default='makeblastdb'`, makeblastdb path if you dont have makeblastdb in PATH |
