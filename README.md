@@ -214,17 +214,29 @@ Detailed usage:
 
 Example usage of the db subcommand with default parameters
 
+To download Antibiotics DB ([CARD](https://card.mcmaster.ca/)):
+
 ```
 python picota.py db antibiotics 
 ```
 
-
-xenobiotics_pathway_list
-
+To download Kegg Xenobiotic Metabolism DB ([KEGG](https://www.genome.jp/kegg/pathway.html)):
 
 ```
 python picota.py db xenobiotics 
 ```
+`xenobiotics_pathway_list` file (a file with KEGG ko numbers splitted by newline for xenobiotics pathway, come with default but you can update with adding more ko numbers from KEGG:
+
+```
+ko00362
+ko00627
+ko00364
+ko00625
+ko00361
+```
+
+
+To download IS Finder Insertion Sequence DB ([ISFinder](https://isfinder.biotoul.fr/)):
 
 ```
 python picota.py db insertion_sequences 
