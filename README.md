@@ -264,6 +264,13 @@ Detailed usage:
 
 PICOTA needs [prodigal](https://github.com/hyattpd/Prodigal) to find CDS regions and [BLAST+](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/) for (`blastn`) and (`madeblastdb`) programs for sequence search.
 
+Example usage of the analysis subcommand with default parameters
+
+```
+python picota.py scoring out_folder_of_pipeline/analysis_folder out_folder_of_pipeline 
+```
+
+Detailed usage:
 
 |__type__ |__command__ |__description__ |
 | --- | --- | --- |
@@ -291,6 +298,16 @@ PICOTA needs [prodigal](https://github.com/hyattpd/Prodigal) to find CDS regions
 
 ### 'all' module: All In One Command
 
+All module starts from sra download module to the end of the PICOTA pipeline. All the optional parameters mentioned above can be used in this module.
+
+Example usage of the analysis subcommand with default parameters
+
+```
+python picota.py all sra_list.txt out_folder_of_pipeline 
+```
+
+
+
 ## Method
 
 ### Composite Transposons
@@ -306,15 +323,35 @@ There are many tools to find the transposons but there is a few tools related to
 To capture the composite transposons in incomplete genomes, assembly graphs built from the raw reads can be very helpful unlike using fasta sequences since the links that are between different parts of genomics sequences are lost in fasta files. Graph algorithms can be used to find transposon motifs, previously known transposons and possible novel composite transposons can be identified even *de-novo*. Then, the candidates can be investigated in existing gene databases for functional analysis. 
 
 <p align="center">
-<img src="logo/2_flowchart.png" alt="Picota logo" width="850"/>
+<img src="logo/1_pipeline.png" alt="Picota logo" width="850"/>
 </p>
+
 
 ### Assembly Graph Analysis
 
 
+<p align="center">
+<img src="logo/2_flowchart.png" alt="Picota logo" width="850"/>
+</p>
+
 
 ### Scoring Functions
+
+There are three different scoring as Scoring0, Scoring1, Scoring2. If Scoring2 == 0, then there is no insertion sequence in the candidate. If Score0 > Score1, then there is more than one interesting gene (such as antibiotics, xenobiotics etc.) in the candidate. I suggest the table below for the interpretation based on Score1: 
+
+|__score__ |__interpretation__ |
+| --- | --- | 
+| Score1 = 0 | not enough |
+| 0 < Score1 <= 50| low |
+| 50 < Score1 <= 100 | moderate |
+| 100 < Score1 <= 150 | high |
+| 150 < Score1 <= 300 | perfect |
+
+
+
 ### Future Analysis
+
+
 ### Clustering
 
 ## FAQ
