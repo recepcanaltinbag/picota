@@ -100,6 +100,21 @@ PICOTA is consist of subcommands which enable you to divide or combine them as y
 
 PICOTA needs [SRA Toolkit](https://github.com/ncbi/sra-tools/wiki/02.-Installing-SRA-Toolkit) for this module. Install SRA Toolkit and make it available with adding it in your PATH or you can give the path of fastq_dump with optional parameter of `--path_of_fastq_dump`. `fastq_dump` is used to obtain fastq files from sra files, so without it, the pipeline will not start. 
 
+`sra_list.txt` file (list of SRA Accessions splitted with new lines) should look like this:
+
+```
+ERR9786618
+SRR6242084
+SRR10869808
+```
+Example usage of the sra_download subcommand with default parameters
+```
+python picota.py sra_download sra_list.txt out_folder_of_pipeline 
+```
+
+Detailed usage:
+
+
 |__type__ |__command__ |__description__ |
 | --- | --- | --- |
 | required | `sra_list` | `.txt` file includes list of SRA Accessions splitted with new lines |
@@ -112,6 +127,44 @@ PICOTA needs [SRA Toolkit](https://github.com/ncbi/sra-tools/wiki/02.-Installing
 ### 'assembly' module: Generating Assembly Graph
 
 PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and [SPAdes](https://github.com/ablab/spades) to generate assembly graph (`.gfa file`)
+
+There is two mode in this module, so be careful when you enter the input folder to the command
+
+If, in `default` mode, Picota assumes there is just one genome's raw read in `rawread_folder` = ERR9786618:
+
+```
+|-- ERR9786618
+  |-- A1.fastq
+  |-- A2.fastq
+```
+
+adding `--batch` command, so Batch is `True`, (to analyze more than one we suggested this) Picota assumes the folder structure:
+
+```
+|-- rawread_folder
+  |-- ERR9786618
+    |-- ERR9786618_1.fastq
+    |-- ERR9786618_2.fastq
+  |-- SRR6242084
+    |-- SRR6242084_1.fastq
+    |-- SRR6242084_2.fastq
+...
+```
+
+
+Example usage of the sra_download subcommand with default parameters
+
+for Default (no Batch):
+```
+python picota.py assembly ERR9786618 out_folder_of_pipeline 
+```
+Batch:
+```
+python picota.py assembly --batch rawread_folder out_folder_of_pipeline 
+```
+
+Detailed usage:
+
 
 
 |__type__ |__command__ |__description__ |
@@ -133,6 +186,15 @@ PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and 
 
 ### 'analysis' module: Analysis of Assembly Graph
 
+Example usage of the analysis subcommand with default parameters
+
+```
+python picota.py analysis out_folder_of_pipeline/gfa_files out_folder_of_pipeline 
+```
+
+Detailed usage:
+
+
 |__type__ |__command__ |__description__ |
 | --- | --- | --- |
 | required | `gfa_folder` | folder path of `.gfa` files |
@@ -149,6 +211,26 @@ PICOTA needs [fastp](https://github.com/OpenGene/fastp) to filter raw reads and 
 
 
 ### 'db' module: Downloading Databases
+
+Example usage of the db subcommand with default parameters
+
+```
+python picota.py db antibiotics 
+```
+
+
+xenobiotics_pathway_list
+
+
+```
+python picota.py db xenobiotics 
+```
+
+```
+python picota.py db insertion_sequences 
+```
+
+Detailed usage:
 
 |__type__ |__command__ |__description__ |
 | --- | --- | --- |
