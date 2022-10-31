@@ -202,7 +202,7 @@ Detailed usage:
 | required | `gfa_folder` | folder path of `.gfa` files |
 | required | `out_folder` | out folder for the pipeline, result will be in `analysis` folder in out folder |
 | optional | `--find_all_path` | `default=True`, finding all possible paths is best, but sometimes it can take too long running time, I recommend to try default unless you need very high speed |
-| optional | `--path_limit` | `default=15`, High number of path limit will slow the analysis, I recommend a value between 10-25, because if the path is longer than 25, it is probably not a composite transposon unless the average node lenghts are very small |
+| optional | `--path_limit` | `default=10`, High number of path limit will slow the analysis, I recommend a value between 10-25, because if the path is longer than 25, it is probably not a composite transposon unless the average node lenghts are very small |
 | optional | `--min_size_of_cycle` | `default=1500`, min size for composite transposons (assumption in cyclic form) |
 | optional | `--max_size_of_cycle` | `default=100000`, max size for composite transposons (assumption in cyclic form) |
 | optional | `--name_prefix_cycle` | `default=''`, prefix of cycles in output fasta file |
