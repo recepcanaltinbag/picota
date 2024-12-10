@@ -38,6 +38,63 @@ class GraphWork:
             if u not in discovered and u not in finished:
                 discovered, finished = self.dfs_visit(G, u, discovered, finished)
 
+    def dfs_iterative(self, G):
+        # Başlangıç durumu
+        stack = []
+        discovered = set()  # Ziyaret edilen düğümler
+        finished = set()    # Tamamen işlenmiş düğümler
+        self.cycles = []    # Tespit edilen döngüler
+        self.reverse_or_cycles = []  # Ters döngüler
+
+        # Grafın tüm düğümleri üzerinden iterasyon
+        for start_node in G.adj.copy():
+            if start_node not in discovered:
+                stack.append((start_node, iter(G.adj[start_node])))
+
+                while stack:
+                    current_node, neighbors = stack[-1]  # Yığının tepesindeki düğüm
+
+                    if current_node not in discovered:
+                        discovered.add(current_node)
+
+                    try:
+                        neighbor = next(neighbors)  # Sıradaki komşuyu al
+
+                        # Döngü kontrolü
+                        if neighbor in discovered:
+                            self.cycles.append((current_node, neighbor))
+                            if self.find_all_path:
+                                self.capturePaths(G, neighbor, current_node, reverse=False)
+                            else:
+                                self.find_paths(neighbor, current_node, G)
+                            continue
+
+                        elif neighbor.replace('-', '+') in discovered or neighbor.replace('+', '-') in discovered:
+                            self.reverse_or_cycles.append((current_node, neighbor))
+                            the_changed_v = (
+                                neighbor.replace('-', '+') if neighbor.replace('-', '+') in discovered
+                                else neighbor.replace('+', '-')
+                            )
+                            if self.find_all_path:
+                                self.capturePaths(G, the_changed_v, current_node, reverse=True)
+                            else:
+                                self.find_paths(the_changed_v, current_node, G)
+                            continue
+
+                        if neighbor not in finished:
+                            # Yığının üstüne yeni komşuyu ekle
+                            stack.append((neighbor, iter(G.adj[neighbor])))
+
+                    except StopIteration:
+                        # Komşular bittiğinde yığından çıkar
+                        stack.pop()
+                        discovered.remove(current_node)
+                        finished.add(current_node)
+
+        return discovered, finished
+
+
+
 
     def dfs_visit(self, G, u, discovered, finished):
         discovered.add(u)
@@ -236,6 +293,28 @@ def find_overlap_length(overlap):
 
 
 
+def is_similar_polynomial(seq1, seq2, k_mer_sim, threshold_sim):
+    # Precompute k-mers from seq1 and its reverse complement
+    kmer_set = set(
+        seq1[i:i+k_mer_sim] for i in range(len(seq1) - k_mer_sim + 1)
+    ) | set(
+        reverse_complement(seq1)[i:i+k_mer_sim] for i in range(len(seq1) - k_mer_sim + 1)
+    )
+
+    # Sliding window to count matching k-mers in seq2
+    exact_count = 0
+    for i in range(len(seq2) - k_mer_sim + 1):
+        kmer = seq2[i:i+k_mer_sim]
+        if kmer in kmer_set:
+            exact_count += 1
+
+    # Check threshold similarity
+    total_kmers = len(seq2) - k_mer_sim + 1
+    if (exact_count / total_kmers) * 100 > threshold_sim:
+        return True
+    return False
+
+
 #%95 threshold,
 def is_similar(seq1, seq2, k_mer_sim, threshold_sim):
     C_t=list(map(''.join, zip(*[iter(seq2)]*k_mer_sim)))
@@ -342,7 +421,8 @@ def cycle_anaylsis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     genome_graph = GW.generate_genome_graph(node_dict, edge_dict)
     print('Detecting the Cycles')
     try:
-        GW.dfs(genome_graph)
+        #GW.dfs(genome_graph) it is not iterative can ve problematic
+        GW.dfs_iterative(genome_graph)
     except RecursionError:
         print('ERROR(Recursion): DFS can not be possible with this graph, try to assemble with higher k-mer!')        
         f = open(out_cycle_file, "w")
@@ -433,7 +513,7 @@ def cycle_anaylsis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
             reverse_ori = 'reverseoriented_'
         sim_num = False
         for second_seq in range(the_other_iterator,len(cycle_info_list)):
-            if is_similar(cycle_el.sequence, cycle_info_list[second_seq].sequence, k_mer_sim, threshold_sim):
+            if is_similar_polynomial(cycle_el.sequence, cycle_info_list[second_seq].sequence, k_mer_sim, threshold_sim):
                 sim_num = True
                 break
         if sim_num == False:

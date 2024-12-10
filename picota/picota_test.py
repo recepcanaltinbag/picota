@@ -3,13 +3,16 @@
 from src.cycle_finder import cycle_anaylsis
 
 
+#zst_file()
+#input()
 
-path_to_data = "picota/test_data/testNitro.gfa"
+
+path_to_data = "assembly_graph_big.gfa"
 
 find_all_path = True
 path_limit = 25
 
-out_cycle_file = "picota/test_data/cyclesOut.fasta"
+out_cycle_file = "picota/test_data/cyclesOutBig.fasta"
 
 min_size_of_cycle = 3000
 max_size_of_cycle = 100000
