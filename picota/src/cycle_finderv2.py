@@ -323,6 +323,46 @@ def is_similar(seq1, seq2, k_mer_sim, threshold_sim):
     return False
 
 
+#path = [340+, 350-, 20-]
+#nodes_len = {340+: 245}
+#new_parts = [[340+, 350-, 20-],[340+, 350-, 10-]]
+def cycle_match_based_on_contig_id(path, nodes_len, new_parts, threshold=70):
+    # İlk path için zaten new_parts boş, bu yüzden direkt olarak ekleyebiliriz.
+    if not new_parts:
+        return True
+
+    # Path'i new_parts içinde yer alan her path ile karşılaştır ve benzerliği kontrol et
+    path_set = set(path)
+    #path_length = sum(nodes_len.get(node, 0) for node in path)
+
+    
+    path_length = sum(nodes_len.get(node, 0) for node in path)
+
+    for part in new_parts:
+    
+        existing_path_set = set(part)
+        common_nodes = path_set.intersection(existing_path_set)
+
+        common_length = sum(nodes_len[node] for node in common_nodes if node in nodes_len)
+        part_length = sum(nodes_len.get(node, 0) for node in part)
+
+        max_length = max(part_length, path_length)
+        
+        if max_length > 0:
+            identity = common_length / max_length * 100
+        else:
+            identity = 0  
+        
+        if identity > threshold:
+            #print(identity)
+            #print(path)
+            #print(existing_path_set)
+            #print(common_length, max_length)
+            #input()
+            return False  # Eğer benzerlik eşik değerini aşarsa, bu path'i eklemeyiz.
+
+    return True
+
 
 def cycle_info_optimized(path, nodes, edges, cycle_info_list):   
     component_number = len(path)
@@ -491,10 +531,25 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     i_count = 0
     total_paths = len(selected_paths)
     
+    new_paths = []
+
+    # node_dict örneğinizin içerdiği yapıya uygun olarak
+    node_lengths = {key: len(value["Sequence"]) for key, value in node_dict.items()}
+
+    print('Contig ID based -')
+    print('Before Elimination:', len(selected_paths))
+    p_count = 0
     for path in selected_paths:
+        p_count += 1
+        print_progress_bar(p_count, len(selected_paths), prefix='Processing:', suffix='Complete')
+        if cycle_match_based_on_contig_id(path, node_lengths, new_paths):
+            new_paths.append(path)
+    print('\nAfter Elimination',len(new_paths))
+
+    for path in new_paths:
         i_count += 1
 
-        print_progress_bar(i_count, total_paths, prefix='Processing:', suffix='Complete')
+        print_progress_bar(i_count, len(new_paths), prefix='Processing:', suffix='Complete')
 
         
         cycle_inf_obj = cycle_info_optimized(path, node_dict, edge_dict, cycle_info_list)

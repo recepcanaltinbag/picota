@@ -48,8 +48,8 @@ def fasta_to_gfa(fasta_file, gfa_file):
 
 
 # Paths for the input and output files
-zst_file_path = "picota/test_data/SRR11362851.contigs.fa.zst"  # Input .zst file
-fasta_path = "SRR643894.contigs.fa"  # Output uncompressed file
+zst_file_path = "picota/test_data/SRR11905265.contigs.fa.zst"  # Input .zst file
+fasta_path = "picota/test_data/SRR11905265.contigs.fa"  # Output uncompressed file
 gfa_path = "assembly_graph_big.gfa"
 # Example usage
 
