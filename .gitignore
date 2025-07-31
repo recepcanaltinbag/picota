@@ -1,4 +1,5 @@
 /picota/test_data/
+/picota/old_src/
 assembly_graph.gfa
 out.gfa.h5
 QxyIncludingCompTn.gfa

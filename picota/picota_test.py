@@ -1,6 +1,6 @@
 from src.cycle_finderv2 import cycle_analysis
 
-path_to_data = "assembly_graph.gfa"
+path_to_data = "picota/old_src/assembly_graph.gfa"
 
 find_all_path = True
 path_limit = 25
