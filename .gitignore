@@ -1,7 +1,11 @@
 /picota/test_data/
 /picota/old_src/
+/picota/sra_files/
 assembly_graph.gfa
 out.gfa.h5
 QxyIncludingCompTn.gfa
 SRR11362851.contigs.fa
+/picota/tools/
+/tools/
 assembly_graph_big.gfa
+/picota/assembly/

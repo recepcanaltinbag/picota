@@ -544,7 +544,7 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
         print_progress_bar(p_count, len(selected_paths), prefix='Processing:', suffix='Complete')
         if cycle_match_based_on_contig_id(path, node_lengths, new_paths):
             new_paths.append(path)
-    print('\nAfter Elimination',len(new_paths))
+    
 
     for path in new_paths:
         i_count += 1
@@ -567,6 +567,8 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
             cycle_inf_obj.name = name_prefix_cycle + '_' + str(name_it)
             cycle_info_list.append(cycle_inf_obj)
 
+    print('\nAfter Elimination',len(cycle_info_list))
+    print(cycle_info_list)
     print('\nReverse Paths reducing:')
     i_count_2 = 0
     len_total_rev = len (GW.reverseallPaths) 
@@ -591,6 +593,8 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
             cycle_info_list.append(cycle_inf_obj)
 
         print_progress_bar(i_count_2, len_total_rev, prefix='Processing:', suffix='Complete')
+    
+    print(cycle_info_list)
 
     final_str_info = ''
     print('\nCycle is reducing')

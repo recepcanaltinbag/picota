@@ -13,7 +13,7 @@ fastp -i in.R1.fq.gz -I in.R2.fq.gz -o out.R1.fq.gz -O out.R2.fq.gz
 
 '''
 # file path is list
-def raw_read_filtering(raw_file, out_folder, fastp_path, q, reads_to_process, quiet_mode):
+def raw_read_filtering(raw_file, out_folder, fastp_path, quiet_mode):
 
     if not os.path.exists(out_folder):
         os.mkdir(out_folder)
@@ -22,7 +22,7 @@ def raw_read_filtering(raw_file, out_folder, fastp_path, q, reads_to_process, qu
         raw_file_1_path = raw_file[0]
         filtered_raw_file_1_name = "filtered_" + raw_file_1_path.split('/')[-1].split('.')[0] 
         f1_path = out_folder + "/" + filtered_raw_file_1_name +".fastq"
-        args = f"{fastp_path} -i {raw_file_1_path} -o {f1_path} -h {f1_path}.html -q {q} --reads_to_process {reads_to_process}"
+        args = f"{fastp_path} -i {raw_file_1_path} -o {f1_path} -h {f1_path}.html"
         print('Command will be run:')
         print(args)
         print('-------')
@@ -37,7 +37,7 @@ def raw_read_filtering(raw_file, out_folder, fastp_path, q, reads_to_process, qu
         f1_path = out_folder + "/" + filtered_raw_file_1_name +".fastq"
         f2_path = out_folder + "/" + filtered_raw_file_2_name +".fastq"
         args = f"{fastp_path} -i {raw_file_1_path} -I {raw_file_2_path} \
-            -o {f1_path} -O {f2_path} -h {f1_path}.html -q {q} --reads_to_process {reads_to_process}" 
+            -o {f1_path} -O {f2_path} -h {f1_path}.html" 
         print('Command will be run:')
         print(args)
         print('-------')
@@ -94,42 +94,190 @@ def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_n
 
 
 
-def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_threads, assembly_k_mer_list, \
-        assembly_quiet, assembly_reads_to_process, assembly_fastp_q, assembly_keep_temp_files, \
-        assembly_path_of_spades, assembly_path_of_fastp, assembly_skip_filtering):
+def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_threads, assembly_k_mer_list,
+        assembly_quiet, assembly_keep_temp_files,
+        assembly_path_of_spades, assembly_path_of_fastp, assembly_skip_filtering, 
+        assembler_type="spades", assembly_path_of_megahit=None, gfa_tools_path="gfatools", path_of_bandage="bandage"):
+
     
     if not os.path.exists(main_out_folder):
-        os.makedir(main_out_folder)
+        os.mkdir(main_out_folder)
     
     the_final_file_list = []
+    out_folder_for_filtering = os.path.join(main_out_folder, 'filtering')
+    if not os.path.exists(out_folder_for_filtering):
+        os.mkdir(out_folder_for_filtering)
+    
+    out_filtering = os.path.join(out_folder_for_filtering, name_for_assembly)
     if assembly_skip_filtering == False:
-        out_folder_for_filtering = os.path.join(main_out_folder, 'filtering')
-        if not os.path.exists(out_folder_for_filtering):
-            os.mkdir(out_folder_for_filtering)
-        
-        out_filtering = os.path.join(out_folder_for_filtering, name_for_assembly)
-        raw_read_filtering(raw_file_list, out_filtering, assembly_path_of_fastp, assembly_fastp_q, assembly_reads_to_process, assembly_quiet)
+        raw_read_filtering(raw_file_list, out_filtering, assembly_path_of_fastp, assembly_quiet)
         filtered_file_list = glob.glob(out_filtering + '/*.fastq')
         the_final_file_list = filtered_file_list
     else:
-        the_final_file_list = raw_file_list
-
-    for k_mer_l in assembly_k_mer_list.split(','):
-        gfa_folder = os.path.join(main_out_folder, 'gfa_files')
-        if not os.path.exists(gfa_folder):
+        filtered_file_list = glob.glob(out_filtering + '/*.fastq')
+        if len(filtered_file_list) == 0: 
+            the_final_file_list = raw_file_list
+        else:
+            the_final_file_list = filtered_file_list
+    
+    gfa_folder = os.path.join(main_out_folder, 'gfa_files')
+    if not os.path.exists(gfa_folder):
             os.mkdir(gfa_folder)
+    out_assembly_main = os.path.join(main_out_folder, 'assembly')
+    if not os.path.exists(out_assembly_main):
+        os.mkdir(out_assembly_main)
+    
+    
+    if assembler_type.lower() == "megahit":
 
-        gfa_name = name_for_assembly + '_' + k_mer_l + '.gfa'
-        out_assembly_main = os.path.join(main_out_folder, 'assembly')
-        if not os.path.exists(out_assembly_main):
-            os.mkdir(out_assembly_main)
-        
-        out_assembly = os.path.join(out_assembly_main, name_for_assembly + '_' + k_mer_l)
-        if not os.path.exists(out_assembly):
-            os.mkdir(out_assembly)
-
+        gfa_name = name_for_assembly + '_' + 'megahit' + '.gfa'
+        out_assembly = os.path.join(out_assembly_main, name_for_assembly + '_' + 'megahit')
         if os.path.exists(gfa_folder + '/' + gfa_name):
             print('GFA File exist, skipping,', gfa_folder + '/' + gfa_name)
         else:
-            assembly_driver_spades(assembly_path_of_spades, filtered_file_list, out_assembly, gfa_folder, \
-            gfa_name, assembly_threads, k_mer_l, assembly_quiet, assembly_keep_temp_files)
+            assembly_driver_megahit(assembly_path_of_megahit, the_final_file_list, out_assembly, gfa_folder, gfa_name, assembly_threads, assembly_quiet, assembly_keep_temp_files, gfa_tools_path, path_of_bandage)
+    else:
+        for k_mer_l in assembly_k_mer_list.split(','):
+            gfa_name = name_for_assembly + '_' + k_mer_l + '.gfa'
+            out_assembly = os.path.join(out_assembly_main, name_for_assembly + '_' + k_mer_l)
+            if not os.path.exists(out_assembly):
+                os.mkdir(out_assembly)
+
+            if os.path.exists(gfa_folder + '/' + gfa_name):
+                print('GFA File exist, skipping,', gfa_folder + '/' + gfa_name)
+            else:
+                assembly_driver_spades(assembly_path_of_spades, filtered_file_list, out_assembly, gfa_folder, \
+                gfa_name, assembly_threads, k_mer_l, assembly_quiet, assembly_keep_temp_files)
+
+
+
+
+
+
+#MEGAHIT
+
+
+def assembly_driver_megahit(megahit_path, file_path, out_folder, gfa_folder, gfa_name, threads, quiet_mode, assembly_keep_temp_files, gfa_tools_path, path_of_bandage):
+    if len(file_path) == 1:
+        args = f"{megahit_path} -r {file_path[0]} -o {out_folder} -t {str(threads)} --out-gfa"
+    elif len(file_path) == 2:
+        args = f"{megahit_path} -1 {file_path[0]} -2 {file_path[1]} -o {out_folder} -t {str(threads)}"
+    else:
+        print('Error: there is no fastq file or more than two fastq file!')
+        return
+
+    print('Command will be run:')
+    print(args)
+    print('-------')
+    #my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
+    
+    intermediate_dir = os.path.join(out_folder, "intermediate_contigs")
+    contig_files = glob.glob(os.path.join(intermediate_dir, "k*.contigs.fa"))
+
+    gfa_files = []
+    for contig_file in contig_files:
+        if os.path.getsize(contig_file) == 0:
+            print(f"Skipping {contig_file}: file is empty.")
+            continue
+        
+        kmer = os.path.basename(contig_file).split('.')[0]
+        fastg_path = os.path.join(gfa_folder, f"{kmer}.fastg")
+        gfa_path = os.path.join(gfa_folder, f"{kmer}.gfa")
+
+        cmd = f"megahit_core contig2fastg {kmer[1:]} {contig_file} > {fastg_path}"
+        print(f"Running: {cmd}")
+        subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+
+        cmd = f"{gfa_tools_path} {fastg_path} > {gfa_path}"
+        print(f"Running: {cmd}")
+        subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+
+        # Skoru GFA'dan hesapla
+        gfa_files.append(gfa_path)
+
+
+    best_gfa = process_gfa_files(gfa_files, path_of_bandage)
+
+    if best_gfa:
+        # Dosyanın bulunduğu dizini al
+        gfa_dir = os.path.dirname(best_gfa)
+        best_gfa_folder = os.path.join(gfa_dir, "best_gfa")
+        os.makedirs(best_gfa_folder, exist_ok=True)
+
+        destination_path = os.path.join(best_gfa_folder, os.path.basename(best_gfa))
+        shutil.copy(best_gfa, destination_path)
+
+        print(f"Best GFA copied to: {destination_path}")
+    else:
+        print("No best GFA file found to copy.")
+
+
+    if assembly_keep_temp_files == False:
+        shutil.rmtree(out_folder)
+        for file_pt in file_path:
+            if os.path.exists(file_pt):
+                os.remove(file_pt)
+        print('Temp Files deleted., if you want to keep them use --keep_temp_files')
+
+
+
+
+
+def process_gfa_files(gfa_files, path_of_bandage):
+    scores = []
+
+    for gfa_file in gfa_files:
+        if os.path.getsize(gfa_file) == 0:
+            print(f"Skipping empty GFA: {gfa_file}")
+            continue
+
+        gfa_path, contigs, dead_ends, score = compute_score_from_gfa(gfa_file, path_of_bandage)
+        scores.append((gfa_path, contigs, dead_ends, score))
+
+    if not scores:
+        print("No valid GFA files found.")
+        return None
+
+    # Normalize skorlar
+    score_values = [s[3] for s in scores]
+    min_score = min(score_values)
+    max_score = max(score_values)
+    range_score = max_score - min_score if max_score != min_score else 1
+
+    normalized_scores = [
+        (path, contigs, dead, (score - min_score) / range_score)
+        for path, contigs, dead, score in scores
+    ]
+
+    # Tüm normalize skorları yazdır
+    print("\nGFA Scores (Normalized):")
+    for path, contigs, dead_ends, norm_score in normalized_scores:
+        print(f"{os.path.basename(path)} | contigs: {contigs}, dead ends: {dead_ends}, normalized score: {norm_score:.4f}")
+
+    # En yüksek normalize skora sahip GFA dosyasını bul
+    best_gfa = max(normalized_scores, key=lambda x: x[3])
+    print(f"\nBest GFA: {os.path.basename(best_gfa[0])} with score {best_gfa[3]:.4f}")
+    return best_gfa[0]
+
+
+
+
+
+def compute_score_from_gfa(gfa_file, path_of_bandage):
+    # Bandage ile dead ends sayısını al
+    cmd = f'{path_of_bandage} info {gfa_file} | grep "Dead ends" | grep -oP "\\d+"'
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, executable='/bin/bash')
+    try:
+        dead_ends = int(result.stdout.strip())
+    except ValueError:
+        dead_ends = 0
+
+    # Contig sayısını hesapla (S satırları)
+    contigs = 0
+    with open(gfa_file, 'r') as f:
+        for line in f:
+            if line.startswith('S'):
+                contigs += 1
+
+    score = 1 / (contigs * (dead_ends + 1)**2)
+    return gfa_file, contigs, dead_ends, score

@@ -32,17 +32,20 @@ def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, 
 
 
     the_url = f"https://sra-pub-run-odp.s3.amazonaws.com/sra/{sra_acc}/{sra_acc}"
-    args2 = f"{path_of_fastq_dump} --split-3 {out_path}/*.sra --outdir {out_path}"
+    args2 = f"{path_of_fastq_dump} -s {out_path}/*.sra -O {out_path} --split-files -t 12"
+    
     print(out_path)
 
-    try:
-        download_url(the_url, out_path + "/" + sra_acc + ".sra")
-    except Exception as e:
-        print('url download error: ', e)
-        return False
+    if not os.path.isfile(out_path + "/" + sra_acc + ".sra"):
+        try:
+            
+            download_url(the_url, out_path + "/" + sra_acc + ".sra")
+        except Exception as e:
+            print('url download error: ', e)
+            return False
 
     print('Start for Fastq Dump')
-    my_process = subprocess.run(args2, shell=True, text=True, capture_output=True)
+    my_process = subprocess.run(args2, shell=True, text=True)
     if my_process.returncode != 0:
         raise Exception("Error in Fastq Dump")
     print('End of Fastq Dump')

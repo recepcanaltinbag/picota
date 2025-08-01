@@ -18,10 +18,15 @@ def print_progress_bar(iteration, total, prefix='', suffix='', length=50, fill='
 
 # Yeni optimizasyonlu döngü
 def filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle):
+    
+    
     kmer_hashes = []  # K-mer hashlerini saklamak için
     cycle_clear_list = []
     name_it = 0
     print(len(cycle_info_list))
+    if len(cycle_info_list) == 0:
+        print('Print empty Cycle List')
+        return cycle_info_list
     print(cycle_info_list[0].name)
 
 
