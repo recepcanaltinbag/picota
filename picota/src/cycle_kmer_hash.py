@@ -1,6 +1,10 @@
 from collections import defaultdict
 import sys
 
+def reverse_complement(seq):
+    complement_dict = {"A":"T", "T":"A", "G":"C", "C":"G", "a":"t", "t":"a", "g":"c", "c":"g"}
+    return "".join([complement_dict[nucleotide] for nucleotide in reversed(seq)])
+
 
 def get_kmer_hashes(seq, k):
     """Verilen bir sekans için k-mer'leri hashleyerek döner."""
@@ -17,7 +21,7 @@ def print_progress_bar(iteration, total, prefix='', suffix='', length=50, fill='
 
 
 # Yeni optimizasyonlu döngü
-def filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle):
+def filter_cycles_with_kmer_old(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle):
     
     
     kmer_hashes = []  # K-mer hashlerini saklamak için
@@ -53,6 +57,57 @@ def filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_pref
             kmer_hashes.append(current_kmer_hashes)  # Benzersiz olarak ekle
 
     # Progress bar'ı güncelle
+        print_progress_bar(i, len(cycle_info_list), prefix='Processing:', suffix='Complete')
+    
+    print('\n')
+    return cycle_clear_list
+
+
+def filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle):
+    kmer_hashes = []  # Hem normal hem de reverse için tutacağız
+    cycle_clear_list = []
+    name_it = 0
+    print(len(cycle_info_list))
+    
+    if len(cycle_info_list) == 0:
+        print('Print empty Cycle List')
+        return cycle_info_list
+
+    print(cycle_info_list[0].name)
+
+    for i, cycle_el in enumerate(cycle_info_list):
+        reverse_ori = ''
+        if cycle_el.reverseOriented:
+            reverse_ori = 'reverseoriented_'
+
+        # Hem normal hem reverse complement k-mer setini al
+        seq = cycle_el.sequence
+        rev_seq = reverse_complement(seq)
+
+        current_kmer_hashes = get_kmer_hashes(seq, k_mer_sim)
+        rev_kmer_hashes = get_kmer_hashes(rev_seq, k_mer_sim)
+
+        is_similar = False
+        
+        for other_kmer_hashes in kmer_hashes:
+            common1 = len(current_kmer_hashes.intersection(other_kmer_hashes))
+            common2 = len(rev_kmer_hashes.intersection(other_kmer_hashes))
+
+            sim1 = (common1 / len(current_kmer_hashes)) * 100
+            sim2 = (common2 / len(rev_kmer_hashes)) * 100
+
+            if sim1 >= threshold_sim or sim2 >= threshold_sim:
+                is_similar = True
+                break
+
+        if not is_similar:
+            name_it += 1
+            cycle_el.name = f"{name_prefix_cycle}_{reverse_ori}{name_it}"
+            cycle_clear_list.append(cycle_el)
+            # Hem normal hem reverse'i sakla ki gelecek cycle'lar da karşılaştırabilsin
+            kmer_hashes.append(current_kmer_hashes)
+            kmer_hashes.append(rev_kmer_hashes)
+
         print_progress_bar(i, len(cycle_info_list), prefix='Processing:', suffix='Complete')
     
     print('\n')

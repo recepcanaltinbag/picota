@@ -179,7 +179,7 @@ def scoring_main(cycle_folder, picota_out_folder, path_to_antibiotics, path_to_x
 
 
         antibiotic_counts, antibiotic_hits = count_hits_and_list(diamond_out_antibiotics, query_lengths, coverage_threshold=0.5)
-        xenobiotic_counts, xenobiotic_hits = count_hits_and_list(diamond_out_xenobiotics, query_lengths, coverage_threshold=0.5)
+        xenobiotic_counts, xenobiotic_hits = count_hits_and_list(diamond_out_xenobiotics, query_lengths, coverage_threshold=0.8)
         ises_counts, ises_hits = count_hits_and_list(diamond_out_ises, query_lengths, coverage_threshold=0.5)
 
 

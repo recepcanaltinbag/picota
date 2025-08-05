@@ -575,7 +575,6 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     for path in GW.reverseallPaths:
         i_count += 1
         i_count_2 += 1
-
         
         cycle_inf_obj = cycle_info_optimized(path, node_dict, edge_dict, cycle_info_list)
         if cycle_inf_obj == None:
