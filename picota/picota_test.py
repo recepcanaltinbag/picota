@@ -2,39 +2,32 @@ from src.cycle_finderv2 import cycle_analysis
 
 from src.sra_download import run_sra_down
 from src.assembly import assembly_main
-
-
-from old_src.ea_kegg_db import download_kegg_db
-
-
-db_folder = "picota/DBs"
-
-
-from bioservices import KEGG
-
-kegg = KEGG()
-
-# 1. KEGG genel pathway listesini al (organizmadan bağımsız haritalar)
-pathway_list_raw = kegg.list("pathway")
-
-print(pathway_list_raw)
+from src.scoringv2 import scoring_main
 
 
 
+
+
+
+
+cycle_folder = "/media/lin-bio/back2/picota_assembly/cycles"
+picota_out_folder = "/media/lin-bio/back2/picota_assembly/picota_out"
+path_to_antibiotics = "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
+path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics.fasta"
+path_to_ises = "picota/DBs/ISes/clusters.single.faa"
+
+
+scoring_main(cycle_folder, picota_out_folder, path_to_antibiotics, path_to_xenobiotics, path_to_ises)
+
+
+
+print('NEd')
 input()
 
 
 
 
 
-download_kegg_db(db_folder, "input_pathway_list", kegg_db_temp_folder='kegg_db_temp', metabolism_folder='Xenobiotics', max_number_of_attends=50)
-
-
-
-
-
-print('kegg')
-input()
 
 
 
@@ -95,3 +88,10 @@ threshold_sim = 50
 
 cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_size_of_cycle, max_size_of_cycle,\
                 name_prefix_cycle, min_component_number, max_component_number, k_mer_sim, threshold_sim)
+
+
+
+
+
+
+
