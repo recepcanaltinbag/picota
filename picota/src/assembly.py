@@ -159,9 +159,9 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
 
 def assembly_driver_megahit(megahit_path, file_path, out_folder, gfa_folder, gfa_name, threads, quiet_mode, assembly_keep_temp_files, gfa_tools_path, path_of_bandage):
     if len(file_path) == 1:
-        args = f"{megahit_path} -r {file_path[0]} -o {out_folder} -t {str(threads)} --out-gfa"
+        args = f"{megahit_path} -r {file_path[0]} -o {out_folder} -t {str(threads)} --k-min 55"
     elif len(file_path) == 2:
-        args = f"{megahit_path} -1 {file_path[0]} -2 {file_path[1]} -o {out_folder} -t {str(threads)}"
+        args = f"{megahit_path} -1 {file_path[0]} -2 {file_path[1]} -o {out_folder} -t {str(threads)} --k-min 55"
     else:
         print('Error: there is no fastq file or more than two fastq file!')
         return
@@ -169,8 +169,9 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, gfa_folder, gfa
     print('Command will be run:')
     print(args)
     print('-------')
-    #my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
-    
+    '''
+    my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
+    '''
     intermediate_dir = os.path.join(out_folder, "intermediate_contigs")
     contig_files = glob.glob(os.path.join(intermediate_dir, "k*.contigs.fa"))
 
@@ -184,13 +185,14 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, gfa_folder, gfa
         fastg_path = os.path.join(gfa_folder, f"{kmer}.fastg")
         gfa_path = os.path.join(gfa_folder, f"{kmer}.gfa")
 
-        cmd = f"megahit_core contig2fastg {kmer[1:]} {contig_file} > {fastg_path}"
-        print(f"Running: {cmd}")
-        subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+        if not os.path.isfile(gfa_path):
+            cmd = f"megahit_core contig2fastg {kmer[1:]} {contig_file} > {fastg_path}"
+            print(f"Running: {cmd}")
+            subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
 
-        cmd = f"{gfa_tools_path} {fastg_path} > {gfa_path}"
-        print(f"Running: {cmd}")
-        subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+            cmd = f"{gfa_tools_path} {fastg_path} > {gfa_path}"
+            print(f"Running: {cmd}")
+            subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
 
         # Skoru GFA'dan hesapla
         gfa_files.append(gfa_path)
@@ -265,6 +267,7 @@ def process_gfa_files(gfa_files, path_of_bandage):
 
 def compute_score_from_gfa(gfa_file, path_of_bandage):
     # Bandage ile dead ends sayısını al
+    print('gfa_process:', gfa_file)
     cmd = f'{path_of_bandage} info {gfa_file} | grep "Dead ends" | grep -oP "\\d+"'
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, executable='/bin/bash')
     try:
@@ -272,12 +275,20 @@ def compute_score_from_gfa(gfa_file, path_of_bandage):
     except ValueError:
         dead_ends = 0
 
-    # Contig sayısını hesapla (S satırları)
+    # Contig ve edge (bağlantı) sayılarını hesapla
     contigs = 0
+    edges = 0
     with open(gfa_file, 'r') as f:
         for line in f:
             if line.startswith('S'):
                 contigs += 1
+            elif line.startswith('L'):
+                edges += 1
 
-    score = 1 / (contigs * (dead_ends + 1)**2)
+    # Skoru hesapla: bağlantı sayısı / (contig sayısı * (dead_ends + 1)^2)
+    if contigs == 0:
+        score = 0  # bölme hatasını önlemek için
+    else:
+        score = edges / (contigs * (dead_ends + 1)**2)
+
     return gfa_file, contigs, dead_ends, score

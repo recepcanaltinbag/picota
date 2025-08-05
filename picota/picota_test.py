@@ -4,6 +4,37 @@ from src.sra_download import run_sra_down
 from src.assembly import assembly_main
 
 
+from old_src.ea_kegg_db import download_kegg_db
+
+
+db_folder = "picota/DBs"
+
+
+from bioservices import KEGG
+
+kegg = KEGG()
+
+# 1. KEGG genel pathway listesini al (organizmadan bağımsız haritalar)
+pathway_list_raw = kegg.list("pathway")
+
+print(pathway_list_raw)
+
+
+
+input()
+
+
+
+
+
+download_kegg_db(db_folder, "input_pathway_list", kegg_db_temp_folder='kegg_db_temp', metabolism_folder='Xenobiotics', max_number_of_attends=50)
+
+
+
+
+
+print('kegg')
+input()
 
 
 
@@ -11,21 +42,22 @@ from src.assembly import assembly_main
 
 
 
-sra_acc_file = "SRR11362851"
+
+sra_acc_file = "SRR12917050"
 out_dir = "picota/sra_files" + "/" + sra_acc_file
 sra_folder = "picota/sra_files"
 path_of_fastq_dump = "parallel-fastq-dump"
 
 '''
 run_sra_down(sra_acc_file, out_dir, sra_folder, path_of_fastq_dump, True, True)
-
-print('End')
 '''
+print('End')
+
 
 name_for_assembly = sra_acc_file
 raw_file_list = ["picota/sra_files" + "/" + sra_acc_file + "/" + sra_acc_file + "_1.fastq", "picota/sra_files" + "/" + sra_acc_file + "/" + sra_acc_file + "_2.fastq"]
 main_out_folder = "/media/lin-bio/back2/picota_assembly"
-assembly_threads = 12
+assembly_threads = 24
 assembly_k_mer_list = "79,99"
 assembly_quiet = False
 assembly_keep_temp_files = True
@@ -44,9 +76,6 @@ assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_thread
         assembly_quiet, assembly_keep_temp_files, \
         assembly_path_of_spades, assembly_path_of_fastp, assembly_skip_filtering, assembler_type, assembly_path_of_megahit, gfa_tools_path, path_of_bandage)
 
-
-print('End')
-input()
 
 
 
