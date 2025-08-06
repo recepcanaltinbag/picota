@@ -169,9 +169,8 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, gfa_folder, gfa
     print('Command will be run:')
     print(args)
     print('-------')
-    '''
     my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
-    '''
+
     intermediate_dir = os.path.join(out_folder, "intermediate_contigs")
     contig_files = glob.glob(os.path.join(intermediate_dir, "k*.contigs.fa"))
 
@@ -202,11 +201,7 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, gfa_folder, gfa
 
     if best_gfa:
         # Dosyanın bulunduğu dizini al
-        gfa_dir = os.path.dirname(best_gfa)
-        best_gfa_folder = os.path.join(gfa_dir, "best_gfa")
-        os.makedirs(best_gfa_folder, exist_ok=True)
-
-        destination_path = os.path.join(best_gfa_folder, os.path.basename(best_gfa))
+        destination_path = os.path.join(out_folder, os.path.basename(best_gfa))
         shutil.copy(best_gfa, destination_path)
 
         print(f"Best GFA copied to: {destination_path}")
