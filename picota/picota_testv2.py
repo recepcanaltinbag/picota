@@ -5,14 +5,31 @@ from src.assembly import assembly_main
 from src.scoringv2 import scoring_main
 from src.scoringv3_blast import scoring_main
 
+import os
+import glob
 
-
+'''
 path_to_antibiotics = "picota/DBs/Antibiotics/nucleotide_fasta_protein_homolog_model.fasta"
 path_to_ises = "picota/DBs/ISes/IS.fna"
 path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics.fasta"
 scoring_main("/media/lin-bio/back2/picota_test/cycle_folder","/media/lin-bio/back2/picota_out/blasted",path_to_antibiotics,\
     path_to_xenobiotics, path_to_ises
     )
+
+print('Enf od blasted')
+input()
+'''
+sra_list_oxford = ["SRR12917043","SRR12917036","SRR12917028"]
+base_dir = "/media/lin-bio/back2/picota_test"
+
+for sra_l in sra_list_oxford:
+    main_out_folder = os.path.join(base_dir, sra_l)
+    sra_folder = os.path.join(main_out_folder, "sra_files")
+    os.makedirs(sra_folder, exist_ok=True)
+
+    path_of_fastq_dump = "parallel-fastq-dump"
+    out_dir = os.path.join(sra_folder)
+    run_sra_down(sra_l, out_dir, sra_folder, path_of_fastq_dump, keep_sra_file=False, the_force=True)
 
 print('Enf od blasted')
 input()
@@ -25,10 +42,6 @@ input()
 
 
 
-
-
-import os
-import glob
 
 
 # === Global Ayarlar ===
