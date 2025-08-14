@@ -49,17 +49,18 @@ def parse_gff_cds(gff_file):
 
 
 def overlap_ratio(start1, end1, start2, end2):
-    overlap_start = max(start1, start2)
-    overlap_end = min(end1, end2)
+    s1, e1 = sorted((start1, end1))
+    s2, e2 = sorted((start2, end2))
+    overlap_start = max(s1, s2)
+    overlap_end = min(e1, e2)
     overlap_len = max(0, overlap_end - overlap_start + 1)
-    length1 = end1 - start1 + 1
-    length2 = end2 - start2 + 1
+    length1 = e1 - s1 + 1
+    length2 = e2 - s2 + 1
     return overlap_len / min(length1, length2)
-
 
 def filter_overlapping_cds(cds_list, overlap_threshold=0.8):
     # cds_list sıralı start'a göre
-    cds_list_sorted = sorted(cds_list, key=lambda x: x["start"])
+    cds_list_sorted = sorted(cds_list, key=lambda x: (min(x["start"], x["end"]), max(x["start"], x["end"])))
     filtered = []
     for cds in cds_list_sorted:
         overlap_found = False
@@ -113,7 +114,6 @@ def scoring_main(fasta_file, picota_out_folder, path_to_antibiotics, path_to_xen
     if not fasta_file.endswith(".fasta") and not fasta_file.endswith(".fa"):
         return
 
-    fasta_path = os.path.join(cycle_folder, fasta_file)
     base_name = os.path.splitext(fasta_file)[0]
     out_prefix = os.path.join(temp_folder, base_name)
 
@@ -123,11 +123,13 @@ def scoring_main(fasta_file, picota_out_folder, path_to_antibiotics, path_to_xen
     filtered_proteins_faa = out_prefix + ".proteins.filtered.faa"
 
     print(f"Running Prodigal on {fasta_file} with GFF output...")
-    run_prodigal_with_gff(fasta_path, proteins_faa, genes_fna, gff_file)
+    run_prodigal_with_gff(fasta_file, proteins_faa, genes_fna, gff_file)
 
-
+    #I deleted this I thin k it is not working
     cds_list = parse_gff_cds(gff_file)
     filtered_cds = filter_overlapping_cds(cds_list, overlap_threshold=0.5)
+    filtered_cds = cds_list
+
 
     print(f"Filtering proteins by overlap threshold, kept {len(filtered_cds)} CDS from {len(cds_list)}")
     filter_protein_fasta(proteins_faa, filtered_cds, filtered_proteins_faa)
@@ -181,7 +183,7 @@ def scoring_main(fasta_file, picota_out_folder, path_to_antibiotics, path_to_xen
         return contig_counts, contig_hits
 
     antibiotic_counts, antibiotic_hits = count_hits_and_list(diamond_out_antibiotics, query_lengths, coverage_threshold=0.5)
-    xenobiotic_counts, xenobiotic_hits = count_hits_and_list(diamond_out_xenobiotics, query_lengths, coverage_threshold=0.8)
+    xenobiotic_counts, xenobiotic_hits = count_hits_and_list(diamond_out_xenobiotics, query_lengths, coverage_threshold=0.5)
     ises_counts, ises_hits = count_hits_and_list(diamond_out_ises, query_lengths, coverage_threshold=0.5)
 
     all_contigs = set(list(antibiotic_counts.keys()) + list(xenobiotic_counts.keys()) + list(ises_counts.keys()))
@@ -191,10 +193,10 @@ def scoring_main(fasta_file, picota_out_folder, path_to_antibiotics, path_to_xen
             "cycle_file": fasta_file,
             "contig": contig,
             "antibiotics_hits": antibiotic_counts.get(contig, 0),
-            "antibiotics_list": ",".join(sorted(antibiotic_hits.get(contig, []))),
             "xenobiotics_hits": xenobiotic_counts.get(contig, 0),
-            "xenobiotics_list": ",".join(sorted(xenobiotic_hits.get(contig, []))),
             "ises_hits": ises_counts.get(contig, 0),
+            "antibiotics_list": ",".join(sorted(antibiotic_hits.get(contig, []))),
+            "xenobiotics_list": ",".join(sorted(xenobiotic_hits.get(contig, []))),
             "ises_list": ",".join(sorted(ises_hits.get(contig, [])))
         })
 

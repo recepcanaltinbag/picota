@@ -132,10 +132,14 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
 
         gfa_name = name_for_assembly + '_' + 'megahit' + '.gfa'
         out_assembly = os.path.join(out_assembly_main, name_for_assembly + '_' + 'megahit')
+        if os.path.exists(out_assembly):
+            shutil.rmtree(out_assembly)
+            print(f"{out_assembly} deleted, overwrite will be truw.")
+
         if os.path.exists(gfa_folder + '/' + gfa_name):
             print('GFA File exist, skipping,', gfa_folder + '/' + gfa_name)
         else:
-            assembly_driver_megahit(assembly_path_of_megahit, the_final_file_list, out_assembly, gfa_folder, gfa_name, assembly_threads, assembly_quiet, assembly_keep_temp_files, gfa_tools_path, path_of_bandage)
+            assembly_driver_megahit(assembly_path_of_megahit, the_final_file_list, out_assembly, main_out_folder, gfa_folder, gfa_name, assembly_threads, assembly_quiet, assembly_keep_temp_files, gfa_tools_path, path_of_bandage)
     else:
         for k_mer_l in assembly_k_mer_list.split(','):
             gfa_name = name_for_assembly + '_' + k_mer_l + '.gfa'
@@ -157,7 +161,11 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
 #MEGAHIT
 
 
-def assembly_driver_megahit(megahit_path, file_path, out_folder, gfa_folder, gfa_name, threads, quiet_mode, assembly_keep_temp_files, gfa_tools_path, path_of_bandage):
+def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder, gfa_folder, gfa_name, threads, quiet_mode, assembly_keep_temp_files, gfa_tools_path, path_of_bandage):
+    
+    
+    
+    
     if len(file_path) == 1:
         args = f"{megahit_path} -r {file_path[0]} -o {out_folder} -t {str(threads)} --k-min 55"
     elif len(file_path) == 2:
@@ -201,7 +209,7 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, gfa_folder, gfa
 
     if best_gfa:
         # Dosyanın bulunduğu dizini al
-        destination_path = os.path.join(out_folder, os.path.basename(best_gfa))
+        destination_path = os.path.join(main_out_folder, os.path.basename(best_gfa))
         shutil.copy(best_gfa, destination_path)
 
         print(f"Best GFA copied to: {destination_path}")
