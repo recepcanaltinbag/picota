@@ -11,7 +11,7 @@ import glob
 '''
 path_to_antibiotics = "picota/DBs/Antibiotics/nucleotide_fasta_protein_homolog_model.fasta"
 path_to_ises = "picota/DBs/ISes/IS.fna"
-path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics.fasta"
+path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
 scoring_main("/media/lin-bio/back2/picota_test/cycle_folder","/media/lin-bio/back2/picota_out/blasted",path_to_antibiotics,\
     path_to_xenobiotics, path_to_ises
     )
@@ -90,7 +90,7 @@ path_of_bandage = "./picota/tools/Bandage_Ubuntu-x86-64_v0.9.0_AppDir/Bandage_Ub
 
 # Scoring veri tabanları
 path_to_antibiotics = "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
-path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics.fasta"
+path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics_.fasta"
 path_to_ises = "picota/DBs/ISes/clusters.single.faa"
 
 # === Pipeline Döngüsü ===
