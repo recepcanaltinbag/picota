@@ -516,6 +516,7 @@ def find_circular_readsv2(bam_file, ref_name, ref_len, fastq_file, transposon_le
 
 # === 4. Main ===
 if __name__ == "__main__":
+    
     base_dir = "/media/lin-bio/back2/picota_IS26_test"
     outdir = os.path.join(base_dir, "circle_Control")
     for root, _, files in os.walk(outdir):
