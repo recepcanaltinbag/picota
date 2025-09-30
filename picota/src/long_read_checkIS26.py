@@ -516,19 +516,24 @@ def find_circular_readsv2(bam_file, ref_name, ref_len, fastq_file, transposon_le
 
 # === 4. Main ===
 if __name__ == "__main__":
-    
+
     base_dir = "/media/lin-bio/back2/picota_IS26_test"
+    split_dir = "/media/lin-bio/back2/picota_IS26_test/split_fasta"
+    fasta_files = [f for f in os.listdir(split_dir) if f.endswith(".fasta")]
+
     outdir = os.path.join(base_dir, "circle_Control")
+    '''
     for root, _, files in os.walk(outdir):
         for f in files:
             if f.endswith(".sam"):
                 os.remove(os.path.join(root,f))
-
+    '''
     os.makedirs(outdir, exist_ok=True)
 
     print(f"[INFO] Çıktılar {outdir} klasörüne kaydedilecek.")
 
     # Referanslara göre transposon başlangıçları
+    '''
     transposon_starts = {
         "Tn4352-M20306": 820,
         "Tn6010-EU370913": 820,
@@ -539,14 +544,14 @@ if __name__ == "__main__":
 
         # istediğin kadar ref ekle
     }
-
-    fasta_files = [f for f in os.listdir(base_dir) if f.endswith(".fasta")]
+    '''
+    
     if not fasta_files:
         print("[WARN] Hiç fasta dosyası bulunamadı!")
         exit(1)
 
     for ref_fasta in fasta_files:
-        ref_path = os.path.join(base_dir, ref_fasta)
+        ref_path = os.path.join(split_dir, ref_fasta)
         ref_record = next(SeqIO.parse(ref_path, "fasta"))
         ref_len = len(ref_record)
         ref_name = os.path.splitext(ref_fasta)[0]
@@ -554,7 +559,7 @@ if __name__ == "__main__":
         print(f"\n[INFO] Referans: {ref_fasta} ({ref_name}, {ref_len} bp)")
 
         # transposon uzunluğunu al, yoksa default 1200
-        transposon_len = transposon_starts.get(ref_name, 1200)
+        #transposon_len = transposon_starts.get(ref_name, 1200)
 
         sra_dir = os.path.join(base_dir, ref_name, "sra_files")
         if not os.path.isdir(sra_dir):
@@ -567,12 +572,18 @@ if __name__ == "__main__":
             continue
 
         for fastq_file in fastq_files:
+            
+            #DROP AFTER TEST
+            if "SRR22753363" not in fastq_file:
+                continue
+
             fq_path = os.path.join(sra_dir, fastq_file)
+
             print(f"\n[STEP] Mapping başlatılıyor → {fastq_file}")
 
             run_dir = os.path.join(outdir, ref_name + "_" + os.path.splitext(fastq_file)[0])
             os.makedirs(run_dir, exist_ok=True)
-
+            print(ref_path)
             try:
                 sorted_bam = run_minimap2(
                     ref_path,
