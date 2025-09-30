@@ -443,22 +443,42 @@ def scoring_main(cycle_folder, picota_out_folder, \
             sorted_genetic_info_list = sorted(genetic_info_list, key=lambda l:l[1], reverse=True)
             for gen_info in sorted_genetic_info_list:
                 IS_str = []
+                IS_coords = []
                 Ant_str = []
+                Ant_coords = []
                 Xeno_str = []
+                Xeno_coords = []
                 for the_g_cds in gen_info[0].feature_list:
                     if the_g_cds.r_type == 'Antibiotics':
                         Ant_str.append(the_g_cds.product)
+                        Ant_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
                     if the_g_cds.r_type == 'Xenobiotics':
                         Xeno_str.append(the_g_cds.product)
+                        Xeno_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
                     if the_g_cds.r_type == 'InsertionSequences':
                         IS_str.append(the_g_cds.product)
+                        IS_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
 
                 #Write this functions
                 # seq_id, SRR_acc, k-mer, score0, score1, score2
+                '''
                 final_list_comps.append('\t'.join((gen_info[0].seq_id, os.path.basename(cycle_file).split('.')[0].split('_')[0], \
                     os.path.basename(cycle_file).split('.')[0].split('_')[1], str(gen_info[0].score0), str(gen_info[0].score1), \
                         str(gen_info[0].score2), str(len(IS_str)), ';'.join(IS_str), str(len(Ant_str)),';'.join(Ant_str),\
-                            str(len(Xeno_str)),';'.join(Xeno_str)))+'\n')
+                            str(len(Xeno_str)),';'.join(Xeno_str)))+'\n')'''
+                
+                final_list_comps.append('\t'.join((
+                    gen_info[0].seq_id,
+                    os.path.basename(cycle_file).split('.')[0].split('_')[0],
+                    os.path.basename(cycle_file).split('.')[0].split('_')[1],
+                    str(gen_info[0].score0),
+                    str(gen_info[0].score1),
+                    str(gen_info[0].score2),
+                    str(len(IS_str)), ';'.join(IS_str), ';'.join(IS_coords),  # IS start-end
+                    str(len(Ant_str)), ';'.join(Ant_str), ';'.join(Ant_coords),  # Antibiotic start-end
+                    str(len(Xeno_str)), ';'.join(Xeno_str), ';'.join(Xeno_coords)  # Xeno start-end
+                ))+'\n')
+
                 picota_out_gbk_path = picota_out_for_cycle + '/' + str(int(gen_info[1])) + '_' + gen_info[0].seq_id + '.gbk'
                 picota_out_fasta_path = picota_out_for_cycle + '/' + str(int(gen_info[1])) + '_' + gen_info[0].seq_id + '.fasta'
                 genbak_create(gen_info[0].nuc_seq, gen_info[0].seq_acc, gen_info[0].seq_id, gen_info[0].seq_description, gen_info[0].feature_list, picota_out_gbk_path)

@@ -2,13 +2,12 @@ from src.cycle_finderv2 import cycle_analysis
 
 from src.sra_download import run_sra_down
 from src.assembly import assembly_main
-from src.scoringv2 import scoring_main
 from src.scoringv3_blast import scoring_main
 
 import os
 import glob
 
-'''
+
 path_to_antibiotics = "picota/DBs/Antibiotics/nucleotide_fasta_protein_homolog_model.fasta"
 path_to_ises = "picota/DBs/ISes/IS.fna"
 path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
@@ -16,8 +15,10 @@ scoring_main("/media/lin-bio/back2/picota_test/cycle_folder","/media/lin-bio/bac
     path_to_xenobiotics, path_to_ises
     )
 
-print('Enf od blasted')"SRR12917043","SRR12917036",
+print('Enf od blasted') #"SRR12917043","SRR12917036",
 input()
+
+
 '''
 sra_list_oxford = ["SRR12917038"]
 base_dir = "/media/lin-bio/back2/picota_test"
@@ -33,7 +34,7 @@ for sra_l in sra_list_oxford:
 
 print('Enf od blasted')
 input()
-
+'''
 
 
 
@@ -90,8 +91,8 @@ path_of_bandage = "./picota/tools/Bandage_Ubuntu-x86-64_v0.9.0_AppDir/Bandage_Ub
 
 # Scoring veri tabanları
 path_to_antibiotics = "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
-path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics_.fasta"
-path_to_ises = "picota/DBs/ISes/clusters.single.faa"
+path_to_xenobiotics = "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
+path_to_ises = "picota/DBs/ISes/IS.fna"
 
 # === Pipeline Döngüsü ===
 for sra_acc_file in sra_acc_files:
