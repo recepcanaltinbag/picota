@@ -16,10 +16,10 @@ scoring_main("/media/lin-bio/back2/picota_test/cycle_folder","/media/lin-bio/bac
     path_to_xenobiotics, path_to_ises
     )
 
-print('Enf od blasted')
+print('Enf od blasted')"SRR12917043","SRR12917036",
 input()
 '''
-sra_list_oxford = ["SRR12917043","SRR12917036","SRR12917028"]
+sra_list_oxford = ["SRR12917038"]
 base_dir = "/media/lin-bio/back2/picota_test"
 
 for sra_l in sra_list_oxford:

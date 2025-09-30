@@ -1,0 +1,317 @@
+import pysam
+from collections import defaultdict
+import os
+
+def collect_annotated_blocks_split_old(bam_file, boundary=820, gap_tolerance=5, min_block_len=300, min_len_tol=0.1,len_tol=0.1):
+    bam = pysam.AlignmentFile(bam_file, "rb")
+    read_blocks = defaultdict(lambda: defaultdict(list))
+
+    # referans uzunluklarını BAM'dan al
+    ref_lengths = {ref: bam.get_reference_length(ref) for ref in bam.references}
+
+    for aln in bam:
+        if aln.is_unmapped:
+            continue
+
+        qname = aln.query_name
+        ref = aln.reference_name
+        read_len = len(aln.query_sequence)
+        ref_len = ref_lengths[ref]
+
+        # read uzunluk filtresi
+        min_len = ref_len * (1 - min_len_tol)
+        max_len = ref_len * (1 + len_tol)
+        if not (min_len <= read_len <= max_len):
+            continue
+
+        pairs = aln.get_aligned_pairs(matches_only=True)
+        if not pairs:
+            continue
+
+        q_start, r_start = pairs[0]
+        prev_q, prev_r = pairs[0]
+
+        for qpos, rpos in pairs[1:]:
+            dq = qpos - prev_q
+            dr = rpos - prev_r
+
+            if dq > gap_tolerance or dr > gap_tolerance:
+                # blok uzunluğu yeterliyse işleme al
+                block_len = prev_r - r_start + 1
+                if block_len >= min_block_len:
+                    # boundary kontrolü: blok boundary’i kesiyorsa iki parçaya böl
+                    if r_start < boundary <= prev_r:
+                        # parça 1: transposon
+                        frac_len = boundary - r_start
+                        q_frac = int(q_start + (frac_len * (prev_q - q_start) / block_len))
+                        read_blocks[qname][ref].append((r_start, boundary-1, q_start, q_frac, "transposon", read_len))
+                        # parça 2: cargo
+                        q_frac2 = q_frac + 1
+                        read_blocks[qname][ref].append((boundary, prev_r, q_frac2, prev_q, "cargo", read_len))
+                    else:
+                        annotation = "transposon" if r_start < boundary else "cargo"
+                        read_blocks[qname][ref].append((r_start, prev_r, q_start, prev_q, annotation, read_len))
+
+                q_start, r_start = qpos, rpos
+            prev_q, prev_r = qpos, rpos
+
+        # son blok
+        block_len = prev_r - r_start + 1
+        if block_len >= min_block_len:
+            if r_start < boundary <= prev_r:
+                # parça 1: transposon
+                len1 = boundary - r_start
+                if len1 >= min_block_len:
+                    q_frac = int(q_start + (len1 * (prev_q - q_start) / block_len))
+                    read_blocks[qname][ref].append((r_start, boundary-1, q_start, q_frac, "transposon", read_len))
+                # parça 2: cargo
+                len2 = prev_r - boundary + 1
+                if len2 >= min_block_len:
+                    q_frac2 = q_frac + 1 if len1 >= min_block_len else q_start  # q_frac yoksa q_start kullan
+                    read_blocks[qname][ref].append((boundary, prev_r, q_frac2, prev_q, "cargo", read_len))
+
+    bam.close()
+    return read_blocks
+
+import pysam
+from collections import defaultdict
+
+def collect_annotated_blocks_single_readlen(bam_file, boundary=820, gap_tolerance=5, min_block_len=300, min_len_tol=0.1, len_tol=0.1):
+    
+    
+    try:
+        bam = pysam.AlignmentFile(bam_file, "rb")
+    except OSError as e:
+        print(f"\033[91m[HATA] {bam_file} açılırken sorun: {e}. Dosya atlanıyor...\033[0m")
+        return {}
+    
+    read_blocks = defaultdict(lambda: defaultdict(list))
+    ref_lengths = {ref: bam.get_reference_length(ref) for ref in bam.references}
+
+    # 1) Tüm alignment bloklarını read bazında topla
+    temp_blocks = defaultdict(lambda: defaultdict(list))
+    read_lengths = defaultdict(int)  # her read için tek read_len
+
+    for aln in bam:
+        if aln.is_unmapped:
+            continue
+        qname = aln.query_name
+        ref = aln.reference_name
+
+        # read uzunluğu: query_length + hard clip baş ve son
+        aln_read_len = aln.query_length
+        if aln.cigartuples:
+            # baştaki hard clip
+            if aln.cigartuples[0][0] == 5:
+                aln_read_len += aln.cigartuples[0][1]
+            # sondaki hard clip
+            if aln.cigartuples[-1][0] == 5:
+                aln_read_len += aln.cigartuples[-1][1]
+
+        # read_len dictionary’sinde max olanı al
+        read_lengths[qname] = max(read_lengths[qname], aln_read_len)
+
+        # read uzunluk filtresi
+        ref_len = ref_lengths[ref]
+        min_len = ref_len * (1 - min_len_tol)
+        max_len = ref_len * (1 + len_tol)
+        if not (min_len <= aln_read_len <= max_len):
+            continue
+
+        # hard clip offset
+        q_offset = 0
+        if aln.cigartuples:
+            if aln.cigartuples[0][0] == 5:  # H
+                q_offset += aln.cigartuples[0][1]
+
+        pairs = aln.get_aligned_pairs(matches_only=True)
+        if not pairs:
+            continue
+
+        q_start, r_start = pairs[0]
+        prev_q, prev_r = pairs[0]
+        blocks_temp = []
+
+        for qpos, rpos in pairs[1:]:
+            dq = qpos - prev_q
+            dr = rpos - prev_r
+            if dq > gap_tolerance or dr > gap_tolerance:
+                block_len = prev_r - r_start + 1
+                if block_len >= min_block_len:
+                    blocks_temp.append((r_start, prev_r, q_start + q_offset, prev_q + q_offset))
+                q_start, r_start = qpos, rpos
+            prev_q, prev_r = qpos, rpos
+
+        # son blok
+        block_len = prev_r - r_start + 1
+        if block_len >= min_block_len:
+            blocks_temp.append((r_start, prev_r, q_start + q_offset, prev_q + q_offset))
+
+        # boundary split ve annotation
+        annotated_blocks = []
+        for r1, r2, q1, q2 in blocks_temp:
+            if r1 < boundary <= r2:
+                len1 = boundary - r1
+                if len1 >= min_block_len:
+                    q_frac = int(q1 + (len1 * (q2 - q1) / (r2 - r1 + 1)))
+                    annotated_blocks.append((r1, boundary-1, q1, q_frac, "transposon", aln_read_len))
+                len2 = r2 - boundary + 1
+                if len2 >= min_block_len:
+                    q_frac2 = q_frac + 1 if len1 >= min_block_len else q1
+                    annotated_blocks.append((boundary, r2, q_frac2, q2, "cargo", aln_read_len))
+            else:
+                annot = "transposon" if r1 < boundary else "cargo"
+                annotated_blocks.append((r1, r2, q1, q2, annot, aln_read_len))
+
+        temp_blocks[qname][ref].extend(annotated_blocks)
+
+    bam.close()
+
+    # 2) Read bazlı merge, overlap olursa ayrı bırak
+    for qname, refs in temp_blocks.items():
+        for ref, blist in refs.items():
+            # tip ve ref_start’a göre sırala
+            blist.sort(key=lambda x: (x[4], x[0]))
+            merged = []
+            for blk in blist:
+                if not merged:
+                    merged.append(blk)
+                else:
+                    prev = merged[-1]
+                    # sadece aynı tip ve ardışık (prev[1]+1 == blk[0] ve prev[4]==blk[4]) ise merge
+                    if blk[4] == prev[4] and blk[0] == prev[1] + 1:
+                        merged[-1] = (
+                            prev[0], max(prev[1], blk[1]), prev[2], max(prev[3], blk[3]), prev[4], read_lengths[qname]
+                        )
+                    else:
+                        merged.append(blk)
+            read_blocks[qname][ref].extend(merged)
+
+
+
+    return read_blocks
+
+def write_cargo_transposon_reads(blocks, out_file):
+    seen_reads = set()
+    with open(out_file, 'a') as f:
+        for read_id, refs in blocks.items():
+            if read_id in seen_reads:
+                continue
+            for ref, blist in refs.items():
+                # read koordinatına göre sırala
+                blist_sorted = sorted(blist, key=lambda x: x[2])
+                pattern = [blk[4] for blk in blist_sorted]
+                
+                # cargo -> transposon -> cargo patterni kontrol
+                try:
+                    first_cargo = pattern.index("cargo")
+                    transposon_idx = pattern.index("transposon", first_cargo + 1)
+                    second_cargo_idx = pattern.index("cargo", transposon_idx + 1)
+
+                    # pattern bulundu → dosyaya yaz
+                    f.write(f">{read_id}\n")
+                    for r1, r2, q1, q2, annot, read_len in blist_sorted:
+                        f.write(f"{ref}: Ref {r1}-{r2} ({annot}) <=> Read {q1}-{q2} | ReadLen={read_len}\n")
+                    
+                    # renkli terminal print
+                    print(f"\n{read_id}")
+                    for r1, r2, q1, q2, annot, read_len in blist_sorted:
+                        color = "\033[93m" if annot=="cargo" else "\033[91m"
+                        reset = "\033[0m"
+                        print(f"  {ref}: Ref {r1}-{r2} ({color}{annot}{reset}) <=> Read {q1}-{q2} | ReadLen={read_len}")
+                    
+                    seen_reads.add(read_id)
+                    break  # bir ref buldu → diğerlerini atla
+                except ValueError:
+                    continue
+
+import re
+import re
+
+def write_cargo_transposon_reads_regex(blocks, out_file_ctc, out_file_partial):
+    """
+    Her read içindeki:
+      - c->t->c patternlerini out_file_ctc dosyasına,
+      - c->t veya t->c patternlerini out_file_partial dosyasına
+    kaydeder.
+    """
+    with open(out_file_ctc, 'a') as f_ctc, open(out_file_partial, 'a') as f_partial:
+        for read_id, refs in blocks.items():
+            for ref, blist in refs.items():
+                # read koordinatına göre sırala
+                blist_sorted = sorted(blist, key=lambda x: x[2])
+                
+                # annotation tiplerini al
+                pattern = [blk[4] for blk in blist_sorted]
+                pattern_str = ''.join(['c' if x == 'cargo' else 't' for x in pattern])
+                
+                # 1) c-t-c patternlerini kontrol et
+                if re.search(r'c.*t.*c', pattern_str):
+                    target_file = f_ctc
+                # 2) c-t veya t-c patternlerini kontrol et (ancak c-t-c yoksa)
+                elif re.search(r'c.*t|t.*c', pattern_str):
+                    target_file = f_partial
+                else:
+                    continue  # hiçbir pattern yoksa atla
+
+                # dosyaya yaz
+                target_file.write(f">{read_id}\n")
+                for r1, r2, q1, q2, annot, read_len in blist_sorted:
+                    target_file.write(f"{ref}: Ref {r1}-{r2} ({annot}) <=> Read {q1}-{q2} | ReadLen={read_len}\n")
+
+                # terminal çıktısı
+                print(f"\n{read_id} ({'c-t-c' if target_file==f_ctc else 'partial'})")
+                for r1, r2, q1, q2, annot, read_len in blist_sorted:
+                    color = "\033[93m" if annot == "cargo" else "\033[91m"
+                    reset = "\033[0m"
+                    print(f"  {ref}: Ref {r1}-{r2} ({color}{annot}{reset}) <=> Read {q1}-{q2} | ReadLen={read_len}")
+
+
+# === Kullanım ===
+if __name__ == "__main__":
+
+
+    base_dir = '/media/lin-bio/back2/picota_IS26_test'
+    out_file = '/media/lin-bio/back2/picota_IS26_test/annotated_reads_normal.txt'
+    out_file_partial = '/media/lin-bio/back2/picota_IS26_test/annotated_reads_partial.txt'
+    # dosyayı sıfırla
+    open(out_file, 'w').close()
+    # tüm BAM dosyalarını bul
+    bam_files = []
+    for root, dirs, files in os.walk(base_dir):
+        for f in files:
+            if f.endswith("_sorted.bam"):
+                bam_files.append(os.path.join(root, f))
+
+    print(f"Found {len(bam_files)} BAM files.")
+    for bam_file in bam_files:
+        print('.', end='', flush=True)
+        #print(f"\nProcessing: {bam_file}")
+        #bam_file = '/media/lin-bio/back2/picota_IS26_test/circle_Control/Tn4352-M20306_ERR5902785_1/ERR5902785_1_Tn4352-M20306_sorted.bam'
+        boundary = 820      # transposon/cargo sınırı
+        len_tol = 5000      # %10 tolerans
+        blocks = collect_annotated_blocks_single_readlen(
+            bam_file,
+            boundary=boundary,
+            gap_tolerance=30,
+            min_block_len=100,
+            min_len_tol= 0.5,
+            len_tol=len_tol
+        )
+
+        # debug çıktı
+    # debug çıktı (sadece tek tip blok olan readler)
+    # debug çıktı (sadece hem transposon hem cargo olan readler)
+        if not blocks:
+            continue  # bozuk dosya ya da boş sonuç, atla
+        '''
+        for read, refs in blocks.items():
+            for ref, blist in refs.items():
+                block_types = set(annot for (_, _, _, _, annot, _) in blist)
+                if "transposon" in block_types and "cargo" in block_types:
+                    print(f"\n{read}")
+                    for (r1, r2, q1, q2, annot, rlen) in blist:
+                        print(f"  {ref}: Ref {r1}-{r2} ({annot}) <=> Read {q1}-{q2} | ReadLen={rlen}")
+        '''
+        # dosyaya yaz
+        write_cargo_transposon_reads_regex(blocks, out_file, out_file_partial)
