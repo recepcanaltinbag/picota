@@ -11,9 +11,9 @@ import csv
 from src.cycle_finderv2 import cycle_analysis
 from src.sra_download import run_sra_down
 from src.assembly import assembly_main
-from src.scoringv3_blast import scoring_main
-
-
+from src.scoringv4ProtBlast import scoring_main
+from src.split_cycle_coords_for_is import split_cycles_from_picota
+from src.bam_analyse import bam_file_analyze
 
 
 def load_sra_pairs(sra_id_file):
@@ -84,22 +84,34 @@ logging.basicConfig(
 
 # === Helper Functions ===
 def run_sra_download(acc, out_dir, sra_folder, fastq_dump_path):
-    raw_files = [os.path.join(sra_folder, f"{acc}_{i}.fastq") for i in (1, 2)]
-    if all(os.path.exists(f) for f in raw_files):
-        logging.info(f"[{acc}] FASTQ zaten mevcut, indirilmiyor.")
+    os.makedirs(sra_folder, exist_ok=True)
+    expected_files = [os.path.join(out_dir, f"{acc}_{i}.fastq") for i in (1, 2)]
+    
+    # eksik olanları indir
+    missing = [f for f in expected_files if not os.path.exists(f)]
+    if missing:
+        logging.info(f"[{acc}] FASTQ eksik, indiriliyor...")
+        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False)
     else:
-        logging.info(f"[{acc}] FASTQ indiriliyor...")
-        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=False, the_force=True)
+        logging.info(f"[{acc}] FASTQ zaten mevcut, indirilmiyor.")
+    
+    # indirildikten sonra var olan tüm fastq dosyalarını döndür
+    raw_files = [f for f in expected_files if os.path.exists(f)]
     return raw_files
 
 def run_longread_download(acc, out_dir, sra_folder, fastq_dump_path):
-    fastq_file = os.path.join(sra_folder, f"{acc}.fastq")
-    if os.path.exists(fastq_file):
-        logging.info(f"[{acc}] Long-read FASTQ zaten mevcut, indirilmiyor.")
+    os.makedirs(sra_folder, exist_ok=True)
+    fastq_file = os.path.join(out_dir, f"{acc}_1.fastq")
+
+    if not os.path.exists(fastq_file):
+        
+        logging.info(f"[{acc}] Long-read FASTQ indiriliyor...")
+        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False)
     else:
-        logging.info(f"[{acc}] Long-read indiriliyor...")
-        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=False, the_force=True)
+        logging.info(f"[{acc}] Long-read FASTQ zaten mevcut, indirilmiyor.")
+
     return fastq_file
+
 
 
 def run_assembly(acc, raw_files, out_folder, cfg):
@@ -137,11 +149,16 @@ def run_cycle_analysis(acc, gfa_file, out_file, cfg):
 
 def run_scoring(acc, cycle_file, out_folder, cfg):
     logging.info(f"[{acc}] Scoring başlatılıyor...")
+    picota_final_tab = os.path.join(out_folder, 'picota_final_tab')    
+    if os.path.exists(picota_final_tab):
+        logging.info(f"[{acc}] Scoring was made.")
+        return picota_final_tab
+    
     scoring_main(
         cycle_file, out_folder,
         cfg["path_to_antibiotics"], cfg["path_to_xenobiotics"], cfg["path_to_ises"]
     )
-
+    return picota_final_tab
 
 # === Pipeline ===
 def process_accession(short_acc, long_acc, cfg, project_root):
@@ -152,15 +169,18 @@ def process_accession(short_acc, long_acc, cfg, project_root):
     asm_folder = os.path.join(project_root, "assembly", short_acc)
     cyc_folder = os.path.join(project_root, "cycles")
     scr_folder = os.path.join(project_root, "scoring", short_acc)
+    annot_folder =  os.path.join(project_root, "annot", short_acc)
     os.makedirs(sra_folder, exist_ok=True)
     os.makedirs(asm_folder, exist_ok=True)
     os.makedirs(cyc_folder, exist_ok=True)
     os.makedirs(scr_folder, exist_ok=True)
+    os.makedirs(annot_folder, exist_ok=True)
 
     # 1) SRA Download
     raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg["path_of_fastq_dump"])
 
     # 2) Assembly
+
     gfa_files = run_assembly(short_acc, raw_files, asm_folder, cfg)
     if not gfa_files:
         logging.warning(f"[{short_acc}] Assembly başarısız, GFA bulunamadı.")
@@ -172,19 +192,25 @@ def process_accession(short_acc, long_acc, cfg, project_root):
     run_cycle_analysis(short_acc, gfa_file, out_cycle_file, cfg)
 
     # 4) Scoring
-    run_scoring(short_acc, out_cycle_file, scr_folder, cfg)
+
+    picota_final_tab = run_scoring(short_acc, out_cycle_file, scr_folder, cfg)
+    annotated_fastas = split_cycles_from_picota(picota_final_tab, out_cycle_file, annot_folder)
+
+    print(annotated_fastas)
 
     # 5) Temizlik
+    '''
     if cfg.get("delete_fastq_files", False):
         for f in raw_files:
             if os.path.exists(f):
                 os.remove(f)
-                logging.info(f"[{acc}] Silindi: {f}")
+                logging.info(f"[{short_acc}] Silindi: {f}")
+    '''
 
     # long-read varsa mapping
     if long_acc:
-        logging.info(f"[{short_acc}] için long-read bulundu: {long_acc}")
-        map_folder = os.path.join(project_root, "mapping", short_acc)
+        logging.info(f"[{long_acc}] için long-read download başlıyor")
+        map_folder = os.path.join(project_root, "mapping", long_acc)
         os.makedirs(map_folder, exist_ok=True)
         long_sra_folder = os.path.join(project_root, "raw_long", long_acc)
         os.makedirs(long_sra_folder, exist_ok=True)
@@ -193,17 +219,32 @@ def process_accession(short_acc, long_acc, cfg, project_root):
             long_fastq = run_longread_download(
                 long_acc, map_folder, long_sra_folder, cfg["path_of_fastq_dump"]
             )
-            sorted_bam = run_minimap2(
-                out_cycle_file, long_fastq,
-                bam_out=f"{long_acc}_mapping.bam",
-                threads=cfg.get("mapping_threads", 4),
-                run_dir=map_folder
-            )
-            logging.info(f"[{short_acc}] Long-read mapping tamamlandı: {sorted_bam}")
+            logging.info(f"[{long_acc}] Long-read download tamamlandı: {long_fastq}")
         except Exception as e:
-            logging.error(f"[{short_acc}] Mapping sırasında hata oluştu: {e}")
+            logging.error(f"[{long_acc}] Long-read download sırasında hata: {e}")
     else:
-        logging.info(f"[{short_acc}] için long-read bulunamadı, mapping atlandı.")
+        logging.info(f"[{long_acc}] bulunamadı, download atlandı")
+
+    for fasta_record in annotated_fastas:
+        print(fasta_record, long_fastq)
+        if long_fastq:
+            try:
+                sorted_bam = run_minimap2(
+                    fasta_record, long_fastq,
+                    bam_out=f"{long_acc}_{fasta_record}_mapping.bam",
+                    threads=cfg.get("mapping_threads", 4),
+                    run_dir=os.path.join(project_root, "mapping", long_acc)
+                )
+                logging.info(f"[{long_acc}] Long-read mapping tamamlandı: {sorted_bam}")
+
+                # BAM analiz fonksiyonunu çağır
+                out_bam_analysis = f"{long_acc}_{fasta_record}_full"
+                out_bam_analysis_partial = f"{long_acc}_{fasta_record}_partial"
+                bam_file_analyze(sorted_bam, out_bam_analysis, out_bam_analysis_partial)
+            except Exception as e:
+                logging.error(f"[{long_acc}] Mapping veya BAM analiz sırasında hata: {e}")
+        else:
+            logging.info(f"[{long_acc}] için long-read bulunamadı, mapping atlandı")
 
 
     logging.info(f"✅ Tamamlandı: {short_acc}")

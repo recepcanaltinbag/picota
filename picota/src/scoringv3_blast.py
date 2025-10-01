@@ -150,53 +150,55 @@ def delete_blast_db(db_dir):
     except OSError as e:
         print("Error: %s - %s." % (e.filename, e.strerror))
 
-def make_blast_db(path_of_makeblastdb, db_input, db_output):
-    nin_file = f"{db_output}.nin"  # nucleotide DB için
-    if os.path.exists(nin_file):
+def make_blast_db(path_of_makeblastdb, db_input, db_output, db_type="nucl"):
+    """db_type: 'nucl' veya 'prot'"""
+    ext = ".nin" if db_type == "nucl" else ".pin"
+    check_file = f"{db_output}{ext}"
+    
+    if os.path.exists(check_file):
         #print(f"[OK] BLAST DB zaten var: {db_output}")
         return
     
-    args = f"{path_of_makeblastdb} -in {db_input} -dbtype nucl -out {db_output}"
+    args = f"{path_of_makeblastdb} -in {db_input} -dbtype {db_type} -out {db_output}"
     subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"[+] BLAST DB oluşturuldu: {db_output}")
-def run_blast(path_of_blastn, query, database, output):
+    print(f"[+] BLAST DB oluşturuldu: {db_output} ({db_type})")
+
+
+def run_blast(path_of_blast, query, database, output):
+    """blastn veya blastp çalıştırılır, executable path caller’a göre verilir"""
     extras = '"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen"'
-    args = f'{path_of_blastn} -db {database} -query {query} -out {output} -outfmt {extras}'
-    my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    args = f'{path_of_blast} -db {database} -query {query} -out {output} -outfmt {extras}'
+    subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder, db_path, blast_query, r_type, info_prod_dict, threshold_blast):
+
+def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, blast_query, r_type,
+                 info_prod_dict, threshold_blast, db_type="nucl"):
+    
     cycle_file_name = os.path.basename(db_path)
-    db_output = os.path.join(out_blast_folder,"blast_temp", cycle_file_name)
-    db_dir = out_blast_folder + "/blast_temp"
+    db_dir = os.path.join(out_blast_folder, "blast_temp")
+    db_output = os.path.join(db_dir, cycle_file_name)
     db_input = db_path
-    result_path = os.path.join(out_blast_folder,"blast_files", os.path.basename(blast_query) + "_" + r_type + ".out")
+    result_path = os.path.join(out_blast_folder, "blast_files", f"{os.path.basename(blast_query)}_{r_type}.out")
 
-    if not os.path.exists(db_dir):
-        os.mkdir(db_dir)
-
-    if not os.path.exists(out_blast_folder + "/blast_files"):
-        os.mkdir(out_blast_folder + "/blast_files")
+    os.makedirs(db_dir, exist_ok=True)
+    os.makedirs(os.path.join(out_blast_folder, "blast_files"), exist_ok=True)
 
     if not os.path.exists(blast_query):
         print('No available Blast Query file')
         return False
 
     try:
-        make_blast_db(path_of_makeblastdb, db_input, db_output)
-        run_blast(path_of_blastn, blast_query, db_output, result_path)
+        make_blast_db(path_of_makeblastdb, db_input, db_output, db_type=db_type)
+        run_blast(path_of_blast, blast_query, db_output, result_path)
     except Exception as e:
         print('Blast Error')
         raise UserWarning('Blast Error')
-    
+
     cds_list = parsing_blast_file(result_path, r_type, threshold_blast, info_prod_dict)
-    #if len(cds_list) == 0:
-    #    print('no good result')
-    #else:
-    #    print('Good result')
-   
-    #delete_blast_db(db_dir)
     return cds_list
+
 
 
 def parsing_blast_file(blast_result_file, r_type, threshold_blast, info_prod_dict, name_of_query=''):
@@ -276,7 +278,7 @@ def parsing_blast_file(blast_result_file, r_type, threshold_blast, info_prod_dic
 def scoring_main(cycle_folder, picota_out_folder, \
     path_to_antibiotics, path_to_xenobiotics, path_to_ises, \
     mean_of_CompTns = 5850, std_of_CompTns = 2586, total_score_type = 0, threshold_final_score = 50, \
-    max_z = 20, dist_type = 1, path_of_prodigal = "prodigal", path_of_blastn = "blastn", path_of_makeblastdb = "makeblastdb", path_of_blastx = "blastx"):
+    max_z = 20, dist_type = 1, path_of_prodigal = "prodigal", path_of_blastn = "blastn", path_of_makeblastdb = "makeblastdb", path_of_blastx = "blastx", path_of_blastp = "blastp"):
 
     #FOLDERS
     picota_temp_folder = os.path.join(picota_out_folder, "Pico_Temp")
@@ -299,8 +301,18 @@ def scoring_main(cycle_folder, picota_out_folder, \
     #INPUT CYCLE FILES
     final_list_comps = []
 
-    cycle_files = glob.glob(cycle_folder+"/*")
-    print('Number of cycle files: ',len(cycle_files))
+    
+    if os.path.isfile(cycle_folder):
+        # Tek dosya
+        cycle_files = [cycle_folder]
+    elif os.path.isdir(cycle_folder):
+        # Klasör, içindeki fasta dosyalarını al
+        cycle_files = glob.glob(os.path.join(cycle_folder, "*.fasta"))
+    else:
+        cycle_files = []
+
+    print(f"Bulunan cycle dosyaları: {cycle_files}")
+
 
     for cycle_file in cycle_files:
 
@@ -359,19 +371,19 @@ def scoring_main(cycle_folder, picota_out_folder, \
                     #Antibiotics
                     if os.path.exists(path_to_antibiotics):
                         r_type = 'Antibiotics'
-                        cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder, path_to_antibiotics, out_file_nuc, r_type, info_prod_dict, threshold_blast=80))
+                        cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder, path_to_antibiotics, out_file_nuc, r_type, info_prod_dict, threshold_blast=80, db_type="prot"))
                     else:
                         print('No available Antibiotics DB, control the path')
                     #Xenobiotics
                     if os.path.exists(path_to_xenobiotics):
                         r_type = 'Xenobiotics'
-                        cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder, path_to_xenobiotics, out_file_nuc, r_type, info_prod_dict, threshold_blast=80))
+                        cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder, path_to_xenobiotics, out_file_nuc, r_type, info_prod_dict, threshold_blast=80, db_type="prot"))
                     else:
                         print('No available Xenobiotics DB, control the path')
                     #Insertion Sequences
                     if os.path.exists(path_to_ises):
                         r_type = 'InsertionSequences'
-                        cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder, path_to_ises, splitted_cycle, r_type, info_prod_dict, threshold_blast=80))
+                        cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder, path_to_ises, splitted_cycle, r_type, info_prod_dict, threshold_blast=80, db_type="nucl"))
                     else:
                         print('No available InsertionSequences DB, control the path')
 

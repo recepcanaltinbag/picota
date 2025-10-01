@@ -293,7 +293,28 @@ def write_cargo_transposon_reads_regex(blocks, out_file_ctc, out_file_partial):
                 print(f"  {annot}: Ref {r1}-{r2} ({color}{annot}{reset}) <=> Read {q1}-{q2} | ReadLen={read_len}")
 
 
+
+def bam_file_analyze(sorted_bam_file, out_file, out_file_partial):
+
+    open(out_file, 'w').close()
+    len_tol = 5000      # %10 tolerans
+    blocks = collect_annotated_blocks_single_readlen(
+        sorted_bam_file,
+        gap_tolerance=30,
+        min_block_len=100,
+        min_len_tol= 0.5,
+        len_tol=len_tol
+    )
+    print(blocks)
+    if not blocks:
+        continue  # bozuk dosya ya da boş sonuç, atla
+    write_cargo_transposon_reads_regex(blocks, out_file, out_file_partial)
+
+
 # === Kullanım ===
+
+
+'''
 if __name__ == "__main__":
 
 
@@ -329,7 +350,7 @@ if __name__ == "__main__":
     # debug çıktı (sadece hem transposon hem cargo olan readler)
         if not blocks:
             continue  # bozuk dosya ya da boş sonuç, atla
-        '''
+       
         for read, refs in blocks.items():
             for ref, blist in refs.items():
                 block_types = set(annot for (_, _, _, _, annot, _) in blist)
@@ -337,6 +358,7 @@ if __name__ == "__main__":
                     print(f"\n{read}")
                     for (r1, r2, q1, q2, annot, rlen) in blist:
                         print(f"  {ref}: Ref {r1}-{r2} ({annot}) <=> Read {q1}-{q2} | ReadLen={rlen}")
-        '''
+       
         # dosyaya yaz
         write_cargo_transposon_reads_regex(blocks, out_file, out_file_partial)
+ '''
