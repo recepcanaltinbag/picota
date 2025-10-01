@@ -14,7 +14,7 @@ from src.assembly import assembly_main
 from src.scoringv4ProtBlast import scoring_main
 from src.split_cycle_coords_for_is import split_cycles_from_picota
 from src.bam_analyse import bam_file_analyze
-
+from src.analyze_blocks import analyze_blocks
 
 def load_sra_pairs(sra_id_file):
     pairs = []
@@ -231,16 +231,17 @@ def process_accession(short_acc, long_acc, cfg, project_root):
             try:
                 sorted_bam = run_minimap2(
                     fasta_record, long_fastq,
-                    bam_out=f"{long_acc}_{fasta_record}_mapping.bam",
+                    bam_out=f"{long_acc}_{os.path.basename(fasta_record)}_mapping.bam",
                     threads=cfg.get("mapping_threads", 4),
                     run_dir=os.path.join(project_root, "mapping", long_acc)
                 )
                 logging.info(f"[{long_acc}] Long-read mapping tamamlandı: {sorted_bam}")
 
                 # BAM analiz fonksiyonunu çağır
-                out_bam_analysis = f"{long_acc}_{fasta_record}_full"
-                out_bam_analysis_partial = f"{long_acc}_{fasta_record}_partial"
+                out_bam_analysis = f"{long_acc}_{os.path.basename(fasta_record)}_full"
+                out_bam_analysis_partial = f"{long_acc}_{os.path.basename(fasta_record)}_partial"
                 bam_file_analyze(sorted_bam, out_bam_analysis, out_bam_analysis_partial)
+                analyze_blocks(out_bam_analysis_partial, out_bam_analysis_partial, map_folder, fasta_record)
             except Exception as e:
                 logging.error(f"[{long_acc}] Mapping veya BAM analiz sırasında hata: {e}")
         else:

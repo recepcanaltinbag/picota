@@ -297,6 +297,7 @@ def write_cargo_transposon_reads_regex(blocks, out_file_ctc, out_file_partial):
 def bam_file_analyze(sorted_bam_file, out_file, out_file_partial):
 
     open(out_file, 'w').close()
+    open(out_file_partial, 'w').close()
     len_tol = 5000      # %10 tolerans
     blocks = collect_annotated_blocks_single_readlen(
         sorted_bam_file,
@@ -307,7 +308,7 @@ def bam_file_analyze(sorted_bam_file, out_file, out_file_partial):
     )
     print(blocks)
     if not blocks:
-        continue  # bozuk dosya ya da boş sonuç, atla
+        return None
     write_cargo_transposon_reads_regex(blocks, out_file, out_file_partial)
 
 
