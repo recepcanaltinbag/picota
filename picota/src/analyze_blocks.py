@@ -215,26 +215,32 @@ def plot_scatter_positions_logscale(pattern_readlens, pattern_positions, outdir=
 
 
 
+def analyze_blocks(file1, file2, figure_out_dir, figure_name):
 
-if __name__ == "__main__":
-    file_path = "annotated_reads_partialSRR22753363.txt"
-    #reads, read_lengths = parse_annotated_file(file_path)
-    reads, read_lengths = parse_annotated_files([file_path, "annotated_reads_normalSRR22753363.txt"])
-    
+    reads, read_lengths = parse_annotated_files([file1, file2])
     srr_counts, total, pattern_readlens, pattern_positions = find_patterns(reads, read_lengths)
+    output_file = os.path.join(figure_out_dir, "srr_summary.txt")
 
-    print("=== SRR bazında ===")
-    for s, d in srr_counts.items():
-        total_patterns = sum(d.values())
-        if total_patterns > 0:
-            print(f"{s}: " + ", ".join(f"{k}={v}" for k,v in d.items() if v>0))
+    with open(output_file, "w") as f:
+        # SRR bazında
+        f.write("=== SRR  ===\n")
+        print("=== SRR  ===")
+        for s, d in srr_counts.items():
+            total_patterns = sum(d.values())
+            if total_patterns > 0:
+                line = f"{s}: " + ", ".join(f"{k}={v}" for k,v in d.items() if v>0)
+                print(line)
+                f.write(line + "\n")
 
-    print("\n=== Genel toplam ===")
-    print(total)
+        # Genel toplam
+        f.write("\n=== Total ===\n")
+        print("\n=== Total ===")
+        print(total)
+        f.write(str(total) + "\n")
 
     # global histogramlar (ReadLen dağılımı)
-    plot_histograms(pattern_readlens, outdir="figures", prefix="global")
+    plot_histograms(pattern_readlens,figure_out_dir, figure_name)
     # ReadLen vs normalized position scatter'ları
-    plot_scatter_positions(pattern_readlens, pattern_positions, outdir="figures", prefix="global")
-    plot_scatter_positions_logscale(pattern_readlens, pattern_positions, outdir="figures", prefix="global")
+    plot_scatter_positions(pattern_readlens, pattern_positions, figure_out_dir, figure_name)
+    plot_scatter_positions_logscale(pattern_readlens, pattern_positions, figure_out_dir, figure_name)
     print("\n[INFO] figures/ klasörüne histogram ve position scatter'ları kaydedildi.")
