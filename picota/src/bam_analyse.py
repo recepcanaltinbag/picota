@@ -157,7 +157,7 @@ def collect_annotated_blocks_single_readlen(
         ref = aln.reference_name
 
         # Contig tipi
-        if ref.endswith("_transposon"):
+        if re.search(r"_transposon(_\d+)?$", ref):
             annot = "transposon"
         elif ref.endswith("_cargo"):
             annot = "cargo"

@@ -1,0 +1,738 @@
+>SRR22753363.2249
+cargo: Ref 3240-10845 (cargo) <=> Read 99651-107111 | ReadLen=118072
+cargo: Ref 14182-19309 (cargo) <=> Read 108418-113423 | ReadLen=118072
+unknown: Ref 0-1228 (unknown) <=> Read 113424-114643 | ReadLen=118072
+>SRR22753363.5258
+cargo: Ref 1459-5399 (cargo) <=> Read 5806-9758 | ReadLen=65273
+cargo: Ref 179-10845 (cargo) <=> Read 34598-45097 | ReadLen=65273
+cargo: Ref 14182-19309 (cargo) <=> Read 46406-51184 | ReadLen=65273
+unknown: Ref 0-1228 (unknown) <=> Read 51185-52407 | ReadLen=65273
+>SRR22753363.8494
+cargo: Ref 1459-5399 (cargo) <=> Read 8557-12471 | ReadLen=86874
+cargo: Ref 179-10845 (cargo) <=> Read 53346-63782 | ReadLen=86874
+cargo: Ref 14182-19309 (cargo) <=> Read 65087-70088 | ReadLen=86874
+unknown: Ref 0-1221 (unknown) <=> Read 70089-71303 | ReadLen=86874
+>SRR22753363.9077
+cargo: Ref 6428-10845 (cargo) <=> Read 67-4351 | ReadLen=20944
+cargo: Ref 14182-19309 (cargo) <=> Read 5657-10638 | ReadLen=20944
+unknown: Ref 0-1228 (unknown) <=> Read 10639-11864 | ReadLen=20944
+>SRR22753363.10570
+cargo: Ref 179-10845 (cargo) <=> Read 13945-24409 | ReadLen=32390
+cargo: Ref 14182-19309 (cargo) <=> Read 25704-30557 | ReadLen=32390
+unknown: Ref 0-1228 (unknown) <=> Read 30558-31748 | ReadLen=32390
+>SRR22753363.12812
+cargo: Ref 1840-5399 (cargo) <=> Read 9-3550 | ReadLen=28504
+cargo: Ref 179-10836 (cargo) <=> Read 3980-14412 | ReadLen=28504
+cargo: Ref 14182-19309 (cargo) <=> Read 15714-20672 | ReadLen=28504
+unknown: Ref 0-1228 (unknown) <=> Read 20673-21866 | ReadLen=28504
+>SRR22753363.13308
+cargo: Ref 1459-5399 (cargo) <=> Read 3311-7211 | ReadLen=61556
+cargo: Ref 179-10845 (cargo) <=> Read 33231-43737 | ReadLen=61556
+cargo: Ref 14182-19309 (cargo) <=> Read 45053-50007 | ReadLen=61556
+unknown: Ref 0-1228 (unknown) <=> Read 50008-51238 | ReadLen=61556
+>SRR22753363.14441
+cargo: Ref 7654-19309 (cargo) <=> Read 68-9430 | ReadLen=20231
+unknown: Ref 0-1228 (unknown) <=> Read 9431-10658 | ReadLen=20231
+>SRR22753363.14640
+cargo: Ref 187-10845 (cargo) <=> Read 666-11105 | ReadLen=18333
+cargo: Ref 14182-19309 (cargo) <=> Read 12412-17393 | ReadLen=18333
+unknown: Ref 0-946 (unknown) <=> Read 17394-18332 | ReadLen=18333
+>SRR22753363.15349
+cargo: Ref 179-10845 (cargo) <=> Read 3475-13846 | ReadLen=32209
+cargo: Ref 14182-19309 (cargo) <=> Read 15172-20160 | ReadLen=32209
+unknown: Ref 0-1228 (unknown) <=> Read 20161-21380 | ReadLen=32209
+>SRR22753363.15830
+cargo: Ref 17890-19309 (cargo) <=> Read 67-1460 | ReadLen=84537
+unknown: Ref 0-1228 (unknown) <=> Read 1461-2653 | ReadLen=84537
+>SRR22753363.16609
+cargo: Ref 10678-10845 (cargo) <=> Read 70-235 | ReadLen=9917
+cargo: Ref 14182-19309 (cargo) <=> Read 1540-6493 | ReadLen=9917
+unknown: Ref 0-1228 (unknown) <=> Read 6494-7725 | ReadLen=9917
+>SRR22753363.16941
+cargo: Ref 1459-5357 (cargo) <=> Read 4919-8752 | ReadLen=51009
+cargo: Ref 179-10845 (cargo) <=> Read 21521-31944 | ReadLen=51009
+cargo: Ref 14182-19309 (cargo) <=> Read 33237-37970 | ReadLen=51009
+unknown: Ref 0-1228 (unknown) <=> Read 37971-39159 | ReadLen=51009
+>SRR22753363.18143
+cargo: Ref 2719-10845 (cargo) <=> Read 68-8027 | ReadLen=34012
+cargo: Ref 14186-19309 (cargo) <=> Read 9333-15386 | ReadLen=34012
+unknown: Ref 0-1228 (unknown) <=> Read 14292-15521 | ReadLen=34012
+>SRR22753363.19322
+cargo: Ref 2482-5401 (cargo) <=> Read 0-2855 | ReadLen=34822
+cargo: Ref 179-10844 (cargo) <=> Read 10903-21427 | ReadLen=34822
+cargo: Ref 14182-19309 (cargo) <=> Read 22720-27674 | ReadLen=34822
+unknown: Ref 0-1228 (unknown) <=> Read 27675-28895 | ReadLen=34822
+>SRR22753363.19827
+cargo: Ref 179-10845 (cargo) <=> Read 21710-32235 | ReadLen=73972
+cargo: Ref 14182-19309 (cargo) <=> Read 33557-38535 | ReadLen=73972
+unknown: Ref 0-1228 (unknown) <=> Read 38536-39755 | ReadLen=73972
+>SRR22753363.20234
+cargo: Ref 1455-5399 (cargo) <=> Read 27562-31486 | ReadLen=84588
+cargo: Ref 179-10845 (cargo) <=> Read 32192-42564 | ReadLen=84588
+cargo: Ref 14182-19309 (cargo) <=> Read 43843-48796 | ReadLen=84588
+unknown: Ref 0-1228 (unknown) <=> Read 48797-50025 | ReadLen=84588
+>SRR22753363.21372
+cargo: Ref 179-10845 (cargo) <=> Read 25857-36357 | ReadLen=82270
+cargo: Ref 11825-12052 (cargo) <=> Read 37138-37318 | ReadLen=82270
+cargo: Ref 13456-19309 (cargo) <=> Read 37376-42662 | ReadLen=82270
+unknown: Ref 0-1228 (unknown) <=> Read 42663-43885 | ReadLen=82270
+>SRR22753363.21811
+cargo: Ref 10723-10845 (cargo) <=> Read 67-186 | ReadLen=16132
+cargo: Ref 1459-19309 (cargo) <=> Read 1412-6475 | ReadLen=16132
+unknown: Ref 0-1228 (unknown) <=> Read 6476-7698 | ReadLen=16132
+>SRR22753363.21880
+cargo: Ref 179-10845 (cargo) <=> Read 31546-41995 | ReadLen=50442
+cargo: Ref 14182-19309 (cargo) <=> Read 43265-48205 | ReadLen=50442
+unknown: Ref 0-1228 (unknown) <=> Read 48206-49427 | ReadLen=50442
+>SRR22753363.21936
+cargo: Ref 179-10845 (cargo) <=> Read 3017-13493 | ReadLen=31646
+cargo: Ref 14182-19306 (cargo) <=> Read 14783-19754 | ReadLen=31646
+unknown: Ref 0-1228 (unknown) <=> Read 19759-20973 | ReadLen=31646
+>SRR22753363.22003
+cargo: Ref 8782-10845 (cargo) <=> Read 69-2000 | ReadLen=19166
+cargo: Ref 1459-19309 (cargo) <=> Read 2657-8298 | ReadLen=19166
+unknown: Ref 0-1217 (unknown) <=> Read 8299-9501 | ReadLen=19166
+>SRR22753363.23844
+cargo: Ref 179-4844 (cargo) <=> Read 8881-13565 | ReadLen=52894
+cargo: Ref 4845-19309 (cargo) <=> Read 13863-25994 | ReadLen=52894
+unknown: Ref 0-1228 (unknown) <=> Read 25995-27221 | ReadLen=52894
+>SRR22753363.24367
+unknown: Ref 0-1228 (unknown) <=> Read 13555-14803 | ReadLen=56279
+cargo: Ref 179-868 (cargo) <=> Read 40214-40888 | ReadLen=56279
+>SRR22753363.24650
+cargo: Ref 180-10845 (cargo) <=> Read 6978-17398 | ReadLen=54646
+cargo: Ref 14182-19309 (cargo) <=> Read 18665-26781 | ReadLen=54646
+unknown: Ref 0-1228 (unknown) <=> Read 23566-24780 | ReadLen=54646
+>SRR22753363.24795
+cargo: Ref 5355-10845 (cargo) <=> Read 68-5436 | ReadLen=15289
+cargo: Ref 14182-19309 (cargo) <=> Read 6733-11716 | ReadLen=15289
+unknown: Ref 0-1228 (unknown) <=> Read 11717-12939 | ReadLen=15289
+>SRR22753363.25198
+cargo: Ref 179-10844 (cargo) <=> Read 30574-41054 | ReadLen=48045
+cargo: Ref 14182-19309 (cargo) <=> Read 42325-47286 | ReadLen=48045
+unknown: Ref 0-704 (unknown) <=> Read 47287-47990 | ReadLen=48045
+>SRR22753363.25364
+cargo: Ref 1459-5366 (cargo) <=> Read 342-4237 | ReadLen=69150
+cargo: Ref 179-11770 (cargo) <=> Read 43793-54777 | ReadLen=69150
+cargo: Ref 12082-12385 (cargo) <=> Read 54832-55075 | ReadLen=69150
+cargo: Ref 13235-19309 (cargo) <=> Read 55156-60551 | ReadLen=69150
+unknown: Ref 0-1228 (unknown) <=> Read 60552-61774 | ReadLen=69150
+>SRR22753363.25675
+cargo: Ref 182-10845 (cargo) <=> Read 6355-16497 | ReadLen=49784
+cargo: Ref 14182-19309 (cargo) <=> Read 17809-22777 | ReadLen=49784
+unknown: Ref 0-1228 (unknown) <=> Read 22778-24007 | ReadLen=49784
+>SRR22753363.26192
+cargo: Ref 1459-5399 (cargo) <=> Read 5698-9596 | ReadLen=89943
+cargo: Ref 179-11037 (cargo) <=> Read 59384-69891 | ReadLen=89943
+cargo: Ref 11442-12385 (cargo) <=> Read 69954-70622 | ReadLen=89943
+cargo: Ref 13692-19309 (cargo) <=> Read 70934-76050 | ReadLen=89943
+unknown: Ref 0-1228 (unknown) <=> Read 76051-77270 | ReadLen=89943
+>SRR22753363.26489
+cargo: Ref 4585-5366 (cargo) <=> Read 0-787 | ReadLen=11211
+cargo: Ref 14182-19309 (cargo) <=> Read 1088-6078 | ReadLen=11211
+unknown: Ref 0-1228 (unknown) <=> Read 6079-7308 | ReadLen=11211
+>SRR22753363.26609
+cargo: Ref 1459-5399 (cargo) <=> Read 12316-16151 | ReadLen=56109
+cargo: Ref 179-10845 (cargo) <=> Read 19310-29588 | ReadLen=56109
+cargo: Ref 14182-19296 (cargo) <=> Read 30865-35728 | ReadLen=56109
+unknown: Ref 0-1223 (unknown) <=> Read 35733-36938 | ReadLen=56109
+>SRR22753363.26612
+cargo: Ref 179-10840 (cargo) <=> Read 10151-20612 | ReadLen=60055
+cargo: Ref 14182-19309 (cargo) <=> Read 21911-28848 | ReadLen=60055
+unknown: Ref 0-1228 (unknown) <=> Read 26883-28115 | ReadLen=60055
+>SRR22753363.27738
+cargo: Ref 179-10845 (cargo) <=> Read 22349-32842 | ReadLen=75240
+cargo: Ref 14182-19309 (cargo) <=> Read 34143-39126 | ReadLen=75240
+unknown: Ref 0-1224 (unknown) <=> Read 39127-40329 | ReadLen=75240
+>SRR22753363.27910
+cargo: Ref 1459-5399 (cargo) <=> Read 12010-15944 | ReadLen=70363
+cargo: Ref 179-10845 (cargo) <=> Read 33330-43809 | ReadLen=70363
+cargo: Ref 14182-19309 (cargo) <=> Read 45110-50084 | ReadLen=70363
+unknown: Ref 0-1228 (unknown) <=> Read 50085-51319 | ReadLen=70363
+>SRR22753363.28464
+cargo: Ref 2799-11778 (cargo) <=> Read 69-8067 | ReadLen=22629
+cargo: Ref 12370-12806 (cargo) <=> Read 8172-8492 | ReadLen=22629
+cargo: Ref 13240-13910 (cargo) <=> Read 8555-9049 | ReadLen=22629
+cargo: Ref 14182-19309 (cargo) <=> Read 9139-14037 | ReadLen=22629
+unknown: Ref 0-1228 (unknown) <=> Read 14038-15254 | ReadLen=22629
+>SRR22753363.29142
+cargo: Ref 1461-5399 (cargo) <=> Read 6285-10204 | ReadLen=70306
+cargo: Ref 183-10824 (cargo) <=> Read 39090-49495 | ReadLen=70306
+cargo: Ref 11825-12052 (cargo) <=> Read 50307-50490 | ReadLen=70306
+cargo: Ref 13509-19309 (cargo) <=> Read 50555-55782 | ReadLen=70306
+unknown: Ref 0-1228 (unknown) <=> Read 55783-56997 | ReadLen=70306
+>SRR22753363.29470
+cargo: Ref 179-19305 (cargo) <=> Read 226-17030 | ReadLen=35480
+unknown: Ref 0-1228 (unknown) <=> Read 17039-18272 | ReadLen=35480
+>SRR22753363.29477
+cargo: Ref 3368-10845 (cargo) <=> Read 67-8403 | ReadLen=26400
+cargo: Ref 14182-19309 (cargo) <=> Read 8677-13672 | ReadLen=26400
+unknown: Ref 0-1228 (unknown) <=> Read 13673-14893 | ReadLen=26400
+>SRR22753363.29840
+cargo: Ref 1459-10845 (cargo) <=> Read 6383-18379 | ReadLen=39209
+cargo: Ref 14182-19309 (cargo) <=> Read 19665-24627 | ReadLen=39209
+unknown: Ref 0-1228 (unknown) <=> Read 24627-25860 | ReadLen=39209
+>SRR22753363.30758
+cargo: Ref 1271-10845 (cargo) <=> Read 67-9436 | ReadLen=20795
+cargo: Ref 14182-19309 (cargo) <=> Read 10744-15737 | ReadLen=20795
+unknown: Ref 0-1228 (unknown) <=> Read 15738-16956 | ReadLen=20795
+>SRR22753363.33293
+cargo: Ref 179-10845 (cargo) <=> Read 4746-15222 | ReadLen=47217
+cargo: Ref 14182-19309 (cargo) <=> Read 16525-21511 | ReadLen=47217
+unknown: Ref 0-1228 (unknown) <=> Read 21512-22742 | ReadLen=47217
+>SRR22753363.33320
+cargo: Ref 3365-10845 (cargo) <=> Read 91-10678 | ReadLen=23359
+cargo: Ref 14182-19309 (cargo) <=> Read 11969-16907 | ReadLen=23359
+unknown: Ref 0-1228 (unknown) <=> Read 16908-18145 | ReadLen=23359
+>SRR22753363.38120
+cargo: Ref 179-19309 (cargo) <=> Read 9980-26791 | ReadLen=55274
+unknown: Ref 0-1228 (unknown) <=> Read 26792-28010 | ReadLen=55274
+>SRR22753363.38569
+cargo: Ref 4131-5366 (cargo) <=> Read 58-1271 | ReadLen=36451
+cargo: Ref 184-10845 (cargo) <=> Read 14519-24770 | ReadLen=36451
+cargo: Ref 14182-19309 (cargo) <=> Read 26043-30930 | ReadLen=36451
+unknown: Ref 0-1221 (unknown) <=> Read 30931-32133 | ReadLen=36451
+>SRR22753363.39635
+cargo: Ref 1459-5399 (cargo) <=> Read 3794-7720 | ReadLen=77193
+cargo: Ref 179-10845 (cargo) <=> Read 48387-58884 | ReadLen=77193
+cargo: Ref 14182-19309 (cargo) <=> Read 60177-65164 | ReadLen=77193
+unknown: Ref 0-1228 (unknown) <=> Read 65165-66386 | ReadLen=77193
+>SRR22753363.43619
+cargo: Ref 179-10845 (cargo) <=> Read 7763-18224 | ReadLen=27010
+cargo: Ref 14182-19305 (cargo) <=> Read 19504-24477 | ReadLen=27010
+unknown: Ref 0-1228 (unknown) <=> Read 24481-25687 | ReadLen=27010
+>SRR22753363.43786
+cargo: Ref 2646-5399 (cargo) <=> Read 0-2738 | ReadLen=32724
+cargo: Ref 179-11139 (cargo) <=> Read 8864-19509 | ReadLen=32724
+cargo: Ref 12494-19309 (cargo) <=> Read 19704-25661 | ReadLen=32724
+unknown: Ref 0-1228 (unknown) <=> Read 25662-26888 | ReadLen=32724
+>SRR22753363.45317
+cargo: Ref 1459-5399 (cargo) <=> Read 16540-20437 | ReadLen=72008
+cargo: Ref 179-10845 (cargo) <=> Read 30464-40978 | ReadLen=72008
+cargo: Ref 14182-19309 (cargo) <=> Read 42283-47259 | ReadLen=72008
+unknown: Ref 0-1228 (unknown) <=> Read 47260-48481 | ReadLen=72008
+>SRR22753363.46211
+cargo: Ref 3329-12380 (cargo) <=> Read 2815-10913 | ReadLen=19737
+cargo: Ref 13235-19309 (cargo) <=> Read 11010-16394 | ReadLen=19737
+unknown: Ref 0-1228 (unknown) <=> Read 16395-17617 | ReadLen=19737
+>SRR22753363.49043
+cargo: Ref 179-10845 (cargo) <=> Read 6762-17316 | ReadLen=40544
+cargo: Ref 14182-19309 (cargo) <=> Read 18614-23576 | ReadLen=40544
+unknown: Ref 0-1228 (unknown) <=> Read 23577-24806 | ReadLen=40544
+>SRR22753363.49054
+cargo: Ref 1459-10845 (cargo) <=> Read 17491-30499 | ReadLen=62502
+cargo: Ref 14182-19309 (cargo) <=> Read 31793-36777 | ReadLen=62502
+unknown: Ref 0-1228 (unknown) <=> Read 36778-37993 | ReadLen=62502
+>SRR22753363.49074
+cargo: Ref 1459-5350 (cargo) <=> Read 7913-11794 | ReadLen=68164
+cargo: Ref 179-10845 (cargo) <=> Read 35191-45710 | ReadLen=68164
+cargo: Ref 14182-19309 (cargo) <=> Read 47035-52004 | ReadLen=68164
+unknown: Ref 0-1228 (unknown) <=> Read 52005-53223 | ReadLen=68164
+>SRR22753363.49102
+cargo: Ref 3213-5399 (cargo) <=> Read 48-2220 | ReadLen=41664
+cargo: Ref 179-10845 (cargo) <=> Read 18315-28827 | ReadLen=41664
+cargo: Ref 14182-19309 (cargo) <=> Read 30129-35118 | ReadLen=41664
+unknown: Ref 0-1228 (unknown) <=> Read 35119-36340 | ReadLen=41664
+>SRR22753363.50271
+cargo: Ref 1597-19304 (cargo) <=> Read 53-3686 | ReadLen=10733
+unknown: Ref 0-1222 (unknown) <=> Read 2680-3819 | ReadLen=10733
+>SRR22753363.51855
+cargo: Ref 1457-5399 (cargo) <=> Read 21777-25693 | ReadLen=82669
+cargo: Ref 179-4929 (cargo) <=> Read 35519-40289 | ReadLen=82669
+cargo: Ref 4930-5065 (cargo) <=> Read 40514-40634 | ReadLen=82669
+cargo: Ref 5066-10845 (cargo) <=> Read 40737-46364 | ReadLen=82669
+cargo: Ref 14182-19309 (cargo) <=> Read 47662-52656 | ReadLen=82669
+unknown: Ref 0-1228 (unknown) <=> Read 52657-53880 | ReadLen=82669
+>SRR22753363.52640
+cargo: Ref 1459-5355 (cargo) <=> Read 7935-11797 | ReadLen=46988
+cargo: Ref 179-10814 (cargo) <=> Read 13959-24453 | ReadLen=46988
+cargo: Ref 14182-19304 (cargo) <=> Read 25821-30805 | ReadLen=46988
+unknown: Ref 0-1225 (unknown) <=> Read 30809-32026 | ReadLen=46988
+>SRR22753363.53963
+cargo: Ref 3774-10845 (cargo) <=> Read 3-6804 | ReadLen=19002
+cargo: Ref 14182-19309 (cargo) <=> Read 8112-13077 | ReadLen=19002
+unknown: Ref 0-1228 (unknown) <=> Read 13078-14301 | ReadLen=19002
+>SRR22753363.56927
+cargo: Ref 1459-5399 (cargo) <=> Read 4597-8541 | ReadLen=64623
+cargo: Ref 179-10842 (cargo) <=> Read 35011-45499 | ReadLen=64623
+cargo: Ref 14182-19309 (cargo) <=> Read 46800-51787 | ReadLen=64623
+unknown: Ref 0-1228 (unknown) <=> Read 51788-53005 | ReadLen=64623
+>SRR22753363.57257
+cargo: Ref 889-10845 (cargo) <=> Read 79-9877 | ReadLen=35686
+cargo: Ref 14182-19309 (cargo) <=> Read 11191-16185 | ReadLen=35686
+unknown: Ref 0-1228 (unknown) <=> Read 16186-17399 | ReadLen=35686
+>SRR22753363.58731
+cargo: Ref 1459-5366 (cargo) <=> Read 22064-26410 | ReadLen=83290
+cargo: Ref 5348-19309 (cargo) <=> Read 40955-53258 | ReadLen=83290
+unknown: Ref 0-1228 (unknown) <=> Read 52537-54468 | ReadLen=83290
+>SRR22753363.58903
+cargo: Ref 179-10845 (cargo) <=> Read 2356-12815 | ReadLen=22432
+cargo: Ref 14182-19294 (cargo) <=> Read 14126-19079 | ReadLen=22432
+unknown: Ref 0-1228 (unknown) <=> Read 19093-20316 | ReadLen=22432
+>SRR22753363.59538
+cargo: Ref 18045-19301 (cargo) <=> Read 62965-64219 | ReadLen=86012
+unknown: Ref 0-1228 (unknown) <=> Read 64228-65438 | ReadLen=86012
+>SRR22753363.60762
+cargo: Ref 179-10845 (cargo) <=> Read 9361-19885 | ReadLen=45774
+cargo: Ref 14182-19309 (cargo) <=> Read 21194-26170 | ReadLen=45774
+unknown: Ref 0-1228 (unknown) <=> Read 26171-27405 | ReadLen=45774
+>SRR22753363.61168
+cargo: Ref 179-19309 (cargo) <=> Read 1933-18640 | ReadLen=37469
+unknown: Ref 0-1228 (unknown) <=> Read 18641-19865 | ReadLen=37469
+>SRR22753363.65280
+cargo: Ref 1241-10845 (cargo) <=> Read 66-9588 | ReadLen=29547
+cargo: Ref 14182-19309 (cargo) <=> Read 10727-15617 | ReadLen=29547
+unknown: Ref 0-1228 (unknown) <=> Read 15618-16831 | ReadLen=29547
+>SRR22753363.65353
+cargo: Ref 10448-10845 (cargo) <=> Read 65-466 | ReadLen=11648
+cargo: Ref 14182-19306 (cargo) <=> Read 1772-6764 | ReadLen=11648
+unknown: Ref 0-1228 (unknown) <=> Read 6769-7997 | ReadLen=11648
+>SRR22753363.67016
+cargo: Ref 2708-5366 (cargo) <=> Read 870-3513 | ReadLen=64510
+cargo: Ref 179-10845 (cargo) <=> Read 39862-50330 | ReadLen=64510
+cargo: Ref 14182-19309 (cargo) <=> Read 51636-56629 | ReadLen=64510
+unknown: Ref 0-1226 (unknown) <=> Read 56630-57857 | ReadLen=64510
+>SRR22753363.2049
+cargo: Ref 828-10843 (cargo) <=> Read 198-10027 | ReadLen=27573
+cargo: Ref 14182-19305 (cargo) <=> Read 11331-16276 | ReadLen=27573
+unknown: Ref 0-1228 (unknown) <=> Read 16283-17491 | ReadLen=27573
+>SRR22753363.2799
+cargo: Ref 1459-5399 (cargo) <=> Read 4057-7968 | ReadLen=88610
+cargo: Ref 179-11767 (cargo) <=> Read 59556-70535 | ReadLen=88610
+cargo: Ref 12082-12385 (cargo) <=> Read 70594-70851 | ReadLen=88610
+cargo: Ref 13235-19309 (cargo) <=> Read 70926-76337 | ReadLen=88610
+unknown: Ref 0-1228 (unknown) <=> Read 76338-77555 | ReadLen=88610
+>SRR22753363.2822
+cargo: Ref 179-10835 (cargo) <=> Read 36826-47308 | ReadLen=54627
+cargo: Ref 14191-19309 (cargo) <=> Read 48640-53623 | ReadLen=54627
+unknown: Ref 0-937 (unknown) <=> Read 53624-54562 | ReadLen=54627
+>SRR22753363.4194
+unknown: Ref 0-1228 (unknown) <=> Read 7269-8495 | ReadLen=29483
+cargo: Ref 179-868 (cargo) <=> Read 19754-20441 | ReadLen=29483
+>SRR22753363.4505
+cargo: Ref 179-10845 (cargo) <=> Read 1718-12189 | ReadLen=20104
+cargo: Ref 14182-19309 (cargo) <=> Read 13498-18474 | ReadLen=20104
+unknown: Ref 0-234 (unknown) <=> Read 18475-18705 | ReadLen=20104
+unknown: Ref 235-387 (unknown) <=> Read 18772-18924 | ReadLen=20104
+>SRR22753363.4979
+cargo: Ref 179-11627 (cargo) <=> Read 7195-17947 | ReadLen=42334
+cargo: Ref 12373-12806 (cargo) <=> Read 18079-18413 | ReadLen=42334
+cargo: Ref 13240-19309 (cargo) <=> Read 18475-24009 | ReadLen=42334
+unknown: Ref 0-1228 (unknown) <=> Read 24010-25240 | ReadLen=42334
+>SRR22753363.5755
+cargo: Ref 1463-5399 (cargo) <=> Read 7165-11079 | ReadLen=61905
+cargo: Ref 179-10845 (cargo) <=> Read 29754-40214 | ReadLen=61905
+cargo: Ref 14184-19309 (cargo) <=> Read 41527-46500 | ReadLen=61905
+unknown: Ref 0-1228 (unknown) <=> Read 46501-47721 | ReadLen=61905
+>SRR22753363.7406
+cargo: Ref 6194-10839 (cargo) <=> Read 31-4481 | ReadLen=23737
+cargo: Ref 1459-19309 (cargo) <=> Read 4774-10784 | ReadLen=23737
+unknown: Ref 0-1228 (unknown) <=> Read 10785-11982 | ReadLen=23737
+>SRR22753363.7436
+cargo: Ref 1459-5078 (cargo) <=> Read 7181-10749 | ReadLen=49198
+cargo: Ref 179-10845 (cargo) <=> Read 16985-27502 | ReadLen=49198
+cargo: Ref 14182-19309 (cargo) <=> Read 28826-33808 | ReadLen=49198
+unknown: Ref 0-1228 (unknown) <=> Read 33809-35047 | ReadLen=49198
+>SRR22753363.7662
+cargo: Ref 16613-18304 (cargo) <=> Read 0-1690 | ReadLen=94527
+cargo: Ref 2918-10845 (cargo) <=> Read 35233-46534 | ReadLen=94527
+cargo: Ref 14184-19309 (cargo) <=> Read 47841-52848 | ReadLen=94527
+unknown: Ref 0-1228 (unknown) <=> Read 52849-54061 | ReadLen=94527
+>SRR22753363.7676
+cargo: Ref 1459-5399 (cargo) <=> Read 13943-17876 | ReadLen=76342
+cargo: Ref 637-10845 (cargo) <=> Read 37845-47859 | ReadLen=76342
+cargo: Ref 14182-19309 (cargo) <=> Read 49165-54149 | ReadLen=76342
+unknown: Ref 0-1228 (unknown) <=> Read 54150-55369 | ReadLen=76342
+>SRR22753363.7820
+cargo: Ref 179-10845 (cargo) <=> Read 7156-17691 | ReadLen=26305
+cargo: Ref 14183-19309 (cargo) <=> Read 18997-23995 | ReadLen=26305
+unknown: Ref 0-1228 (unknown) <=> Read 23996-25227 | ReadLen=26305
+>SRR22753363.7947
+cargo: Ref 179-10845 (cargo) <=> Read 24796-35294 | ReadLen=42580
+cargo: Ref 14182-19309 (cargo) <=> Read 36576-41528 | ReadLen=42580
+unknown: Ref 0-989 (unknown) <=> Read 41529-42512 | ReadLen=42580
+>SRR22753363.9031
+cargo: Ref 179-10845 (cargo) <=> Read 13124-23881 | ReadLen=58167
+cargo: Ref 11825-19309 (cargo) <=> Read 24421-29949 | ReadLen=58167
+unknown: Ref 0-1228 (unknown) <=> Read 29950-31176 | ReadLen=58167
+>SRR22753363.9992
+cargo: Ref 179-10856 (cargo) <=> Read 18862-29212 | ReadLen=39241
+cargo: Ref 14182-19309 (cargo) <=> Read 30513-35490 | ReadLen=39241
+unknown: Ref 0-1228 (unknown) <=> Read 35491-36703 | ReadLen=39241
+>SRR22753363.10646
+cargo: Ref 18045-19301 (cargo) <=> Read 54960-56208 | ReadLen=69532
+unknown: Ref 0-1228 (unknown) <=> Read 56217-57438 | ReadLen=69532
+>SRR22753363.10675
+cargo: Ref 2918-5409 (cargo) <=> Read 188-2630 | ReadLen=26941
+cargo: Ref 179-10845 (cargo) <=> Read 3198-13692 | ReadLen=26941
+cargo: Ref 14182-19305 (cargo) <=> Read 14998-19990 | ReadLen=26941
+unknown: Ref 0-1228 (unknown) <=> Read 19994-21223 | ReadLen=26941
+>SRR22753363.10770
+cargo: Ref 1460-5366 (cargo) <=> Read 13377-17212 | ReadLen=64121
+cargo: Ref 179-6412 (cargo) <=> Read 25928-32118 | ReadLen=64121
+cargo: Ref 8147-10843 (cargo) <=> Read 33830-36366 | ReadLen=64121
+cargo: Ref 14188-19309 (cargo) <=> Read 37664-42570 | ReadLen=64121
+unknown: Ref 0-1228 (unknown) <=> Read 42571-43792 | ReadLen=64121
+>SRR22753363.12219
+cargo: Ref 179-10845 (cargo) <=> Read 38369-48826 | ReadLen=56212
+cargo: Ref 16043-19309 (cargo) <=> Read 51682-54838 | ReadLen=56212
+unknown: Ref 0-1216 (unknown) <=> Read 54839-56017 | ReadLen=56212
+>SRR22753363.13845
+cargo: Ref 1459-10843 (cargo) <=> Read 24844-38292 | ReadLen=77637
+cargo: Ref 14182-19309 (cargo) <=> Read 39603-44575 | ReadLen=77637
+unknown: Ref 0-1228 (unknown) <=> Read 44576-45793 | ReadLen=77637
+>SRR22753363.15357
+cargo: Ref 7412-10845 (cargo) <=> Read 0-3276 | ReadLen=27376
+cargo: Ref 14182-19309 (cargo) <=> Read 4584-13485 | ReadLen=27376
+unknown: Ref 0-1228 (unknown) <=> Read 9549-10775 | ReadLen=27376
+>SRR22753363.16123
+cargo: Ref 4843-10845 (cargo) <=> Read 54-5955 | ReadLen=22501
+cargo: Ref 14187-19309 (cargo) <=> Read 7227-12192 | ReadLen=22501
+unknown: Ref 0-1228 (unknown) <=> Read 12193-13415 | ReadLen=22501
+>SRR22753363.16206
+cargo: Ref 10265-19301 (cargo) <=> Read 0-6399 | ReadLen=14963
+unknown: Ref 0-1228 (unknown) <=> Read 6406-7618 | ReadLen=14963
+>SRR22753363.17424
+cargo: Ref 179-10833 (cargo) <=> Read 3968-14427 | ReadLen=25770
+cargo: Ref 14182-19309 (cargo) <=> Read 15740-20678 | ReadLen=25770
+unknown: Ref 0-930 (unknown) <=> Read 20679-21594 | ReadLen=25770
+>SRR22753363.17563
+cargo: Ref 16109-19309 (cargo) <=> Read 58-3235 | ReadLen=10580
+unknown: Ref 0-1228 (unknown) <=> Read 3236-4457 | ReadLen=10580
+>SRR22753363.18891
+cargo: Ref 4108-5399 (cargo) <=> Read 67-1354 | ReadLen=56627
+cargo: Ref 179-10845 (cargo) <=> Read 34212-44665 | ReadLen=56627
+cargo: Ref 14182-19309 (cargo) <=> Read 45956-50951 | ReadLen=56627
+unknown: Ref 0-1228 (unknown) <=> Read 50952-52180 | ReadLen=56627
+>SRR22753363.24312
+cargo: Ref 1459-5399 (cargo) <=> Read 1935-5834 | ReadLen=47245
+cargo: Ref 179-10851 (cargo) <=> Read 20453-30883 | ReadLen=47245
+cargo: Ref 14188-19309 (cargo) <=> Read 32164-37114 | ReadLen=47245
+unknown: Ref 0-1228 (unknown) <=> Read 37115-38340 | ReadLen=47245
+>SRR22753363.25191
+cargo: Ref 1459-5366 (cargo) <=> Read 16980-20880 | ReadLen=65170
+cargo: Ref 179-10845 (cargo) <=> Read 23119-33641 | ReadLen=65170
+cargo: Ref 11825-12052 (cargo) <=> Read 34423-34605 | ReadLen=65170
+cargo: Ref 13637-19309 (cargo) <=> Read 34690-39944 | ReadLen=65170
+unknown: Ref 0-1228 (unknown) <=> Read 39945-41159 | ReadLen=65170
+>SRR22753363.25437
+cargo: Ref 7883-10842 (cargo) <=> Read 0-2807 | ReadLen=9934
+cargo: Ref 14182-19309 (cargo) <=> Read 4093-8975 | ReadLen=9934
+unknown: Ref 0-906 (unknown) <=> Read 8976-9865 | ReadLen=9934
+>SRR22753363.25814
+cargo: Ref 18047-19301 (cargo) <=> Read 38201-39445 | ReadLen=52778
+unknown: Ref 0-1228 (unknown) <=> Read 39454-40672 | ReadLen=52778
+>SRR22753363.25965
+cargo: Ref 179-10845 (cargo) <=> Read 22140-32407 | ReadLen=39383
+cargo: Ref 11569-12060 (cargo) <=> Read 33110-33368 | ReadLen=39383
+cargo: Ref 13637-19305 (cargo) <=> Read 33444-38686 | ReadLen=39383
+unknown: Ref 0-629 (unknown) <=> Read 38690-39312 | ReadLen=39383
+>SRR22753363.29810
+cargo: Ref 646-10845 (cargo) <=> Read 26277-36356 | ReadLen=83222
+cargo: Ref 14182-19309 (cargo) <=> Read 37674-42656 | ReadLen=83222
+unknown: Ref 0-1228 (unknown) <=> Read 42657-43883 | ReadLen=83222
+>SRR22753363.32267
+cargo: Ref 1459-5383 (cargo) <=> Read 6524-10380 | ReadLen=88510
+cargo: Ref 179-10845 (cargo) <=> Read 57092-67596 | ReadLen=88510
+cargo: Ref 14182-19309 (cargo) <=> Read 68909-73859 | ReadLen=88510
+unknown: Ref 0-1228 (unknown) <=> Read 73860-75068 | ReadLen=88510
+>SRR22753363.32378
+cargo: Ref 6291-10845 (cargo) <=> Read 0-4385 | ReadLen=16610
+cargo: Ref 14182-19309 (cargo) <=> Read 5683-10586 | ReadLen=16610
+unknown: Ref 0-1228 (unknown) <=> Read 10587-11809 | ReadLen=16610
+>SRR22753363.32557
+cargo: Ref 179-19309 (cargo) <=> Read 334-17077 | ReadLen=34554
+unknown: Ref 0-1228 (unknown) <=> Read 17078-18280 | ReadLen=34554
+>SRR22753363.33587
+cargo: Ref 3918-10845 (cargo) <=> Read 1-6769 | ReadLen=13506
+cargo: Ref 14182-19309 (cargo) <=> Read 8062-13020 | ReadLen=13506
+unknown: Ref 0-418 (unknown) <=> Read 13021-13436 | ReadLen=13506
+>SRR22753363.34061
+cargo: Ref 1460-5382 (cargo) <=> Read 10521-14432 | ReadLen=70910
+cargo: Ref 179-10845 (cargo) <=> Read 35307-45835 | ReadLen=70910
+cargo: Ref 11822-12052 (cargo) <=> Read 46631-46806 | ReadLen=70910
+cargo: Ref 13456-19309 (cargo) <=> Read 46864-52122 | ReadLen=70910
+unknown: Ref 0-1228 (unknown) <=> Read 52123-53353 | ReadLen=70910
+>SRR22753363.36729
+cargo: Ref 179-10839 (cargo) <=> Read 31209-41655 | ReadLen=50044
+cargo: Ref 14182-19309 (cargo) <=> Read 42967-47937 | ReadLen=50044
+unknown: Ref 0-1228 (unknown) <=> Read 47938-49151 | ReadLen=50044
+>SRR22753363.38496
+cargo: Ref 4137-5383 (cargo) <=> Read 69-1302 | ReadLen=36585
+cargo: Ref 179-10613 (cargo) <=> Read 14371-24496 | ReadLen=36585
+cargo: Ref 14207-19309 (cargo) <=> Read 26025-31003 | ReadLen=36585
+unknown: Ref 0-1228 (unknown) <=> Read 31004-32210 | ReadLen=36585
+>SRR22753363.39392
+cargo: Ref 1251-10845 (cargo) <=> Read 0-9412 | ReadLen=22715
+cargo: Ref 14182-19306 (cargo) <=> Read 10720-15705 | ReadLen=22715
+unknown: Ref 0-1228 (unknown) <=> Read 15710-16930 | ReadLen=22715
+>SRR22753363.40987
+unknown: Ref 0-1220 (unknown) <=> Read 40-1234 | ReadLen=24457
+cargo: Ref 1459-5399 (cargo) <=> Read 16253-20171 | ReadLen=24457
+>SRR22753363.41194
+cargo: Ref 1460-10845 (cargo) <=> Read 41014-54207 | ReadLen=109876
+cargo: Ref 14182-19309 (cargo) <=> Read 55508-60507 | ReadLen=109876
+unknown: Ref 0-1228 (unknown) <=> Read 60508-61730 | ReadLen=109876
+>SRR22753363.41785
+cargo: Ref 179-10826 (cargo) <=> Read 14284-24707 | ReadLen=31928
+cargo: Ref 14190-19309 (cargo) <=> Read 26032-30971 | ReadLen=31928
+unknown: Ref 0-894 (unknown) <=> Read 30972-31860 | ReadLen=31928
+>SRR22753363.41796
+cargo: Ref 1497-12372 (cargo) <=> Read 13613-26764 | ReadLen=53953
+cargo: Ref 13235-19309 (cargo) <=> Read 26843-32221 | ReadLen=53953
+unknown: Ref 0-1228 (unknown) <=> Read 32222-33449 | ReadLen=53953
+>SRR22753363.42640
+cargo: Ref 179-19297 (cargo) <=> Read 9261-25698 | ReadLen=29548
+unknown: Ref 0-1228 (unknown) <=> Read 25706-26905 | ReadLen=29548
+>SRR22753363.44071
+cargo: Ref 3866-19309 (cargo) <=> Read 0-13087 | ReadLen=25866
+unknown: Ref 0-1228 (unknown) <=> Read 13088-14310 | ReadLen=25866
+>SRR22753363.44284
+cargo: Ref 1459-5409 (cargo) <=> Read 9958-13894 | ReadLen=50350
+cargo: Ref 179-10707 (cargo) <=> Read 15380-25742 | ReadLen=50350
+cargo: Ref 14182-19309 (cargo) <=> Read 27143-32142 | ReadLen=50350
+unknown: Ref 0-1228 (unknown) <=> Read 32143-33368 | ReadLen=50350
+>SRR22753363.45755
+cargo: Ref 1459-5399 (cargo) <=> Read 515-4431 | ReadLen=52529
+cargo: Ref 179-10845 (cargo) <=> Read 26987-37495 | ReadLen=52529
+cargo: Ref 14182-19309 (cargo) <=> Read 38807-43778 | ReadLen=52529
+unknown: Ref 0-1228 (unknown) <=> Read 43779-45011 | ReadLen=52529
+>SRR22753363.46498
+cargo: Ref 1459-5382 (cargo) <=> Read 23715-27600 | ReadLen=89786
+cargo: Ref 179-10707 (cargo) <=> Read 41049-51404 | ReadLen=89786
+cargo: Ref 14182-19309 (cargo) <=> Read 52849-57837 | ReadLen=89786
+unknown: Ref 0-1228 (unknown) <=> Read 57838-59060 | ReadLen=89786
+>SRR22753363.47228
+cargo: Ref 176-4699 (cargo) <=> Read 18141-22526 | ReadLen=37183
+cargo: Ref 5159-10842 (cargo) <=> Read 22881-28343 | ReadLen=37183
+cargo: Ref 14182-19309 (cargo) <=> Read 29635-34572 | ReadLen=37183
+unknown: Ref 0-1228 (unknown) <=> Read 34573-35795 | ReadLen=37183
+>SRR22753363.49259
+cargo: Ref 5523-19309 (cargo) <=> Read 1851-13367 | ReadLen=27151
+unknown: Ref 0-1228 (unknown) <=> Read 13368-14591 | ReadLen=27151
+>SRR22753363.49954
+cargo: Ref 179-10832 (cargo) <=> Read 35472-45944 | ReadLen=71011
+cargo: Ref 14183-19309 (cargo) <=> Read 47263-52232 | ReadLen=71011
+unknown: Ref 0-1228 (unknown) <=> Read 52233-53458 | ReadLen=71011
+>SRR22753363.49961
+cargo: Ref 1459-5364 (cargo) <=> Read 4245-8131 | ReadLen=69965
+cargo: Ref 179-10843 (cargo) <=> Read 40762-51230 | ReadLen=69965
+cargo: Ref 14182-19309 (cargo) <=> Read 52542-57501 | ReadLen=69965
+unknown: Ref 0-1228 (unknown) <=> Read 57502-58726 | ReadLen=69965
+>SRR22753363.50852
+cargo: Ref 5231-19309 (cargo) <=> Read 4-11765 | ReadLen=25358
+unknown: Ref 0-1228 (unknown) <=> Read 11766-12970 | ReadLen=25358
+>SRR22753363.51554
+cargo: Ref 8215-10845 (cargo) <=> Read 2-2509 | ReadLen=25669
+cargo: Ref 14182-19309 (cargo) <=> Read 3822-12503 | ReadLen=25669
+unknown: Ref 0-1228 (unknown) <=> Read 8855-10080 | ReadLen=25669
+>SRR22753363.52651
+cargo: Ref 1469-5366 (cargo) <=> Read 2616-6426 | ReadLen=74197
+cargo: Ref 179-10845 (cargo) <=> Read 46776-57238 | ReadLen=74197
+cargo: Ref 14184-19309 (cargo) <=> Read 58538-63432 | ReadLen=74197
+unknown: Ref 0-1228 (unknown) <=> Read 63433-64650 | ReadLen=74197
+>SRR22753363.52672
+cargo: Ref 179-11342 (cargo) <=> Read 7769-18550 | ReadLen=29068
+cargo: Ref 11607-11824 (cargo) <=> Read 18616-18805 | ReadLen=29068
+cargo: Ref 12149-19309 (cargo) <=> Read 18858-24543 | ReadLen=29068
+unknown: Ref 0-1033 (unknown) <=> Read 24544-25581 | ReadLen=29068
+>SRR22753363.53011
+cargo: Ref 2628-10845 (cargo) <=> Read 0-8007 | ReadLen=31870
+cargo: Ref 14200-19309 (cargo) <=> Read 9331-14267 | ReadLen=31870
+unknown: Ref 0-1224 (unknown) <=> Read 14268-15484 | ReadLen=31870
+>SRR22753363.53098
+cargo: Ref 3899-5382 (cargo) <=> Read 67-1538 | ReadLen=45081
+cargo: Ref 179-10845 (cargo) <=> Read 22431-32948 | ReadLen=45081
+cargo: Ref 14182-19309 (cargo) <=> Read 34299-39196 | ReadLen=45081
+unknown: Ref 0-1228 (unknown) <=> Read 39197-40414 | ReadLen=45081
+>SRR22753363.55428
+cargo: Ref 6769-10826 (cargo) <=> Read 52-3965 | ReadLen=27760
+cargo: Ref 14182-19309 (cargo) <=> Read 5281-13162 | ReadLen=27760
+unknown: Ref 0-1228 (unknown) <=> Read 10255-11468 | ReadLen=27760
+>SRR22753363.57388
+cargo: Ref 1588-5399 (cargo) <=> Read 69-3851 | ReadLen=49516
+cargo: Ref 179-10845 (cargo) <=> Read 24524-35021 | ReadLen=49516
+cargo: Ref 14182-19309 (cargo) <=> Read 36332-41329 | ReadLen=49516
+unknown: Ref 0-1228 (unknown) <=> Read 41330-42559 | ReadLen=49516
+>SRR22753363.58810
+cargo: Ref 1313-11303 (cargo) <=> Read 4859-14486 | ReadLen=34061
+cargo: Ref 11611-12352 (cargo) <=> Read 14586-14997 | ReadLen=34061
+cargo: Ref 13235-13367 (cargo) <=> Read 15095-15204 | ReadLen=34061
+cargo: Ref 13643-19309 (cargo) <=> Read 15264-20488 | ReadLen=34061
+unknown: Ref 0-1228 (unknown) <=> Read 20489-21711 | ReadLen=34061
+>SRR22753363.59246
+cargo: Ref 1459-5359 (cargo) <=> Read 23057-26904 | ReadLen=81647
+cargo: Ref 179-12385 (cargo) <=> Read 33578-44895 | ReadLen=81647
+cargo: Ref 13235-13910 (cargo) <=> Read 44971-45325 | ReadLen=81647
+cargo: Ref 14135-19309 (cargo) <=> Read 45383-50405 | ReadLen=81647
+unknown: Ref 0-1228 (unknown) <=> Read 50406-51624 | ReadLen=81647
+>SRR22753363.60637
+cargo: Ref 5307-10845 (cargo) <=> Read 2550-7887 | ReadLen=18025
+cargo: Ref 14182-19309 (cargo) <=> Read 9194-14165 | ReadLen=18025
+unknown: Ref 0-1228 (unknown) <=> Read 14166-15381 | ReadLen=18025
+>SRR22753363.61076
+cargo: Ref 1459-5399 (cargo) <=> Read 30559-34484 | ReadLen=99273
+cargo: Ref 179-10942 (cargo) <=> Read 43656-54237 | ReadLen=99273
+cargo: Ref 11442-12353 (cargo) <=> Read 54297-54938 | ReadLen=99273
+cargo: Ref 13276-19309 (cargo) <=> Read 55086-60441 | ReadLen=99273
+unknown: Ref 0-1228 (unknown) <=> Read 60442-61679 | ReadLen=99273
+>SRR22753363.61433
+cargo: Ref 1464-5366 (cargo) <=> Read 6067-9904 | ReadLen=55126
+cargo: Ref 179-10845 (cargo) <=> Read 24371-34859 | ReadLen=55126
+cargo: Ref 14182-19309 (cargo) <=> Read 36184-41146 | ReadLen=55126
+unknown: Ref 0-844 (unknown) <=> Read 41148-41978 | ReadLen=55126
+>SRR22753363.61508
+cargo: Ref 2523-10839 (cargo) <=> Read 0-8025 | ReadLen=35543
+cargo: Ref 14182-19309 (cargo) <=> Read 9322-16745 | ReadLen=35543
+unknown: Ref 0-1228 (unknown) <=> Read 14190-15368 | ReadLen=35543
+>SRR22753363.62605
+cargo: Ref 1459-5399 (cargo) <=> Read 1837-5748 | ReadLen=33769
+cargo: Ref 179-10845 (cargo) <=> Read 6901-17419 | ReadLen=33769
+cargo: Ref 14182-19309 (cargo) <=> Read 18727-23704 | ReadLen=33769
+unknown: Ref 0-1228 (unknown) <=> Read 23705-24934 | ReadLen=33769
+>SRR22753363.62669
+cargo: Ref 10088-10845 (cargo) <=> Read 0-757 | ReadLen=11112
+cargo: Ref 14182-19309 (cargo) <=> Read 2067-7046 | ReadLen=11112
+unknown: Ref 0-1228 (unknown) <=> Read 7047-8284 | ReadLen=11112
+>SRR22753363.63746
+cargo: Ref 1459-10845 (cargo) <=> Read 6020-20281 | ReadLen=40789
+cargo: Ref 14184-19309 (cargo) <=> Read 21589-26573 | ReadLen=40789
+unknown: Ref 0-1228 (unknown) <=> Read 26574-27783 | ReadLen=40789
+>SRR22753363.64838
+cargo: Ref 15108-19309 (cargo) <=> Read 0-5022 | ReadLen=13442
+unknown: Ref 0-1228 (unknown) <=> Read 4075-5289 | ReadLen=13442
+>SRR22753363.65953
+cargo: Ref 15656-19309 (cargo) <=> Read 26976-30627 | ReadLen=30954
+unknown: Ref 0-267 (unknown) <=> Read 30628-30888 | ReadLen=30954
+>SRR22753363.65986
+cargo: Ref 1449-5226 (cargo) <=> Read 15038-18792 | ReadLen=108121
+cargo: Ref 5227-5409 (cargo) <=> Read 18860-19042 | ReadLen=108121
+cargo: Ref 194-10845 (cargo) <=> Read 67940-78436 | ReadLen=108121
+cargo: Ref 14182-19309 (cargo) <=> Read 79747-84755 | ReadLen=108121
+unknown: Ref 0-1228 (unknown) <=> Read 84756-85973 | ReadLen=108121
+>SRR22753363.67529
+cargo: Ref 1459-5399 (cargo) <=> Read 5533-9423 | ReadLen=60974
+cargo: Ref 179-10845 (cargo) <=> Read 30438-40930 | ReadLen=60974
+cargo: Ref 14182-19309 (cargo) <=> Read 42240-47230 | ReadLen=60974
+unknown: Ref 0-1228 (unknown) <=> Read 47231-48454 | ReadLen=60974
+>SRR22753363.68714
+cargo: Ref 179-10842 (cargo) <=> Read 9804-20312 | ReadLen=45765
+cargo: Ref 14182-19309 (cargo) <=> Read 21621-26600 | ReadLen=45765
+unknown: Ref 0-1228 (unknown) <=> Read 26601-27822 | ReadLen=45765
+>SRR22753363.68964
+cargo: Ref 179-10845 (cargo) <=> Read 24998-35598 | ReadLen=81760
+cargo: Ref 14182-19309 (cargo) <=> Read 36849-41830 | ReadLen=81760
+unknown: Ref 0-1228 (unknown) <=> Read 41831-43051 | ReadLen=81760
+>SRR22753363.68026
+cargo: Ref 1459-10845 (cargo) <=> Read 18036-31871 | ReadLen=64429
+cargo: Ref 14182-19309 (cargo) <=> Read 33160-38142 | ReadLen=64429
+unknown: Ref 1-1228 (unknown) <=> Read 38147-39372 | ReadLen=64429
+>SRR22753363.1741
+cargo: Ref 5356-19309 (cargo) <=> Read 0-11557 | ReadLen=24150
+unknown: Ref 4-1228 (unknown) <=> Read 11564-12769 | ReadLen=24150
+>SRR22753363.17579
+cargo: Ref 1407-5399 (cargo) <=> Read 11741-15725 | ReadLen=62753
+cargo: Ref 179-10969 (cargo) <=> Read 26074-36609 | ReadLen=62753
+cargo: Ref 14182-19309 (cargo) <=> Read 37918-42739 | ReadLen=62753
+unknown: Ref 4-1228 (unknown) <=> Read 42746-43936 | ReadLen=62753
+>SRR22753363.17774
+cargo: Ref 1459-5399 (cargo) <=> Read 26774-30657 | ReadLen=91463
+cargo: Ref 179-10845 (cargo) <=> Read 39784-50242 | ReadLen=91463
+cargo: Ref 14182-19309 (cargo) <=> Read 51549-56479 | ReadLen=91463
+unknown: Ref 4-1226 (unknown) <=> Read 56483-57714 | ReadLen=91463
+>SRR22753363.65684
+cargo: Ref 18045-19293 (cargo) <=> Read 5-1226 | ReadLen=13484
+unknown: Ref 4-1225 (unknown) <=> Read 1247-2488 | ReadLen=13484
+>SRR22753363.67894
+cargo: Ref 18045-19301 (cargo) <=> Read 15930-17142 | ReadLen=38003
+unknown: Ref 4-1228 (unknown) <=> Read 17155-18351 | ReadLen=38003
+>SRR22753363.16004
+cargo: Ref 1459-5399 (cargo) <=> Read 5308-9235 | ReadLen=73001
+cargo: Ref 179-10845 (cargo) <=> Read 42775-53163 | ReadLen=73001
+cargo: Ref 14186-19306 (cargo) <=> Read 54460-59445 | ReadLen=73001
+unknown: Ref 6-1228 (unknown) <=> Read 59455-60671 | ReadLen=73001
+>SRR22753363.34713
+cargo: Ref 1459-5399 (cargo) <=> Read 9193-13104 | ReadLen=79709
+cargo: Ref 179-10845 (cargo) <=> Read 45462-55972 | ReadLen=79709
+cargo: Ref 14182-19309 (cargo) <=> Read 57281-62281 | ReadLen=79709
+unknown: Ref 6-1228 (unknown) <=> Read 62290-63513 | ReadLen=79709
+>SRR22753363.4925
+cargo: Ref 6136-10845 (cargo) <=> Read 25-4591 | ReadLen=13507
+cargo: Ref 14182-19231 (cargo) <=> Read 5904-10828 | ReadLen=13507
+unknown: Ref 6-1228 (unknown) <=> Read 10911-12093 | ReadLen=13507
+>SRR22753363.9987
+cargo: Ref 17984-19309 (cargo) <=> Read 2065-3351 | ReadLen=17408
+unknown: Ref 6-124 (unknown) <=> Read 3356-3475 | ReadLen=17408
+>SRR22753363.18465
+cargo: Ref 179-868 (cargo) <=> Read 24217-24907 | ReadLen=75331
+unknown: Ref 6-1228 (unknown) <=> Read 48598-49818 | ReadLen=75331
+>SRR22753363.32132
+cargo: Ref 5932-13102 (cargo) <=> Read 53-5670 | ReadLen=13998
+cargo: Ref 13532-18920 (cargo) <=> Read 5751-10604 | ReadLen=13998
+unknown: Ref 6-1228 (unknown) <=> Read 10966-12168 | ReadLen=13998
+>SRR22753363.64098
+cargo: Ref 1459-5366 (cargo) <=> Read 6031-9923 | ReadLen=65090
+cargo: Ref 179-12385 (cargo) <=> Read 33979-45298 | ReadLen=65090
+cargo: Ref 13235-13341 (cargo) <=> Read 45375-45463 | ReadLen=65090
+cargo: Ref 13643-19309 (cargo) <=> Read 45548-50797 | ReadLen=65090
+unknown: Ref 7-1228 (unknown) <=> Read 50800-52028 | ReadLen=65090
+>SRR22753363.64904
+cargo: Ref 1459-5366 (cargo) <=> Read 14784-18662 | ReadLen=78870
+cargo: Ref 179-10845 (cargo) <=> Read 39159-49655 | ReadLen=78870
+cargo: Ref 14182-19039 (cargo) <=> Read 50948-55664 | ReadLen=78870
+unknown: Ref 7-1228 (unknown) <=> Read 55897-57082 | ReadLen=78870
+>SRR22753363.65270
+cargo: Ref 2918-5399 (cargo) <=> Read 190-2606 | ReadLen=26545
+cargo: Ref 179-10845 (cargo) <=> Read 2982-13386 | ReadLen=26545
+cargo: Ref 14182-19301 (cargo) <=> Read 14674-19608 | ReadLen=26545
+unknown: Ref 11-1228 (unknown) <=> Read 19631-20828 | ReadLen=26545
+>SRR22753363.47286
+cargo: Ref 179-10845 (cargo) <=> Read 17726-27997 | ReadLen=36696
+cargo: Ref 14183-19309 (cargo) <=> Read 29279-34135 | ReadLen=36696
+unknown: Ref 16-1228 (unknown) <=> Read 34144-35347 | ReadLen=36696
+>SRR22753363.47177
+cargo: Ref 179-10845 (cargo) <=> Read 66203-76621 | ReadLen=98465
+cargo: Ref 14220-19305 (cargo) <=> Read 77927-82785 | ReadLen=98465
+unknown: Ref 25-690 (unknown) <=> Read 82803-83451 | ReadLen=98465
+>SRR22753363.24750
+cargo: Ref 9450-10845 (cargo) <=> Read 69-1449 | ReadLen=10941
+cargo: Ref 14182-19304 (cargo) <=> Read 2792-7765 | ReadLen=10941
+unknown: Ref 26-1228 (unknown) <=> Read 7789-9002 | ReadLen=10941
+>SRR22753363.20956
+cargo: Ref 180-12372 (cargo) <=> Read 37420-48674 | ReadLen=58970
+cargo: Ref 13235-13388 (cargo) <=> Read 48752-48864 | ReadLen=58970
+cargo: Ref 13643-19309 (cargo) <=> Read 48924-54050 | ReadLen=58970
+unknown: Ref 28-1228 (unknown) <=> Read 54072-55271 | ReadLen=58970
+>SRR22753363.59440
+cargo: Ref 3227-10845 (cargo) <=> Read 1-7783 | ReadLen=20415
+cargo: Ref 14182-19309 (cargo) <=> Read 9067-14012 | ReadLen=20415
+unknown: Ref 36-1228 (unknown) <=> Read 14043-15212 | ReadLen=20415
+>SRR22753363.41202
+cargo: Ref 1475-5399 (cargo) <=> Read 19244-23109 | ReadLen=147787
+cargo: Ref 179-10838 (cargo) <=> Read 103704-114095 | ReadLen=147787
+cargo: Ref 14182-19309 (cargo) <=> Read 115400-120371 | ReadLen=147787
+unknown: Ref 37-1228 (unknown) <=> Read 120399-121579 | ReadLen=147787
+>SRR22753363.4428
+cargo: Ref 1459-5401 (cargo) <=> Read 7702-11621 | ReadLen=59023
+cargo: Ref 179-10634 (cargo) <=> Read 27001-37287 | ReadLen=59023
+cargo: Ref 14862-18334 (cargo) <=> Read 39281-42403 | ReadLen=59023
+unknown: Ref 322-1228 (unknown) <=> Read 43586-44490 | ReadLen=59023
+>SRR22753363.32699
+unknown: Ref 511-1228 (unknown) <=> Read 66-782 | ReadLen=17435
+cargo: Ref 1446-5399 (cargo) <=> Read 9702-13570 | ReadLen=17435
+>SRR22753363.39626
+unknown: Ref 531-1228 (unknown) <=> Read 7-701 | ReadLen=71806
+cargo: Ref 1459-5382 (cargo) <=> Read 64127-68018 | ReadLen=71806
+>SRR22753363.19055
+unknown: Ref 608-1228 (unknown) <=> Read 59-666 | ReadLen=12157
+cargo: Ref 1462-5343 (cargo) <=> Read 4508-8368 | ReadLen=12157
+>SRR22753363.25197
+cargo: Ref 179-10851 (cargo) <=> Read 4406-14917 | ReadLen=48194
+cargo: Ref 14182-19293 (cargo) <=> Read 16208-22807 | ReadLen=48194
+unknown: Ref 879-1228 (unknown) <=> Read 21941-22281 | ReadLen=48194
+>SRR22753363.21777
+unknown: Ref 880-1228 (unknown) <=> Read 66-412 | ReadLen=25051
+cargo: Ref 1459-5399 (cargo) <=> Read 17687-21545 | ReadLen=25051
+>SRR22753363.23370
+unknown: Ref 932-1228 (unknown) <=> Read 64-361 | ReadLen=29901
+cargo: Ref 1459-5366 (cargo) <=> Read 22487-26402 | ReadLen=29901

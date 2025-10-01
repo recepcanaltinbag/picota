@@ -238,8 +238,8 @@ def process_accession(short_acc, long_acc, cfg, project_root):
                 logging.info(f"[{long_acc}] Long-read mapping tamamlandı: {sorted_bam}")
 
                 # BAM analiz fonksiyonunu çağır
-                out_bam_analysis = f"{long_acc}_{os.path.basename(fasta_record)}_full"
-                out_bam_analysis_partial = f"{long_acc}_{os.path.basename(fasta_record)}_partial"
+                out_bam_analysis = os.path.join(map_folder, f"{long_acc}_{os.path.basename(fasta_record)}_full") 
+                out_bam_analysis_partial = os.path.join(map_folder, f"{long_acc}_{os.path.basename(fasta_record)}_partial")
                 bam_file_analyze(sorted_bam, out_bam_analysis, out_bam_analysis_partial)
                 analyze_blocks(out_bam_analysis_partial, out_bam_analysis_partial, map_folder, fasta_record)
             except Exception as e:
