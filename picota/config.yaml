@@ -1,0 +1,35 @@
+delete_fastq_files: true
+sra_id_file: "picota/sra_ids.tsv"
+
+outdir : "/media/lin-bio/back2/picota_project_longTest"
+
+
+path_of_fastq_dump: "parallel-fastq-dump"
+assembly_threads: 24
+assembly_k_mer_list: "79,99"
+assembly_quiet: false
+assembly_keep_temp_files: true
+assembly_path_of_spades: "spades.py"
+assembly_path_of_fastp: "fastp"
+assembly_skip_filtering: true
+assembler_type: "megahit"
+assembly_path_of_megahit: "megahit"
+
+gfa_tools_path: "./picota/tools/gfaview/misc/fastg2gfa"
+path_of_bandage: "./picota/tools/Bandage_Ubuntu-x86-64_v0.9.0_AppDir/Bandage_Ubuntu-x86-64_v0.9.0/usr/bin/bandage"
+
+path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
+path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
+path_to_ises: "picota/DBs/ISes/IS.fna"
+
+find_all_path: true
+path_limit: 25
+min_size_of_cycle: 2000
+max_size_of_cycle: 50000
+name_prefix_cycle: "Cycle"
+min_component_number: 1
+max_component_number: 50
+k_mer_sim: 50
+threshold_sim: 50
+
+mapping_threads: 8
