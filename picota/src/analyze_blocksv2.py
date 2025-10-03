@@ -71,7 +71,7 @@ def check_adjacent(coords, types=None, tolerance=1000, small_overlap=300,
 
             # Mutlak küçük gap kontrolü
             if gap <= absolute_small_gap:
-                print(f"⚠ Küçük gap, kabule değer: {prev_type}->{next_type}, gap={gap}")
+                print(f"⚠ small gap acceptable: {prev_type}->{next_type}, gap={gap}")
                 continue
 
             # Gap büyük/küçük sınıflandırması tip bazlı
@@ -81,12 +81,12 @@ def check_adjacent(coords, types=None, tolerance=1000, small_overlap=300,
             total_count = stats.get('count', 1)
             large_count = stats.get('large_count', 0)
             if is_large and total_count > 0 and (large_count / total_count) < min_large_fraction:
-                print(f"⚠ Büyük gap ama az örnek, anlamsız kabul edildi: {prev_type}->{next_type}, gap={gap}")
+                print(f"⚠ Big gap but not enough sample to support: {prev_type}->{next_type}, gap={gap}")
                 continue  # kabule değer
 
             # Mode civarında gap → kabule değer
             if abs(gap - stats['mode_gap']) <= mode_gap_tolerance:
-                print(f"⚠ Gap mod civarında, kabule değer: {prev_type}->{next_type}, gap={gap}, mode_gap={stats['mode_gap']}")
+                print(f"⚠ Gap around mod, acceptable: {prev_type}->{next_type}, gap={gap}, mode_gap={stats['mode_gap']}")
                 continue
 
             # Asimetri kontrolü
@@ -94,13 +94,13 @@ def check_adjacent(coords, types=None, tolerance=1000, small_overlap=300,
                 reverse_gap_mode = reverse_stats['mode_gap']
                 is_reverse_large = gap > reverse_gap_mode * 1.2
                 if is_large != is_reverse_large:
-                    print(f"⚠ Asimetrik gap tespit edildi: {prev_type}->{next_type}, gap={gap}, mode_gap={stats['mode_gap']}, reverse_mode={reverse_gap_mode}")
+                    print(f"⚠ Asimetric gaps: {prev_type}->{next_type}, gap={gap}, mode_gap={stats['mode_gap']}, reverse_mode={reverse_gap_mode}")
                     continue  # adjacent kabul edilebilir
 
             # Büyük gap kontrolü
             final_boosted = min(max_boost, max(boosted_tolerance, int(stats['mode_gap'] * 1.5)))
             if gap > final_boosted:
-                print(f"❌ Büyük gap, adjacent değil: {prev_type}->{next_type}, gap={gap}, final_boosted={final_boosted}")
+                print(f"❌ Large gap, not adjacent: {prev_type}->{next_type}, gap={gap}, final_boosted={final_boosted}")
                 return False
 
     return True
@@ -123,69 +123,6 @@ def check_overlap(prev, next_, min_overlap=1, max_tolerated=300):
         return overlap_len > max_tolerated  # küçük overlapleri "yok" gibi say
     return False
 
-def find_patterns_with_insertions_old(reads, read_lengths, tolerance=1000):
-    patterns = {
-        "CT": ["cargo", "transposon"],
-        "TC": ["transposon", "cargo"],
-        "TCT": ["transposon", "cargo", "transposon"],
-        "CTC": ["cargo", "transposon", "cargo"],
-        "CTCT": ["cargo", "transposon", "cargo", "transposon"],
-        "TCTC": ["transposon", "cargo", "transposon", "cargo"],
-        "TCTCT": ["transposon", "cargo", "transposon", "cargo", "transposon"],
-        "CTCTC": ["cargo", "transposon", "cargo", "transposon", "cargo"],
-        "TCTCTC": ["transposon", "cargo", "transposon", "cargo", "transposon", "cargo"],
-        "TCTCTCT": ["transposon", "cargo", "transposon", "cargo", "transposon", "cargo", "transposon"],
-    }
-
-    srr_counts = defaultdict(lambda: {p: 0 for p in patterns})
-    total = {p: 0 for p in patterns}
-    pattern_readlens = {p: [] for p in patterns}
-    pattern_positions = {p: [] for p in patterns}
-    insertions = defaultdict(list)
-
-    for read_id, blocks in reads.items():
-        srr_id = read_id.split(".")[0]
-        n = len(blocks)
-        readlen = read_lengths.get(read_id, None)
-        if not readlen or readlen <= 0:
-            continue
-
-        # --- Transposon-in-cargo tespiti ---
-        overlap_indices = set()
-        for i, (b_type, b_start, b_end) in enumerate(blocks):
-            if b_type == "transposon":
-                # Önceki cargo ile kontrol
-                if i > 0 and blocks[i-1][0] == "cargo" and check_overlap((blocks[i-1][1], blocks[i-1][2]), (b_start, b_end)):
-                    insertions[read_id].append(("cargo-inserted-transposon", i-1, i))
-                    overlap_indices.update([i-1, i])
-                # Sonraki cargo ile kontrol
-                if i < n-1 and blocks[i+1][0] == "cargo" and check_overlap((b_start, b_end), (blocks[i+1][1], blocks[i+1][2])):
-                    insertions[read_id].append(("transposon-in-cargo", i, i+1))
-                    overlap_indices.update([i, i+1])
-
-        # --- Pattern tespiti (overlap içeren blokları sayma) ---
-        for pname, ptypes in patterns.items():
-            k = len(ptypes)
-            for i in range(n - k + 1):
-                window = blocks[i:i+k]
-                types = [b[0] for b in window]
-                coords = [(b[1], b[2]) for b in window]
-
-                # Eğer window içinde overlap var ise sayma
-                if any((i+j) in overlap_indices for j in range(k)):
-                    continue
-
-                if types == ptypes and check_adjacent(coords, tolerance):
-                    srr_counts[srr_id][pname] += 1
-                    total[pname] += 1
-                    pattern_readlens[pname].append(readlen)
-                    pattern_start = coords[0][0]
-                    pattern_end = coords[-1][1]
-                    center_norm = ((pattern_start + pattern_end) / 2.0) / readlen
-                    center_norm = max(0.0, min(1.0, center_norm))
-                    pattern_positions[pname].append(center_norm)
-
-    return srr_counts, total, pattern_readlens, pattern_positions, insertions
 
 def find_patterns_with_insertions(reads, read_lengths, tolerance=1000):
     patterns = {
@@ -233,7 +170,7 @@ def find_patterns_with_insertions(reads, read_lengths, tolerance=1000):
         else:
             gap_summary[k] = {'avg_gap': 0, 'mode_gap': 0, 'max_gap': 0, 'count': 0}
 
-    print("Tiplere göre gap istatistikleri:")
+    print("Stats:")
     for k, v in gap_summary.items():
         print(f"{k}: {v}")
 
@@ -404,9 +341,10 @@ def analyze_blocks(file1, file2, figure_out_dir, figure_name):
     print("[INFO] insertions ve pattern özetleri txt dosyasına kaydedildi.")
 
 
-
+'''
 analyze_blocks("/media/lin-bio/back2/picota_project_longTestIS26/mapping/SRR11108582/SRR11108582_Cycle_3-len5783-_split.fasta_partial",
     "/media/lin-bio/back2/picota_project_longTestIS26/mapping/SRR11108582/SRR11108582_Cycle_3-len5783-_split.fasta_full",
     "/media/lin-bio/back2/picota_project_longTestIS26/mapping/SRR11108582",
     "abc"
 )
+'''

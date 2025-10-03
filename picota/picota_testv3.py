@@ -16,6 +16,14 @@ from src.split_cycle_coords_for_is import split_cycles_from_picota
 from src.bam_analyse import bam_file_analyze
 from src.analyze_blocksv2 import analyze_blocks
 
+# === Logger ===
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+
+#SRA pairs can be short, long sra ids
 def load_sra_pairs(sra_id_file):
     pairs = []
     with open(sra_id_file) as f:
@@ -23,7 +31,7 @@ def load_sra_pairs(sra_id_file):
         for row in reader:
             short_id = row["sra_short_id"].strip()
 
-            val = row.get("sra_long_id")  # None gelebilir
+            val = row.get("sra_long_id")  # Can be none
             if val is not None:
                 val = val.strip()
             long_id = val if val not in (None, "", "-", "null") else None
@@ -31,10 +39,10 @@ def load_sra_pairs(sra_id_file):
             pairs.append((short_id, long_id))
     return pairs
 
-
+#minimap2 driver, to map cycles on to the long reads
 def run_minimap2(ref_fasta, fastq_file, bam_out="mapping.bam", threads=4, run_dir=None):
-    """Minimap2 ile mapping yapar ve sorted BAM döner.
-    Temp dosyalar ayrı klasörde tutulur. Var olanlar tekrar kullanılmaz."""
+    """returns sorted bam
+    temps files will be in seperated folders"""
     
     if run_dir is None:
         run_dir = "tmp_mapping"
@@ -45,9 +53,9 @@ def run_minimap2(ref_fasta, fastq_file, bam_out="mapping.bam", threads=4, run_di
     sorted_bam = bam_out.replace(".bam", "_sorted.bam")
     bai_out = sorted_bam + ".bai"
 
-    # Eğer sorted bam + index varsa hiç çalıştırma
+    # If there is sorted bam dont run
     if os.path.exists(sorted_bam) and os.path.exists(bai_out):
-        print(f"[OK] {sorted_bam} ve {bai_out} bulundu, mapping atlandı.")
+        print(f"[OK] {sorted_bam} ve {bai_out} found, mapping skipped.")
         return sorted_bam
 
     # Minimap2
@@ -77,15 +85,6 @@ def run_minimap2(ref_fasta, fastq_file, bam_out="mapping.bam", threads=4, run_di
 
     return sorted_bam
 
-
-
-# === Logger ===
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    handlers=[logging.StreamHandler()]
-)
-
 # === Helper Functions ===
 def run_sra_download(acc, out_dir, sra_folder, fastq_dump_path):
     os.makedirs(sra_folder, exist_ok=True)
@@ -94,10 +93,10 @@ def run_sra_download(acc, out_dir, sra_folder, fastq_dump_path):
     # eksik olanları indir
     missing = [f for f in expected_files if not os.path.exists(f)]
     if missing:
-        logging.info(f"[{acc}] FASTQ eksik, indiriliyor...")
+        logging.info(f"[{acc}] FASTQ missing, downloading...")
         run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False)
     else:
-        logging.info(f"[{acc}] FASTQ zaten mevcut, indirilmiyor.")
+        logging.info(f"[{acc}] FASTQ already exists, skip download.")
     
     # indirildikten sonra var olan tüm fastq dosyalarını döndür
     raw_files = [f for f in expected_files if os.path.exists(f)]
@@ -109,22 +108,21 @@ def run_longread_download(acc, out_dir, sra_folder, fastq_dump_path):
 
     if not os.path.exists(fastq_file):
         
-        logging.info(f"[{acc}] Long-read FASTQ indiriliyor...")
+        logging.info(f"[{acc}] Long-read FASTQ is downloading...")
         run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False)
     else:
-        logging.info(f"[{acc}] Long-read FASTQ zaten mevcut, indirilmiyor.")
+        logging.info(f"[{acc}] Long-read FASTQ already exists, skip download.")
 
     return fastq_file
 
-
-
+#ASSEMBLY MODULE
 def run_assembly(acc, raw_files, out_folder, cfg):
     gfa_files = glob.glob(os.path.join(out_folder, "*.gfa"))
     if gfa_files:
-        logging.info(f"[{acc}] Assembly zaten mevcut, atlanıyor.")
+        logging.info(f"[{acc}] Assembly already exist, skip.")
         return gfa_files
 
-    logging.info(f"[{acc}] Assembly başlatılıyor...")
+    logging.info(f"[{acc}] Assembly is starting...")
     assembly_main(
         acc, raw_files, out_folder,
         cfg["assembly_threads"], cfg["assembly_k_mer_list"], cfg["assembly_quiet"],
@@ -136,13 +134,13 @@ def run_assembly(acc, raw_files, out_folder, cfg):
     gfa_files = glob.glob(os.path.join(out_folder, "*.gfa"))
     return gfa_files
 
-
+#CYCLE SEARCH MODULE
 def run_cycle_analysis(acc, gfa_file, out_file, cfg):
     if os.path.exists(out_file):
-        logging.info(f"[{acc}] Cycle analizi zaten yapılmış.")
+        logging.info(f"[{acc}] Cycle analysis already done.")
         return
 
-    logging.info(f"[{acc}] Cycle analizi başlatılıyor...")
+    logging.info(f"[{acc}] Cycle analysis is starting...")
     cycle_analysis(
         gfa_file, out_file, cfg["find_all_path"], cfg["path_limit"],
         cfg["min_size_of_cycle"], cfg["max_size_of_cycle"], cfg["name_prefix_cycle"],
@@ -152,7 +150,7 @@ def run_cycle_analysis(acc, gfa_file, out_file, cfg):
 
 
 def run_scoring(acc, cycle_file, out_folder, cfg):
-    logging.info(f"[{acc}] Scoring başlatılıyor...")
+    logging.info(f"[{acc}] Scoring is starting...")
     picota_final_tab = os.path.join(out_folder, 'picota_final_tab')    
     if os.path.exists(picota_final_tab):
         logging.info(f"[{acc}] Scoring was made.")
