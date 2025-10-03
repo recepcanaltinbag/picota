@@ -76,24 +76,24 @@ def run_minimap2(ref_fasta, fastq_file, bam_out="mapping.bam", threads=4, run_di
 
 
 # --- Helper Functions ---
-def run_sra_download(acc, out_dir, sra_folder, fastq_dump_path):
+def run_sra_download(acc, out_dir, sra_folder, fastq_dump_path, logger_name):
     os.makedirs(sra_folder, exist_ok=True)
     expected_files = [os.path.join(out_dir, f"{acc}_{i}.fastq") for i in (1, 2)]
     missing = [f for f in expected_files if not os.path.exists(f)]
     if missing:
         logger.info(f"[{acc}] FASTQ eksik, indiriliyor...")
-        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False)
+        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False, logger_name=logger_name)
     else:
         logger.info(f"[{acc}] FASTQ mevcut, atlandı.")
     return [f for f in expected_files if os.path.exists(f)]
 
 
-def run_longread_download(acc, out_dir, sra_folder, fastq_dump_path):
+def run_longread_download(acc, out_dir, sra_folder, fastq_dump_path, logger_name):
     os.makedirs(sra_folder, exist_ok=True)
     fastq_file = os.path.join(out_dir, f"{acc}_1.fastq")
     if not os.path.exists(fastq_file):
         logger.info(f"[{acc}] Long-read FASTQ indiriliyor...")
-        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False)
+        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False, logger_name=logger_name)
     else:
         logger.info(f"[{acc}] Long-read FASTQ mevcut, atlandı.")
     return fastq_file
@@ -176,7 +176,7 @@ def process_accession(short_acc, long_acc, cfg: Config):
     os.makedirs(annot_folder, exist_ok=True)
 
     # 1) SRA download
-    raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump)
+    raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
 
     # 2) Assembly
     gfa_files = run_assembly(short_acc, raw_files, asm_folder, cfg)
@@ -202,7 +202,7 @@ def process_accession(short_acc, long_acc, cfg: Config):
         os.makedirs(long_sra_folder, exist_ok=True)
 
         try:
-            long_fastq = run_longread_download(long_acc, map_folder, long_sra_folder, cfg.paths.fastq_dump)
+            long_fastq = run_longread_download(long_acc, map_folder, long_sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
         except Exception as e:
             logger.error(f"[{long_acc}] Long-read download sırasında hata: {e}")
 

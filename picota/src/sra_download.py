@@ -4,6 +4,11 @@ import urllib.request
 import os
 import shutil
 import subprocess
+import logging
+
+
+logger: logging.Logger = None
+
 
 class DownloadProgressBar(tqdm):
     def update_to(self, b=1, bsize=1, tsize=None):
@@ -18,7 +23,10 @@ def download_url(url, output_path):
         urllib.request.urlretrieve(url, filename=output_path, reporthook=t.update_to)
 
 
-def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, the_force):
+def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, the_force, logger_name):
+    global logger
+    logger = logging.getLogger(logger_name)
+
 
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
@@ -27,33 +35,33 @@ def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, 
     else:
         if the_force == False:
             
-            print('\n\033[0;33mWARNING:\033[0m Folder Exist!, Do you want to download again? Delete the folder, or run with force option: --force\n')
+            logger.warning('\n\033[0;33mWARNING:\033[0m Folder Exist!, Do you want to download again? Delete the folder, or run with force option: --force\n')
             return
 
 
     the_url = f"https://sra-pub-run-odp.s3.amazonaws.com/sra/{sra_acc}/{sra_acc}"
     args2 = f"{path_of_fastq_dump} -s {out_path}/*.sra -O {out_path} --split-files -t 12"
     
-    print(out_path)
+    logger.info(out_path)
 
     if not os.path.isfile(out_path + "/" + sra_acc + ".sra"):
         try:
             
             download_url(the_url, out_path + "/" + sra_acc + ".sra")
         except Exception as e:
-            print('url download error: ', e)
+            logger.error('url download error: ', e)
             return False
 
-    print('Start for Fastq Dump')
+    logger.info('Start for Fastq Dump')
     my_process = subprocess.run(args2, shell=True, text=True)
     if my_process.returncode != 0:
         raise Exception("Error in Fastq Dump")
-    print('End of Fastq Dump')
+    logger.info('End of Fastq Dump')
     if keep_sra_file == False:
         if os.path.exists(f"{out_path}/{sra_acc}.sra"):
             os.remove(f"{out_path}/{sra_acc}.sra")
-            print('SRA Files deleted.')
-    print('fastq files were created in:', out_path)
+            logger.info('SRA Files deleted.')
+    logger.info('fastq files were created in:', out_path)
     return True
 
 
@@ -68,18 +76,22 @@ def parse_sra_acc_file(file_path):
     return the_return_list
 
 
-def sra_download_main(sra_acc_file, out_dir, sra_folder, path_of_fastq_dump, keep_sra_file, the_force):
+def sra_download_main(sra_acc_file, out_dir, sra_folder, path_of_fastq_dump, keep_sra_file, the_force, logger_name):
+    
+    global logger
+    logger = logging.getLogger(logger_name)
+    
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
 
     the_sra_list = parse_sra_acc_file(sra_acc_file)
     for index, sra_acc in enumerate(the_sra_list, start=0):
-        print('Downloading:', sra_acc, ' : ', index ,'/', len(the_sra_list))
+        logger.info('Downloading:', sra_acc, ' : ', index ,'/', len(the_sra_list))
         out_dir_sra = os.path.join(out_dir, sra_folder)
         if not os.path.exists(out_dir_sra):
             os.mkdir(out_dir_sra)
         out_path = os.path.join(out_dir, sra_folder, sra_acc)
-        run_sra_down(sra_acc, out_path, out_dir_sra, path_of_fastq_dump, keep_sra_file, the_force)
+        run_sra_down(sra_acc, out_path, out_dir_sra, path_of_fastq_dump, keep_sra_file, the_force, logger_name)
 
     return out_dir_sra
 
