@@ -33,6 +33,7 @@ class PlottingConfig:
 class LoggingConfig:
     log_file: str = "picota/picota.log"
     level: str = "INFO"
+    logger_name: str = "picota_analysis"
 
 # -------------------------
 # Paths config

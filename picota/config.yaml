@@ -3,7 +3,8 @@
 # -------------------------
 logging:
   log_file: "picota/picota.log"
-  level: "INFO"
+  level: "DEBUG"
+  logger_name: "picota_analysis"
 
 # -------------------------
 # Paths / General pipeline settings

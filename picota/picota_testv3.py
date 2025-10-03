@@ -227,7 +227,7 @@ def main():
     sra_pairs = load_sra_pairs(cfg.paths.sra_id_file)
     global logger
     logger = setup_logger_from_config(cfg)
-
+    logger.debug("DEBUG control")
 
     for short_id, long_id in sra_pairs:
         process_accession(short_id, long_id, cfg)

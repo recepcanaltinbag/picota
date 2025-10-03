@@ -10,7 +10,7 @@ import logging
 from src.config_loader import ToleranceConfig
 from src.config_loader import Config
 
-
+logger: logging.Logger = None
 
 
 # -------------------------
@@ -279,6 +279,9 @@ def plot_scatter_positions_logscale(pattern_readlens, pattern_positions, outdir=
 # Main analysis entry point
 # -------------------------
 def analyze_blocks(file1: str, file2: str, figure_out_dir, contig_name, cfg: Config):
+    global logger
+    logger = logging.getLogger(cfg.logging.logger_name)
+    
     reads, read_lengths = parse_annotated_files([file1, file2])
     srr_counts, total, pattern_readlens, pattern_positions, insertions = find_patterns_with_insertions(reads, read_lengths, cfg)
 

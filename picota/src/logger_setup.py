@@ -1,11 +1,11 @@
 import logging
 
-def setup_logger_from_config(cfg, name="picota_analysis"):
+def setup_logger_from_config(cfg):
     """
     Config üzerinden logger oluşturur.
     cfg.logging.log_file ve cfg.logging.level beklenir.
     """
-    logger = logging.getLogger(name)
+    logger = logging.getLogger(cfg.logging.logger_name)
     if logger.handlers:
         return logger  # zaten oluşturulmuşsa tekrar ekleme
 
