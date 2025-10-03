@@ -74,6 +74,18 @@ class OptionsConfig:
     k_mer_sim: int
     threshold_sim: int
     mapping_threads: int
+    mean_of_CompTns: int
+    std_of_CompTns: int
+    total_score_type: int
+    threshold_final_score: int
+    max_z: int
+    dist_type: int
+    path_of_prodigal: str
+    path_of_blastn: str
+    path_of_makeblastdb: str
+    path_of_blastx: str
+    path_of_blastp: str
+
 
 # -------------------------
 # Main config

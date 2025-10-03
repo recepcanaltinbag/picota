@@ -142,7 +142,19 @@ def run_scoring(acc, cycle_file, out_folder, cfg: Config):
     logger.info(f"[{acc}] Scoring başlatılıyor...")
     scoring_main(
         cycle_file, out_folder,
-        cfg.paths.path_to_antibiotics, cfg.paths.path_to_xenobiotics, cfg.paths.path_to_ises
+        cfg.paths.path_to_antibiotics, cfg.paths.path_to_xenobiotics, cfg.paths.path_to_ises, 
+        cfg.options.mean_of_CompTns,
+        cfg.options.std_of_CompTns,
+        cfg.options.total_score_type,
+        cfg.options.threshold_final_score,
+        cfg.options.max_z,
+        cfg.options.dist_type,
+        cfg.options.path_of_prodigal,
+        cfg.options.path_of_blastn,
+        cfg.options.path_of_makeblastdb,
+        cfg.options.path_of_blastx,
+        cfg.options.path_of_blastp,
+        cfg.logging.logger_name
     )
     return picota_final_tab
 

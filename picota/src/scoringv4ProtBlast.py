@@ -8,8 +8,12 @@ from Bio.SeqFeature import SeqFeature, FeatureLocation
 from datetime import date
 import pandas as pd
 import shutil
-
+import logging
 # --------------------------- Classes ---------------------------
+
+
+logger: logging.Logger = None
+
 
 class CodingRegion:
     def __init__(self, start, end, strand, fullname, r_type, score):
@@ -123,7 +127,7 @@ def delete_blast_db(db_dir):
     try:
         shutil.rmtree(db_dir)
     except OSError as e:
-        print(f"Error: {e.filename} - {e.strerror}.")
+        logger.error(f"Error: {e.filename} - {e.strerror}.")
 
 
 # --------------------------- External Tools ---------------------------
@@ -141,7 +145,7 @@ def make_blast_db(path_of_makeblastdb, db_input, db_output, db_type="nucl"):
     args = f"{path_of_makeblastdb} -in {db_input} -dbtype {db_type} -out {db_output}"
     subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"[+] BLAST DB oluşturuldu: {db_output} ({db_type})")
+    logger.info(f"[+] BLAST DB created: {db_output} ({db_type})")
 
 
 def run_blast(path_of_blast, query, database, output):
@@ -209,7 +213,7 @@ def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, 
     os.makedirs(os.path.join(out_blast_folder, "blast_files"), exist_ok=True)
 
     if not os.path.exists(blast_query):
-        print('No available Blast Query file')
+        logger.warning('No available Blast Query file')
         return []
 
     try:
@@ -232,7 +236,10 @@ def scoring_main(cycle_folder, picota_out_folder,
                  path_of_blastn="blastn",
                  path_of_makeblastdb="makeblastdb",
                  path_of_blastx="blastx",
-                 path_of_blastp="blastp"):
+                 path_of_blastp="blastp", logger_name="picota_analysis"):
+
+    global logger
+    logger = logging.getLogger(logger_name)
 
     picota_temp_folder = os.path.join(picota_out_folder, "Pico_Temp")
     splitted_cycle_folder = os.path.join(picota_temp_folder, "Splitted_Cycles")
@@ -250,7 +257,7 @@ def scoring_main(cycle_folder, picota_out_folder,
     else:
         cycle_files = []
 
-    print(f"Bulunan cycle dosyaları: {cycle_files}")
+    logger.info(f"Found Cycle Files: {cycle_files}")
     final_list_comps = []
 
     for cycle_file in cycle_files:
@@ -270,7 +277,7 @@ def scoring_main(cycle_folder, picota_out_folder,
         splitted_cycles = glob.glob(os.path.join(splitted_cycle_single_folder, "*"))
 
         for splitted_cycle in splitted_cycles:
-            print('.', end='', flush=True)
+            #print('.', end='', flush=True)
             cds_list = []
 
             # Prodigal outputs
@@ -339,10 +346,10 @@ def scoring_main(cycle_folder, picota_out_folder,
             t_score = [score0, score1, score2][total_score_type]
 
             if t_score > threshold_final_score:
-                print(f'\nAnalyzing: {os.path.basename(splitted_cycle)}')
-                print(os.path.basename(splitted_cycle), ' (score0):', score0, ' (score1):', score1, ' (score2):', score2)
-                print('Antibiotics: ', len(lst_ant), 'Xenobiotics: ', len(lst_xe), 'ISes: ', len(lst_is))
-                print('--------------------------------------------------------------------')
+                logger.info(f'\nAnalyzing: {os.path.basename(splitted_cycle)}')
+                logger.info(os.path.basename(splitted_cycle), ' (score0):', score0, ' (score1):', score1, ' (score2):', score2)
+                logger.info('Antibiotics: ', len(lst_ant), 'Xenobiotics: ', len(lst_xe), 'ISes: ', len(lst_is))
+                logger.info('--------------------------------------------------------------------')
 
             # GeneticInfo objesi
             qseqid = os.path.basename(splitted_cycle)

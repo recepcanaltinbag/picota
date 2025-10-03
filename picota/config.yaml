@@ -53,6 +53,22 @@ options:
   threshold_sim: 50
   mapping_threads: 8
 
+# new parameters
+  mean_of_CompTns: 5850
+  std_of_CompTns: 2586
+  total_score_type: 0
+  threshold_final_score: 50
+  max_z: 20
+  dist_type: 1
+  path_of_prodigal: "prodigal"
+  path_of_blastn: "blastn"
+  path_of_makeblastdb: "makeblastdb"
+  path_of_blastx: "blastx"
+  path_of_blastp: "blastp"
+
+
+
+
 # -------------------------
 # Block patterns
 # -------------------------
