@@ -1,51 +1,61 @@
+# -------------------------
+# Logging
+# -------------------------
 logging:
   log_file: "picota/picota.log"
   level: "INFO"
 
+# -------------------------
+# Paths / General pipeline settings
+# -------------------------
+paths:
+  # Pipeline
+  outdir: "/media/lin-bio/back2/picota_project_longTestIS26"
+  sra_id_file: "picota/selected_sra.csv"
+  fastq_dump: "parallel-fastq-dump"
 
+  # Assembly
+  assembly_threads: 24
+  assembly_k_mer_list: "79,99"
+  quiet: true
+  keep_temp_files: true
+  path_of_spades: "spades.py"
+  path_of_fastp: "fastp"
+  skip_filtering: true
+  assembler_type: "megahit"
+  path_of_megahit: "megahit"
 
+  # Tools
+  gfa_tools_path: "./picota/tools/gfaview/misc/fastg2gfa"
+  path_of_bandage: "./picota/tools/Bandage_Ubuntu-x86-64_v0.9.0_AppDir/Bandage_Ubuntu-x86-64_v0.9.0/usr/bin/bandage"
 
+  # Databases
+  path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
+  path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
+  path_to_ises: "picota/DBs/ISes/tncentral_integrall_isfinder.fa"
 
-delete_fastq_files: true
-sra_id_file: "picota/selected_sra.csv"
+  # SRA
+  find_all_path: true
+  path_limit: 25
 
-outdir : "/media/lin-bio/back2/picota_project_longTestIS26"
+# -------------------------
+# General options
+# -------------------------
+options:
+  delete_fastq_files: true
+  min_size_of_cycle: 2000
+  max_size_of_cycle: 50000
+  name_prefix_cycle: "Cycle"
+  min_component_number: 1
+  max_component_number: 50
+  k_mer_sim: 50
+  threshold_sim: 50
+  mapping_threads: 8
 
-
-path_of_fastq_dump: "parallel-fastq-dump"
-assembly_threads: 24
-assembly_k_mer_list: "79,99"
-assembly_quiet: true
-assembly_keep_temp_files: true
-assembly_path_of_spades: "spades.py"
-assembly_path_of_fastp: "fastp"
-assembly_skip_filtering: true
-assembler_type: "megahit"
-assembly_path_of_megahit: "megahit"
-
-gfa_tools_path: "./picota/tools/gfaview/misc/fastg2gfa"
-path_of_bandage: "./picota/tools/Bandage_Ubuntu-x86-64_v0.9.0_AppDir/Bandage_Ubuntu-x86-64_v0.9.0/usr/bin/bandage"
-
-path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
-path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
-path_to_ises: "picota/DBs/ISes/tncentral_integrall_isfinder.fa"
-
-find_all_path: true
-path_limit: 25
-min_size_of_cycle: 2000
-max_size_of_cycle: 50000
-name_prefix_cycle: "Cycle"
-min_component_number: 1
-max_component_number: 50
-k_mer_sim: 50
-threshold_sim: 50
-
-mapping_threads: 8
-
-
-
-
-block_patterns:
+# -------------------------
+# Block patterns
+# -------------------------
+patterns:
   CT: ["cargo", "transposon"]
   TC: ["transposon", "cargo"]
   TCT: ["transposon", "cargo", "transposon"]
@@ -57,7 +67,10 @@ block_patterns:
   TCTCTC: ["transposon", "cargo", "transposon", "cargo", "transposon", "cargo"]
   TCTCTCT: ["transposon", "cargo", "transposon", "cargo", "transposon", "cargo", "transposon"]
 
-block_tolerances:
+# -------------------------
+# Block tolerances
+# -------------------------
+tolerances:
   tolerance: 1000
   small_overlap: 300
   boosted_tolerance: 1000
@@ -66,7 +79,10 @@ block_tolerances:
   min_large_fraction: 0.25
   absolute_small_gap: 200
 
-block_plotting:
+# -------------------------
+# Plotting config
+# -------------------------
+plotting:
   outdir: "figures"
   prefix: "global"
   hist_bins: 30

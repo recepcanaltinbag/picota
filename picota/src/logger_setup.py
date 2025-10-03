@@ -1,7 +1,6 @@
 import logging
-from config_loader import Config, load_config
 
-def setup_logger_from_config(cfg: Config, name="picota_analysis"):
+def setup_logger_from_config(cfg, name="picota_analysis"):
     """
     Config üzerinden logger oluşturur.
     cfg.logging.log_file ve cfg.logging.level beklenir.
@@ -33,6 +32,3 @@ def setup_logger_from_config(cfg: Config, name="picota_analysis"):
     logger.setLevel(level)
     return logger
 
-# Global logger örneği
-cfg = load_config("picota/config.yaml")
-logger = setup_logger_from_config(cfg)

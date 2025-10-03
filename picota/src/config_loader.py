@@ -1,21 +1,23 @@
-# config_loader.py
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 import yaml
 
+# -------------------------
+# Tolerance config
+# -------------------------
 @dataclass
 class ToleranceConfig:
-    """
-    Gap/overlap related parameters.
-    """
-    tolerance: int = 1000              # general gap tolerance used for coarse filtering
-    small_overlap: int = 300           # overlaps <= this are tolerated/ignored
-    boosted_tolerance: int = 1000      # baseline boosted tolerance for asymmetry boosting
-    max_boost: int = 5000              # hard cap to prevent huge boosted tolerance
-    mode_gap_tolerance: int = 200      # how close to mode is considered 'around mode'
-    min_large_fraction: float = 0.25   # fraction: if large_gap_count/total_count < this -> ignore singletons
-    absolute_small_gap: int = 200      # absolute bp threshold below which gap is always acceptable
+    tolerance: int = 1000
+    small_overlap: int = 300
+    boosted_tolerance: int = 1000
+    max_boost: int = 5000
+    mode_gap_tolerance: int = 200
+    min_large_fraction: float = 0.25
+    absolute_small_gap: int = 200
 
+# -------------------------
+# Plotting config
+# -------------------------
 @dataclass
 class PlottingConfig:
     outdir: str = "figures"
@@ -24,25 +26,78 @@ class PlottingConfig:
     scatter_point_size: int = 30
     scatter_alpha: float = 0.6
 
+# -------------------------
+# Logging config
+# -------------------------
+@dataclass
+class LoggingConfig:
+    log_file: str = "picota/picota.log"
+    level: str = "INFO"
+
+# -------------------------
+# Paths config
+# -------------------------
+@dataclass
+class PathsConfig:
+    outdir: str
+    sra_id_file: str
+    fastq_dump: str
+    assembly_threads: int
+    assembly_k_mer_list: str
+    quiet: bool
+    keep_temp_files: bool
+    path_of_spades: str
+    path_of_fastp: str
+    skip_filtering: bool
+    assembler_type: str
+    path_of_megahit: str
+    gfa_tools_path: str
+    path_of_bandage: str
+    path_to_antibiotics: str
+    path_to_xenobiotics: str
+    path_to_ises: str
+    find_all_path: bool
+    path_limit: int
+
+# -------------------------
+# Options config
+# -------------------------
+@dataclass
+class OptionsConfig:
+    delete_fastq_files: bool
+    min_size_of_cycle: int
+    max_size_of_cycle: int
+    name_prefix_cycle: str
+    min_component_number: int
+    max_component_number: int
+    k_mer_sim: int
+    threshold_sim: int
+    mapping_threads: int
+
+# -------------------------
+# Main config
+# -------------------------
 @dataclass
 class Config:
+    paths: PathsConfig
+    options: OptionsConfig
     patterns: Dict[str, List[str]]
     tolerances: ToleranceConfig
     plotting: PlottingConfig
+    logging: LoggingConfig
 
+# -------------------------
+# Loader
+# -------------------------
 def load_config(yaml_path: str) -> Config:
-    """
-    Load YAML configuration into Config dataclass structure.
-    """
     with open(yaml_path, "r") as fh:
         data = yaml.safe_load(fh)
 
-    tol = data.get("block_tolerances", {})
-    plot = data.get("block_plotting", {})
-    patterns = data.get("block_patterns", {})
-
     return Config(
-        patterns=patterns,
-        tolerances=ToleranceConfig(**tol),
-        plotting=PlottingConfig(**plot)
+        paths=PathsConfig(**data["paths"]),
+        options=OptionsConfig(**data["options"]),
+        patterns=data.get("patterns", {}),
+        tolerances=ToleranceConfig(**data.get("tolerances", {})),
+        plotting=PlottingConfig(**data.get("plotting", {})),
+        logging=LoggingConfig(**data.get("logging", {}))
     )

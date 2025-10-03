@@ -6,35 +6,9 @@ from typing import Dict, List, Tuple
 import matplotlib.pyplot as plt
 import logging
 
-from config_loader import Config, ToleranceConfig, PlottingConfig
 
-# -------------------------
-# Logger setup
-# -------------------------
-def setup_logger(log_file: str = None, level: int = logging.DEBUG):
-    logger = logging.getLogger("picota_analysis")
-    logger.setLevel(level)
-
-    # tekrar handler eklenmesin
-    if logger.handlers:
-        return logger
-
-    # konsol handler
-    ch = logging.StreamHandler()
-    ch.setLevel(level)
-    ch_formatter = logging.Formatter("[%(levelname)s] %(message)s")
-    ch.setFormatter(ch_formatter)
-    logger.addHandler(ch)
-
-    # opsiyonel dosya handler
-    if log_file:
-        fh = logging.FileHandler(log_file)
-        fh.setLevel(level)
-        fh_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-        fh.setFormatter(fh_formatter)
-        logger.addHandler(fh)
-
-    return logger
+from src.config_loader import ToleranceConfig
+from src.config_loader import Config
 
 
 
@@ -342,11 +316,13 @@ def analyze_blocks(file1: str, file2: str, figure_out_dir, contig_name, cfg: Con
 
 
 
-
-logger = setup_logger("log.txt", level="INFO")
+'''
+logger = setup_logger("log.txt", level=logging.INFO)
 
 from config_loader import load_config
 cfg = load_config("picota/config.yaml")
+
+print(cfg)
 
 analyze_blocks(
     "/media/lin-bio/back2/picota_project_longTestIS26/mapping/SRR11108582/SRR11108582_Cycle_3-len5783-_split.fasta_partial",
@@ -355,3 +331,4 @@ analyze_blocks(
     "SRR11108582_Cycle_3-len5783",
     cfg
 )
+'''
