@@ -2,6 +2,7 @@ import re
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import os
+from collections import Counter
 
 def parse_annotated_files(file_list):
     """
@@ -33,24 +34,43 @@ def parse_annotated_files(file_list):
 
     return reads_all, read_lengths_all
 
-def check_adjacent(coords, tolerance=1000, small_overlap=300):
+
+def check_adjacent(coords, types=None, tolerance=1000, small_overlap=300, 
+                   near_threshold=10, boosted_tolerance=1000, gap_stats=None):
     """
     Ardışıklık kontrolü:
-    - Gap tolerans içinde ise adjacent
-    - Küçük overlap (ör. -100bp) varsa adjacent
-    - Büyük overlap varsa adjacent sayma
+    - gap ≤ tolerance ise adjacent
+    - Küçük overlap ≤ small_overlap ise adjacent
+    - Büyük overlap ise sayma
+    - Eğer bir gap ≤ near_threshold ise diğer gap'ler boosted_tolerance ile kontrol edilir
+    - gap_stats: tip bazlı global gap istatistiklerine göre boosted_tolerance otomatik artırılabilir
     """
-    for (prev_s, prev_e), (next_s, next_e) in zip(coords, coords[1:]):
-        gap = next_s - prev_e
+    gaps = [next_e - prev_s if next_s < prev_e else next_s - prev_e
+            for (prev_s, prev_e), (next_s, next_e) in zip(coords, coords[1:])]
+    gaps = [next_s - prev_e for (prev_s, prev_e), (next_s, next_e) in zip(coords, coords[1:])]
 
-        if gap >= 0:  
-            # Normal boşluk
+    print(gaps, types)
+
+    # Önce overlap ve gap check
+    for gap in gaps:
+        if gap >= 0:
             if gap > tolerance:
+                continue
+        else:
+            if abs(gap) > small_overlap:
                 return False
-        else:  
-            # Overlap durumu
-            if abs(gap) > small_overlap:  
-                return False
+
+    # Asimetrik kontrol
+    for i, gap in enumerate(gaps):
+        if gap_stats and types:
+            prev_type = types[i]
+            next_type = types[i+1]
+            stats = gap_stats.get((prev_type, next_type))
+            if stats and stats['mode_gap'] > boosted_tolerance:  # threshold
+                final_boosted = max(boosted_tolerance, int(stats['avg_gap']*1.5))
+                print(f"⚠ Asimetrik gap tespit edildi: {prev_type}->{next_type}, gap={gap}, mode_gap={stats['mode_gap']}, final_boosted={final_boosted}")
+                if gap > final_boosted:
+                    return False
 
     return True
 
@@ -69,8 +89,7 @@ def check_overlap(prev, next_, min_overlap=1, max_tolerated=300):
         return overlap_len > max_tolerated  # küçük overlapleri "yok" gibi say
     return False
 
-
-def find_patterns_with_insertions(reads, read_lengths, tolerance=1000):
+def find_patterns_with_insertions_old(reads, read_lengths, tolerance=1000):
     patterns = {
         "CT": ["cargo", "transposon"],
         "TC": ["transposon", "cargo"],
@@ -134,6 +153,108 @@ def find_patterns_with_insertions(reads, read_lengths, tolerance=1000):
 
     return srr_counts, total, pattern_readlens, pattern_positions, insertions
 
+def find_patterns_with_insertions(reads, read_lengths, tolerance=1000):
+    patterns = {
+        "CT": ["cargo", "transposon"],
+        "TC": ["transposon", "cargo"],
+        "TCT": ["transposon", "cargo", "transposon"],
+        "CTC": ["cargo", "transposon", "cargo"],
+        "CTCT": ["cargo", "transposon", "cargo", "transposon"],
+        "TCTC": ["transposon", "cargo", "transposon", "cargo"],
+        "TCTCT": ["transposon", "cargo", "transposon", "cargo", "transposon"],
+        "CTCTC": ["cargo", "transposon", "cargo", "transposon", "cargo"],
+        "TCTCTC": ["transposon", "cargo", "transposon", "cargo", "transposon", "cargo"],
+        "TCTCTCT": ["transposon", "cargo", "transposon", "cargo", "transposon", "cargo", "transposon"],
+    }
+
+    srr_counts = defaultdict(lambda: {p: 0 for p in patterns})
+    total = {p: 0 for p in patterns}
+    pattern_readlens = {p: [] for p in patterns}
+    pattern_positions = {p: [] for p in patterns}
+    insertions = defaultdict(list)
+
+    # ----------------------------
+    # Global gap istatistikleri
+    # ----------------------------
+    
+
+    gap_stats_by_type = defaultdict(list)
+
+    for blocks in reads.values():
+        for prev, next_ in zip(blocks, blocks[1:]):
+            prev_type, prev_s, prev_e = prev
+            next_type, next_s, next_e = next_
+            gap = next_s - prev_e
+            # Tip kombinasyonuna göre kaydet
+            gap_stats_by_type[(prev_type, next_type)].append(gap)
+
+    # Ortalama ve mod hesaplama
+    gap_summary = {}
+    for k, gaps in gap_stats_by_type.items():
+        if gaps:
+            avg_gap = sum(gaps)/len(gaps)
+            # Mod hesaplama (Counter kullan)
+            mode_gap = Counter(gaps).most_common(1)[0][0]
+            gap_summary[k] = {'avg_gap': avg_gap, 'mode_gap': mode_gap, 'max_gap': max(gaps)}
+        else:
+            gap_summary[k] = {'avg_gap': 0, 'mode_gap': 0, 'max_gap': 0}
+
+    print("Tiplere göre gap istatistikleri:")
+    for k, v in gap_summary.items():
+        print(f"{k}: {v}")
+
+
+    print(gap_summary)
+    
+    # ----------------------------
+    # Read başına analiz
+    # ----------------------------
+    for read_id, blocks in reads.items():
+        srr_id = read_id.split(".")[0]
+        n = len(blocks)
+        readlen = read_lengths.get(read_id, None)
+        if not readlen or readlen <= 0:
+            continue
+
+        # --- Transposon-in-cargo tespiti ---
+        overlap_indices = set()
+        for i, (b_type, b_start, b_end) in enumerate(blocks):
+            if b_type == "transposon":
+                # Önceki cargo ile kontrol
+                if i > 0 and blocks[i-1][0] == "cargo" and check_overlap((blocks[i-1][1], blocks[i-1][2]), (b_start, b_end)):
+                    insertions[read_id].append(("cargo-inserted-transposon", i-1, i))
+                    overlap_indices.update([i-1, i])
+                # Sonraki cargo ile kontrol
+                if i < n-1 and blocks[i+1][0] == "cargo" and check_overlap((b_start, b_end), (blocks[i+1][1], blocks[i+1][2])):
+                    insertions[read_id].append(("transposon-in-cargo", i, i+1))
+                    overlap_indices.update([i, i+1])
+
+        # --- Pattern tespiti ---
+        for pname, ptypes in patterns.items():
+            k = len(ptypes)
+            for i in range(n - k + 1):
+                window = blocks[i:i+k]
+                types = [b[0] for b in window]
+                coords = [(b[1], b[2]) for b in window]
+
+                # Overlap içeren blokları sayma
+                if any((i+j) in overlap_indices for j in range(k)):
+                    continue
+
+                if types == ptypes and check_adjacent(coords, types=types, gap_stats=gap_summary):
+                    srr_counts[srr_id][pname] += 1
+                    total[pname] += 1
+                    pattern_readlens[pname].append(readlen)
+                    pattern_start = coords[0][0]
+                    pattern_end = coords[-1][1]
+                    center_norm = ((pattern_start + pattern_end) / 2.0) / readlen
+                    center_norm = max(0.0, min(1.0, center_norm))
+                    pattern_positions[pname].append(center_norm)
+
+    return srr_counts, total, pattern_readlens, pattern_positions, insertions
+
+
+
 def plot_histograms(pattern_readlens, outdir="figures", prefix="global"):
     os.makedirs(outdir, exist_ok=True)
     for pname, lens in pattern_readlens.items():
@@ -193,6 +314,12 @@ def plot_scatter_positions_logscale(pattern_readlens, pattern_positions, outdir=
         plt.savefig(os.path.join(outdir, f"{prefix}_{pname}_pos_vs_len_log.png"), dpi=300)
         plt.close()
 
+
+
+
+
+
+
 def analyze_blocks(file1, file2, figure_out_dir, figure_name):
     # Reads ve read lengths oku
     reads, read_lengths = parse_annotated_files([file1, file2])
@@ -241,3 +368,11 @@ def analyze_blocks(file1, file2, figure_out_dir, figure_name):
     
     print("\n[INFO] figures/ klasörüne histogram ve position scatter'ları kaydedildi.")
     print("[INFO] insertions ve pattern özetleri txt dosyasına kaydedildi.")
+
+
+
+analyze_blocks("/media/lin-bio/back2/picota_project_longTestIS26/mapping/SRR11108582/SRR11108582_Cycle_3-len5783-_split.fasta_partial",
+    "/media/lin-bio/back2/picota_project_longTestIS26/mapping/SRR11108582/SRR11108582_Cycle_3-len5783-_split.fasta_full",
+    "/media/lin-bio/back2/picota_project_longTestIS26/mapping/SRR11108582",
+    "abc"
+)
