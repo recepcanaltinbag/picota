@@ -145,10 +145,11 @@ def make_blast_db(path_of_makeblastdb, db_input, db_output, db_type="nucl"):
 
 
 def run_blast(path_of_blast, query, database, output):
-    extras = '"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen"'
-    args = f'{path_of_blast} -db {database} -query {query} -out {output} -outfmt {extras}'
-    subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not os.path.exists(output):
+        extras = '"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen"'
+        args = f'{path_of_blast} -db {database} -query {query} -out {output} -outfmt {extras}'
+        subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def parsing_blast_file(blast_result_file, r_type, threshold_blast, info_prod_dict):
@@ -165,11 +166,13 @@ def parsing_blast_file(blast_result_file, r_type, threshold_blast, info_prod_dic
 
     for qseqid, frame in df_filtered.groupby('qseqid'):
         the_best_list = []
+        
         for idx in range(len(frame)):
             match_len = int(frame.iloc[idx]['length'])
             slen = int(frame.iloc[idx]['slen'])
             score = (match_len / slen) * float(frame.iloc[idx]['pident'])
             if score > threshold_blast:
+                
                 the_best_list.append((score, idx))
         if the_best_list:
             best_score, best_idx = sorted(the_best_list, key=lambda x: x[0], reverse=True)[0]
@@ -288,16 +291,16 @@ def scoring_main(cycle_folder, picota_out_folder,
             if os.path.exists(path_to_antibiotics):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder,
                                              path_to_antibiotics, out_file_prot, 'Antibiotics', info_prod_dict,
-                                             threshold_blast=80, db_type="prot"))
+                                             threshold_blast=50, db_type="prot"))
             if os.path.exists(path_to_xenobiotics):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder,
                                              path_to_xenobiotics, out_file_prot, 'Xenobiotics', info_prod_dict,
-                                             threshold_blast=80, db_type="prot"))
+                                             threshold_blast=50, db_type="prot"))
             if os.path.exists(path_to_ises):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder,
                                              path_to_ises, splitted_cycle, 'InsertionSequences', info_prod_dict,
-                                             threshold_blast=80, db_type="nucl"))
-
+                                             threshold_blast=50, db_type="nucl"))
+            
             # CDS score listeleri
             lst_ant, lst_is, lst_xe = [], [], []
             for the_cds in cds_list:
@@ -326,6 +329,7 @@ def scoring_main(cycle_folder, picota_out_folder,
                 the_cy_lines = sc_f.readlines()
             len_of_cycle = sum(len(line.strip()) for line in the_cy_lines if not line.startswith('>'))
             nuc_of_cycle = ''.join(line.strip() for line in the_cy_lines if not line.startswith('>'))
+
 
             # Score hesaplama
             score0 = calculate_total_score(0, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe)

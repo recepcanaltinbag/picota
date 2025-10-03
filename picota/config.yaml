@@ -1,7 +1,7 @@
 delete_fastq_files: true
-sra_id_file: "picota/sra_ids.tsv"
+sra_id_file: "picota/selected_sra.csv"
 
-outdir : "/media/lin-bio/back2/picota_project_longTest"
+outdir : "/media/lin-bio/back2/picota_project_longTestIS26"
 
 
 path_of_fastq_dump: "parallel-fastq-dump"
@@ -20,7 +20,7 @@ path_of_bandage: "./picota/tools/Bandage_Ubuntu-x86-64_v0.9.0_AppDir/Bandage_Ubu
 
 path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
 path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
-path_to_ises: "picota/DBs/ISes/IS.fna"
+path_to_ises: "picota/DBs/ISes/tncentral_integrall_isfinder.fa"
 
 find_all_path: true
 path_limit: 25

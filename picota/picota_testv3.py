@@ -14,18 +14,22 @@ from src.assembly import assembly_main
 from src.scoringv4ProtBlast import scoring_main
 from src.split_cycle_coords_for_is import split_cycles_from_picota
 from src.bam_analyse import bam_file_analyze
-from src.analyze_blocks import analyze_blocks
+from src.analyze_blocksv2 import analyze_blocks
 
 def load_sra_pairs(sra_id_file):
     pairs = []
     with open(sra_id_file) as f:
-        reader = csv.DictReader(f, delimiter="\t")
+        reader = csv.DictReader(f, delimiter=",")
         for row in reader:
             short_id = row["sra_short_id"].strip()
-            long_id = row["sra_long_id"].strip() if row["sra_long_id"].strip() not in ("", "-", "null") else None
+
+            val = row.get("sra_long_id")  # None gelebilir
+            if val is not None:
+                val = val.strip()
+            long_id = val if val not in (None, "", "-", "null") else None
+
             pairs.append((short_id, long_id))
     return pairs
-
 
 
 def run_minimap2(ref_fasta, fastq_file, bam_out="mapping.bam", threads=4, run_dir=None):
@@ -189,6 +193,7 @@ def process_accession(short_acc, long_acc, cfg, project_root):
     # 3) Cycle Analysis
     gfa_file = gfa_files[0]  # ilk gfa dosyası
     out_cycle_file = os.path.join(cyc_folder, f"{short_acc}_{os.path.basename(gfa_file)}.fasta")
+    print(out_cycle_file)
     run_cycle_analysis(short_acc, gfa_file, out_cycle_file, cfg)
 
     # 4) Scoring
@@ -241,7 +246,7 @@ def process_accession(short_acc, long_acc, cfg, project_root):
                 out_bam_analysis = os.path.join(map_folder, f"{long_acc}_{os.path.basename(fasta_record)}_full") 
                 out_bam_analysis_partial = os.path.join(map_folder, f"{long_acc}_{os.path.basename(fasta_record)}_partial")
                 bam_file_analyze(sorted_bam, out_bam_analysis, out_bam_analysis_partial)
-                analyze_blocks(out_bam_analysis_partial, out_bam_analysis_partial, map_folder, fasta_record)
+                analyze_blocks(out_bam_analysis_partial, out_bam_analysis, map_folder, os.path.basename(fasta_record))
             except Exception as e:
                 logging.error(f"[{long_acc}] Mapping veya BAM analiz sırasında hata: {e}")
         else:
