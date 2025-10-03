@@ -34,45 +34,79 @@ def parse_annotated_files(file_list):
 
     return reads_all, read_lengths_all
 
+def check_adjacent(coords, types=None, tolerance=1000, small_overlap=300,
+                   boosted_tolerance=1000, max_boost=5000, mode_gap_tolerance=200,
+                   min_large_fraction=0.25, gap_stats=None, absolute_small_gap=200):
+    """
+    İki yönlü asimetri ve sayısal anlamlılık kontrolü:
+    - Gap ≤ absolute_small_gap → kesinlikle küçük, kabule değer
+    - Normal: her iki yönde de gap küçük → adjacent ✅
+    - Simetrik büyük gap → adjacent ❌
+    - Asimetrik gap (biri küçük, biri büyük) → adjacent, ⚠ print
+    - Tek tük büyük gap → anlamsız, kabule değer
+    - gap_stats: {'mode_gap': ..., 'count': ..., 'large_count': ...}
+    """
+    if len(coords) < 2:
+        return True
 
-def check_adjacent(coords, types=None, tolerance=1000, small_overlap=300, 
-                   near_threshold=10, boosted_tolerance=1000, gap_stats=None):
-    """
-    Ardışıklık kontrolü:
-    - gap ≤ tolerance ise adjacent
-    - Küçük overlap ≤ small_overlap ise adjacent
-    - Büyük overlap ise sayma
-    - Eğer bir gap ≤ near_threshold ise diğer gap'ler boosted_tolerance ile kontrol edilir
-    - gap_stats: tip bazlı global gap istatistiklerine göre boosted_tolerance otomatik artırılabilir
-    """
-    gaps = [next_e - prev_s if next_s < prev_e else next_s - prev_e
-            for (prev_s, prev_e), (next_s, next_e) in zip(coords, coords[1:])]
+    # Gap hesaplama
     gaps = [next_s - prev_e for (prev_s, prev_e), (next_s, next_e) in zip(coords, coords[1:])]
+    print("Gaps:", gaps, "Types:", types)
 
-    print(gaps, types)
-
-    # Önce overlap ve gap check
+    # Overlap ve tolerance check
     for gap in gaps:
-        if gap >= 0:
-            if gap > tolerance:
-                continue
-        else:
-            if abs(gap) > small_overlap:
-                return False
+        if gap < 0 and abs(gap) > small_overlap:
+            return False
 
-    # Asimetrik kontrol
-    for i, gap in enumerate(gaps):
-        if gap_stats and types:
+    # Gap yönleri ve tip bazlı kontrol
+    if gap_stats and types:
+        for i, gap in enumerate(gaps):
             prev_type = types[i]
             next_type = types[i+1]
             stats = gap_stats.get((prev_type, next_type))
-            if stats and stats['mode_gap'] > boosted_tolerance:  # threshold
-                final_boosted = max(boosted_tolerance, int(stats['avg_gap']*1.5))
-                print(f"⚠ Asimetrik gap tespit edildi: {prev_type}->{next_type}, gap={gap}, mode_gap={stats['mode_gap']}, final_boosted={final_boosted}")
-                if gap > final_boosted:
-                    return False
+            reverse_stats = gap_stats.get((next_type, prev_type))
+
+            if not stats:
+                continue
+
+            # Mutlak küçük gap kontrolü
+            if gap <= absolute_small_gap:
+                print(f"⚠ Küçük gap, kabule değer: {prev_type}->{next_type}, gap={gap}")
+                continue
+
+            # Gap büyük/küçük sınıflandırması tip bazlı
+            is_large = gap > stats['mode_gap'] * 1.2
+
+            # Sayısal anlamlılık kontrolü
+            total_count = stats.get('count', 1)
+            large_count = stats.get('large_count', 0)
+            if is_large and total_count > 0 and (large_count / total_count) < min_large_fraction:
+                print(f"⚠ Büyük gap ama az örnek, anlamsız kabul edildi: {prev_type}->{next_type}, gap={gap}")
+                continue  # kabule değer
+
+            # Mode civarında gap → kabule değer
+            if abs(gap - stats['mode_gap']) <= mode_gap_tolerance:
+                print(f"⚠ Gap mod civarında, kabule değer: {prev_type}->{next_type}, gap={gap}, mode_gap={stats['mode_gap']}")
+                continue
+
+            # Asimetri kontrolü
+            if reverse_stats:
+                reverse_gap_mode = reverse_stats['mode_gap']
+                is_reverse_large = gap > reverse_gap_mode * 1.2
+                if is_large != is_reverse_large:
+                    print(f"⚠ Asimetrik gap tespit edildi: {prev_type}->{next_type}, gap={gap}, mode_gap={stats['mode_gap']}, reverse_mode={reverse_gap_mode}")
+                    continue  # adjacent kabul edilebilir
+
+            # Büyük gap kontrolü
+            final_boosted = min(max_boost, max(boosted_tolerance, int(stats['mode_gap'] * 1.5)))
+            if gap > final_boosted:
+                print(f"❌ Büyük gap, adjacent değil: {prev_type}->{next_type}, gap={gap}, final_boosted={final_boosted}")
+                return False
 
     return True
+
+
+
 
 
 def check_overlap(prev, next_, min_overlap=1, max_tolerated=300):
@@ -195,9 +229,9 @@ def find_patterns_with_insertions(reads, read_lengths, tolerance=1000):
             avg_gap = sum(gaps)/len(gaps)
             # Mod hesaplama (Counter kullan)
             mode_gap = Counter(gaps).most_common(1)[0][0]
-            gap_summary[k] = {'avg_gap': avg_gap, 'mode_gap': mode_gap, 'max_gap': max(gaps)}
+            gap_summary[k] = {'avg_gap': avg_gap, 'mode_gap': mode_gap, 'max_gap': max(gaps), 'count': len(gaps)}  # örnek sayısı}
         else:
-            gap_summary[k] = {'avg_gap': 0, 'mode_gap': 0, 'max_gap': 0}
+            gap_summary[k] = {'avg_gap': 0, 'mode_gap': 0, 'max_gap': 0, 'count': 0}
 
     print("Tiplere göre gap istatistikleri:")
     for k, v in gap_summary.items():
