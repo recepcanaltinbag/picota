@@ -14,6 +14,7 @@ class ToleranceConfig:
     mode_gap_tolerance: int = 200
     min_large_fraction: float = 0.25
     absolute_small_gap: int = 200
+    max_reasonable_gap: int = 3000  
 
 # -------------------------
 # Plotting config

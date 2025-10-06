@@ -130,32 +130,43 @@ def check_adjacent(coords: List[Tuple[int,int]], types: List[str], gap_summary: 
                 logger.debug(f"No stats and gap > tolerance: {prev_type}->{next_type}, gap={gap}")
                 return False
 
+        # 🔹 Safety: cap unrealistic mode gaps
+        mode_gap = info.get('mode_gap', 0)
+        if mode_gap > cfg.max_reasonable_gap:
+            logger.warning(f"Unrealistic mode_gap={mode_gap} detected for {prev_type}->{next_type}, using capped value {cfg.max_reasonable_gap}")
+            mode_gap = cfg.max_reasonable_gap
+
         total_count = info.get('count', 0)
         large_count = info.get('large_count', 0)
 
-        if abs(gap - info['mode_gap']) <= cfg.mode_gap_tolerance:
-            logger.debug(f"Gap near mode accepted: {prev_type}->{next_type}, gap={gap}, mode={info['mode_gap']}")
+        if abs(gap - mode_gap) <= cfg.mode_gap_tolerance:
+            logger.debug(f"Gap near mode accepted: {prev_type}->{next_type}, gap={gap}, mode={mode_gap}")
             continue
 
-        is_large = gap > max(cfg.absolute_small_gap, int(info['mode_gap'] * 1.2))
+        is_large = gap > max(cfg.absolute_small_gap, int(mode_gap * 1.2))
         if is_large and total_count > 0 and (large_count / total_count) < cfg.min_large_fraction:
             logger.debug(f"Singleton large gap ignored: {prev_type}->{next_type}, gap={gap} (large_count={large_count}, total={total_count})")
             continue
 
         if reverse_info:
-            rev_mode = reverse_info['mode_gap']
+            rev_mode = reverse_info.get('mode_gap', 0)
+            if rev_mode > cfg.max_reasonable_gap:
+                rev_mode = cfg.max_reasonable_gap
             is_reverse_large = gap > max(cfg.absolute_small_gap, int(rev_mode * 1.2))
             if is_large != is_reverse_large:
-                logger.warning(f"Asymmetric gap pattern: {prev_type}->{next_type}, gap={gap}, mode={info['mode_gap']}, reverse_mode={rev_mode}")
+                logger.warning(f"Asymmetric gap pattern: {prev_type}->{next_type}, gap={gap}, mode={mode_gap}, reverse_mode={rev_mode}")
                 continue
 
-        final_boosted = min(cfg.max_boost, max(cfg.boosted_tolerance, int(info['mode_gap'] * 1.5)))
+        # 🔹 final_boosted artık her zaman "caplenmiş" mode_gap ile hesaplanıyor
+        final_boosted = min(cfg.max_boost, max(cfg.boosted_tolerance, int(mode_gap * 1.5)))
         if gap > final_boosted:
             logger.debug(f"Gap exceeds final_boosted: {prev_type}->{next_type}, gap={gap}, final_boosted={final_boosted} -> reject")
             return False
 
         logger.debug(f"Gap accepted by default: {prev_type}->{next_type}, gap={gap}")
+
     return True
+
 
 
 # -------------------------

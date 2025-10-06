@@ -16,6 +16,8 @@ from src.logger_setup import setup_logger_from_config
 from src.config_loader import load_config, Config, LoggingConfig, ToleranceConfig
 
 
+
+
 logger: logging.Logger = None
 
 '''
@@ -176,6 +178,7 @@ def process_accession(short_acc, long_acc, cfg: Config):
     os.makedirs(annot_folder, exist_ok=True)
 
     # 1) SRA download
+    
     raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
 
     # 2) Assembly

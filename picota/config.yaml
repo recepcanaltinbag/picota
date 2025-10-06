@@ -95,6 +95,7 @@ tolerances:
   mode_gap_tolerance: 200
   min_large_fraction: 0.25
   absolute_small_gap: 200
+  max_reasonable_gap: 10000  
 
 # -------------------------
 # Plotting config
