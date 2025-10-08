@@ -1,13 +1,13 @@
 from collections import Counter
 from Bio import SeqIO
 
-# ---- 1. Core enzymatic genler ----
+# ---- 1. Core enzymatic genes ----
 enzymatic_core = [
     "hydrogenase", "oxygenase", "reductase", "dehydrogenase", 
     "kinase", "transferase", "ligase", "lyase", "isomerase", "mutase"
 ]
 
-# ---- 2. Xenobiotic / biodegradation enzimleri (güncellenmiş) ----
+# ---- 2. Xenobiotic / biodegradation enzymes----
 xenobiotic_related = [
     # Halojenli bileşik bozunması
     "haloalkane dehalogenase",
