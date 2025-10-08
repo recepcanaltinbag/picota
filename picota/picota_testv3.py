@@ -97,7 +97,7 @@ def run_longread_download(acc, out_dir, sra_folder, fastq_dump_path, logger_name
     fastq_file = os.path.join(out_dir, f"{acc}_1.fastq")
     if not os.path.exists(fastq_file):
         logger.info(f"[{acc}] Long-read FASTQ indiriliyor...")
-        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False, logger_name=logger_name)
+        run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=True, logger_name=logger_name)
     else:
         logger.info(f"[{acc}] Long-read FASTQ mevcut, atlandı.")
     return fastq_file
@@ -196,8 +196,9 @@ def process_accession(short_acc, long_acc, cfg: Config):
 
     # 4) Scoring
     picota_final_tab = run_scoring(short_acc, out_cycle_file, scr_folder, cfg)
-    annotated_fastas = split_cycles_from_picota(picota_final_tab, out_cycle_file, annot_folder)
-
+    
+    annotated_fastas = split_cycles_from_picota(picota_final_tab, out_cycle_file, annot_folder, cfg.options.split_min_score)
+    print(annotated_fastas)
     # 5) Long-read download + mapping
     long_fastq = None
     if long_acc:

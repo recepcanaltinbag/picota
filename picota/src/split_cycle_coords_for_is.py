@@ -4,7 +4,7 @@ from Bio.SeqRecord import SeqRecord
 import os
 import pandas as pd
 
-def split_cycles_from_picota(picota_tab, cycle_fasta_file, output_dir, min_score=80):
+def split_cycles_from_picota(picota_tab, cycle_fasta_file, output_dir, split_min_score=50):
     """
     PICOTA final tab ve cycle FASTA dosyasını alır,
     her cycle için sadece 1 transposon ve 1 cargo bölgesi ayırır.
@@ -18,12 +18,10 @@ def split_cycles_from_picota(picota_tab, cycle_fasta_file, output_dir, min_score
     fasta_records = {rec.id: rec for rec in SeqIO.parse(cycle_fasta_file, "fasta")}
     df = pd.read_csv(picota_tab, sep="\t", header=0)
     created_fasta_files = []
-
     for idx, row in df.iterrows():
         cycle_id = row['CycleID']
-
         # Skor kontrolü
-        if pd.isna(row['score2']) or float(row['score2']) < min_score:
+        if pd.isna(row['score2']) or float(row['score2']) < split_min_score:
             continue
         if pd.isna(row['IScoords']) or row['IScoords'] == "":
             continue

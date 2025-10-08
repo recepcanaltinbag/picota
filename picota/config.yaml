@@ -17,7 +17,7 @@ paths:
 
   # Assembly
   assembly_threads: 24
-  assembly_k_mer_list: "79,99"
+  assembly_k_mer_list: "99"
   quiet: true
   keep_temp_files: true
   path_of_spades: "spades.py"
@@ -46,13 +46,15 @@ paths:
 options:
   delete_fastq_files: true
   min_size_of_cycle: 2000
-  max_size_of_cycle: 50000
+  max_size_of_cycle: 30000
   name_prefix_cycle: "Cycle"
   min_component_number: 1
-  max_component_number: 50
-  k_mer_sim: 50
-  threshold_sim: 50
+  max_component_number: 25
+  k_mer_sim: 80
+  threshold_sim: 80
   mapping_threads: 8
+  split_min_score: 51
+
 
 # new parameters
   mean_of_CompTns: 5850

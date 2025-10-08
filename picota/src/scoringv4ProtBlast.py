@@ -70,38 +70,51 @@ def genbak_create(nuc_seq, seq_acc, seq_id, seq_description, feature_list, out_f
         SeqIO.write(record, output_file, 'genbank')
 
 
-def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns,
-                          len_of_cycle, lst_ant, lst_is, lst_xe):
+def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe):
     min_z = 0
-    z = abs(len_of_cycle - mean_of_CompTns) / std_of_CompTns
+    z = (abs(len_of_cycle - mean_of_CompTns))/std_of_CompTns
     if z > max_z:
         z = max_z
-    if dist_type == 1 and len_of_cycle < mean_of_CompTns:
-        z = 0
+    if dist_type == 1:
+        if len_of_cycle < mean_of_CompTns:
+            z = 0
 
-    z_c_l = 1 - (z - min_z) / (max_z - min_z)
+
+    z_c_l = 1 - (z - min_z)/(max_z - min_z)
     total_score = 0
-    antc, isc, xc = 0, 0, 0
-
+    antc = 0
+    isc = 0
+    xc = 0
     if total_score_type == 0:
-        antc = sum(lst_ant)
-        isc = sum(lst_is)
-        xc = sum(lst_xe)
-        total_score = (antc + isc + xc) ** z_c_l
+        for ant in lst_ant:
+            antc += ant
+        for ist in lst_is:
+            isc += ist
+        for xet in lst_xe:
+            xc += xet
+        total_score = (antc + isc + xc)**z_c_l
+
     elif total_score_type == 1:
-        if lst_ant: antc = 100
-        if lst_is: isc = 100
-        if lst_xe: xc = 100
-        total_score = (antc + isc + xc) ** z_c_l
+        if len(lst_ant) > 0:
+            antc = 100
+        if len(lst_is) > 0:
+            isc = 100
+        if len(lst_xe) > 0:
+            xc = 100
+        total_score = (antc + isc + xc)**z_c_l
+
     elif total_score_type == 2:
-        antc = sum(lst_ant)
-        xc = sum(lst_xe)
-        isc = 1 if lst_is else 0
+        for ant in lst_ant:
+            antc += ant
+        if len(lst_is) > 0:
+            isc = 1
+        for xet in lst_xe:
+            xc += xet
         if xc + antc == 0:
             antc = 50
-        total_score = ((antc + xc) * isc) ** z_c_l
+        total_score = ((antc + xc)*isc)**z_c_l
     else:
-        raise Exception('Error, total_score_type is invalid, it can be 0, 1, 2')
+        raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2')
 
     return total_score
 

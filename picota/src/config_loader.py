@@ -86,6 +86,7 @@ class OptionsConfig:
     path_of_makeblastdb: str
     path_of_blastx: str
     path_of_blastp: str
+    split_min_score: int
 
 
 # -------------------------
