@@ -346,7 +346,7 @@ def scoring_main(cycle_folder, picota_out_folder,
             t_score = [score0, score1, score2][total_score_type]
 
             if t_score > threshold_final_score:
-                logger.info(f'\nAnalyzing: {os.path.basename(splitted_cycle)}')
+                logger.info(f'Analyzing: {os.path.basename(splitted_cycle)}')
                 logger.info(
                     f"{os.path.basename(splitted_cycle)} (score0): {score0}, (score1): {score1}, (score2): {score2}"
                 )

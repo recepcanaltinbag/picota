@@ -104,7 +104,7 @@ def run_longread_download(acc, out_dir, sra_folder, fastq_dump_path, logger_name
 
 
 # --- Assembly ---
-def run_assembly(acc, raw_files, out_folder, cfg: Config):
+def run_assembly(acc, raw_files, out_folder, cfg: Config, logger_name):
     gfa_files = glob.glob(os.path.join(out_folder, "*.gfa"))
     if gfa_files:
         logger.info(f"[{acc}] Assembly zaten var, atlandı.")
@@ -117,7 +117,7 @@ def run_assembly(acc, raw_files, out_folder, cfg: Config):
         cfg.paths.keep_temp_files, cfg.paths.path_of_spades,
         cfg.paths.path_of_fastp, cfg.paths.skip_filtering,
         cfg.paths.assembler_type, cfg.paths.path_of_megahit,
-        cfg.paths.gfa_tools_path, cfg.paths.path_of_bandage
+        cfg.paths.gfa_tools_path, cfg.paths.path_of_bandage, logger_name
     )
     return glob.glob(os.path.join(out_folder, "*.gfa"))
 
@@ -184,7 +184,7 @@ def process_accession(short_acc, long_acc, cfg: Config):
     raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
     logger.info(f"Raw Files: {raw_files}")
     # 2) Assembly
-    gfa_files = run_assembly(short_acc, raw_files, asm_folder, cfg)
+    gfa_files = run_assembly(short_acc, raw_files, asm_folder, cfg, cfg.logging.logger_name)
     if not gfa_files:
         logger.warning(f"[{short_acc}] Assembly başarısız, GFA bulunamadı.")
         return

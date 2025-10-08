@@ -2,7 +2,9 @@ import subprocess
 import glob
 import os
 import shutil
+import logging
 
+logger: logging.Logger = None
 
 # ----------------------------------------------------------------
 # 1- FILTERING THE RAW FILE WITH FASTP
@@ -23,9 +25,9 @@ def raw_read_filtering(raw_file, out_folder, fastp_path, quiet_mode):
         filtered_raw_file_1_name = "filtered_" + raw_file_1_path.split('/')[-1].split('.')[0] 
         f1_path = out_folder + "/" + filtered_raw_file_1_name +".fastq"
         args = f"{fastp_path} -i {raw_file_1_path} -o {f1_path} -h {f1_path}.html"
-        print('Command will be run:')
-        print(args)
-        print('-------')
+        logger.info('Command will be run:')
+        logger.info(f"{args}")
+        logger.info('-------')
         my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
 
 
@@ -38,14 +40,14 @@ def raw_read_filtering(raw_file, out_folder, fastp_path, quiet_mode):
         f2_path = out_folder + "/" + filtered_raw_file_2_name +".fastq"
         args = f"{fastp_path} -i {raw_file_1_path} -I {raw_file_2_path} \
             -o {f1_path} -O {f2_path} -h {f1_path}.html" 
-        print('Command will be run:')
-        print(args)
-        print('-------')
+        logger.info('Command will be run:')
+        logger.info(f"{args}")
+        logger.info('-------')
         my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
 
 
     else:
-        print('More than 2 file or no file exist, error!')
+        logger.info('More than 2 file or no file exist, error!')
 
 
 
@@ -53,9 +55,9 @@ def raw_read_filtering(raw_file, out_folder, fastp_path, quiet_mode):
 def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_name, threads, k_mer, quiet_mode, assembly_keep_temp_files):
     if len(file_path) == 1:
         args = f"{spades_path} -1 {file_path[0]} -o {out_folder} -t {str(threads)}  -k {k_mer}" 
-        print('Command will be run:')
-        print(args)
-        print('-------')
+        logger.info('Command will be run:')
+        logger.info(f"{args}")
+        logger.info('-------')
         my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
         gfa_files = glob.glob(out_folder + '/*.gfa')
         if len(gfa_files) == 0:
@@ -69,14 +71,14 @@ def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_n
             for file_pt in file_path:
                 if os.path.exists(file_pt):
                     os.remove(file_pt)
-            print('Temp Files deleted., if you want to keep them use --keep_temp_files')
+            logger.info('Temp Files deleted., if you want to keep them use --keep_temp_files')
                 
 
     elif len(file_path) == 2:
         args = f"{spades_path} -1 {file_path[0]} -2 {file_path[1]} -o {out_folder} -t {str(threads)} -k {k_mer}" 
-        print('Command will be run:')
-        print(args)
-        print('-------')
+        logger.info('Command will be run:')
+        logger.info(f"{args}")
+        logger.info('-------')
         my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
         gfa_files = glob.glob(out_folder + '/*.gfa')
 
@@ -89,7 +91,7 @@ def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_n
         
 
     else:
-        print('Error, there is no fastq file or more than two fastq file!')
+        logger.info('Error, there is no fastq file or more than two fastq file!')
 
 
 
@@ -97,9 +99,11 @@ def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_n
 def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_threads, assembly_k_mer_list,
         assembly_quiet, assembly_keep_temp_files,
         assembly_path_of_spades, assembly_path_of_fastp, assembly_skip_filtering, 
-        assembler_type="spades", assembly_path_of_megahit=None, gfa_tools_path="gfatools", path_of_bandage="bandage"):
+        assembler_type="spades", assembly_path_of_megahit=None, gfa_tools_path="gfatools", path_of_bandage="bandage", logger_name="picota_analysis"):
 
-    
+    global logger
+    logger = logging.getLogger(logger_name)
+
     if not os.path.exists(main_out_folder):
         os.mkdir(main_out_folder)
     
@@ -146,7 +150,7 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
     else:
         gfa_files = []
         for k_mer_l in assembly_k_mer_list.split(','):
-            gfa_name = name_for_assembly + '_' + k_mer_l + '.gfa'
+            gfa_name = k_mer_l + '.gfa'
             out_assembly = os.path.join(out_assembly_main, name_for_assembly + '_' + k_mer_l)
             if not os.path.exists(out_assembly):
                 os.mkdir(out_assembly)
@@ -184,12 +188,12 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder
     elif len(file_path) == 2:
         args = f"{megahit_path} -1 {file_path[0]} -2 {file_path[1]} -o {out_folder} -t {str(threads)} --k-min 55"
     else:
-        print('Error: there is no fastq file or more than two fastq file!')
+        logger.info('Error: there is no fastq file or more than two fastq file!')
         return
 
-    print('Command will be run:')
-    print(args)
-    print('-------')
+    logger.info('Command will be run:')
+    logger.info(f"{args}")
+    logger.info('-------')
     my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
 
     intermediate_dir = os.path.join(out_folder, "intermediate_contigs")
@@ -207,11 +211,11 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder
 
         if not os.path.isfile(gfa_path):
             cmd = f"megahit_core contig2fastg {kmer[1:]} {contig_file} > {fastg_path}"
-            print(f"Running: {cmd}")
+            logger.info(f"Running: {cmd}")
             subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
 
             cmd = f"{gfa_tools_path} {fastg_path} > {gfa_path}"
-            print(f"Running: {cmd}")
+            logger.info(f"Running: {cmd}")
             subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
 
         # Skoru GFA'dan hesapla
@@ -225,9 +229,9 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder
         destination_path = os.path.join(main_out_folder, os.path.basename(best_gfa))
         shutil.copy(best_gfa, destination_path)
 
-        print(f"Best GFA copied to: {destination_path}")
+        logger.info(f"Best GFA copied to: {destination_path}")
     else:
-        print("No best GFA file found to copy.")
+        logger.info("No best GFA file found to copy.")
 
 
     if assembly_keep_temp_files == False:
@@ -235,7 +239,7 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder
         for file_pt in file_path:
             if os.path.exists(file_pt):
                 os.remove(file_pt)
-        print('Temp Files deleted., if you want to keep them use --keep_temp_files')
+        logger.info('Temp Files deleted., if you want to keep them use --keep_temp_files')
 
 
 
@@ -246,14 +250,14 @@ def process_gfa_files(gfa_files, path_of_bandage):
 
     for gfa_file in gfa_files:
         if os.path.getsize(gfa_file) == 0:
-            print(f"Skipping empty GFA: {gfa_file}")
+            logger.info(f"Skipping empty GFA: {gfa_file}")
             continue
 
         gfa_path, contigs, dead_ends, score = compute_score_from_gfa(gfa_file, path_of_bandage)
         scores.append((gfa_path, contigs, dead_ends, score))
 
     if not scores:
-        print("No valid GFA files found.")
+        logger.info("No valid GFA files found.")
         return None
 
     # Normalize skorlar
@@ -268,13 +272,13 @@ def process_gfa_files(gfa_files, path_of_bandage):
     ]
 
     # Tüm normalize skorları yazdır
-    print("\nGFA Scores (Normalized):")
+    logger.info("\nGFA Scores (Normalized):")
     for path, contigs, dead_ends, norm_score in normalized_scores:
-        print(f"{os.path.basename(path)} | contigs: {contigs}, dead ends: {dead_ends}, normalized score: {norm_score:.4f}")
+        logger.info(f"{os.path.basename(path)} | contigs: {contigs}, dead ends: {dead_ends}, normalized score: {norm_score:.4f}")
 
     # En yüksek normalize skora sahip GFA dosyasını bul
     best_gfa = max(normalized_scores, key=lambda x: x[3])
-    print(f"\nBest GFA: {os.path.basename(best_gfa[0])} with score {best_gfa[3]:.4f}")
+    logger.info(f"\nBest GFA: {os.path.basename(best_gfa[0])} with score {best_gfa[3]:.4f}")
     return best_gfa[0]
 
 
@@ -283,7 +287,7 @@ def process_gfa_files(gfa_files, path_of_bandage):
 
 def compute_score_from_gfa(gfa_file, path_of_bandage):
     # Bandage ile dead ends sayısını al
-    print('gfa_process:', gfa_file)
+    logger.info(f'gfa_process: {gfa_file}')
     cmd = f'{path_of_bandage} info {gfa_file} | grep "Dead ends" | grep -oP "\\d+"'
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, executable='/bin/bash')
     try:
