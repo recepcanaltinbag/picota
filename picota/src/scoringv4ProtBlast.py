@@ -347,8 +347,12 @@ def scoring_main(cycle_folder, picota_out_folder,
 
             if t_score > threshold_final_score:
                 logger.info(f'\nAnalyzing: {os.path.basename(splitted_cycle)}')
-                logger.info(os.path.basename(splitted_cycle), ' (score0):', score0, ' (score1):', score1, ' (score2):', score2)
-                logger.info('Antibiotics: ', len(lst_ant), 'Xenobiotics: ', len(lst_xe), 'ISes: ', len(lst_is))
+                logger.info(
+                    f"{os.path.basename(splitted_cycle)} (score0): {score0}, (score1): {score1}, (score2): {score2}"
+                )
+                logger.info(
+                    f"Antibiotics: {len(lst_ant)}, Xenobiotics: {len(lst_xe)}, ISes: {len(lst_is)}"
+                )
                 logger.info('--------------------------------------------------------------------')
 
             # GeneticInfo objesi
