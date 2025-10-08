@@ -81,7 +81,9 @@ def run_minimap2(ref_fasta, fastq_file, bam_out="mapping.bam", threads=4, run_di
 def run_sra_download(acc, out_dir, sra_folder, fastq_dump_path, logger_name):
     os.makedirs(sra_folder, exist_ok=True)
     expected_files = [os.path.join(out_dir, f"{acc}_{i}.fastq") for i in (1, 2)]
+    logger.info(f"Raw Files: {expected_files}")
     missing = [f for f in expected_files if not os.path.exists(f)]
+    logger.info(f"Missing Files: {missing}")
     if missing:
         logger.info(f"[{acc}] FASTQ eksik, indiriliyor...")
         run_sra_down(acc, out_dir, sra_folder, fastq_dump_path, keep_sra_file=True, the_force=False, logger_name=logger_name)
@@ -178,9 +180,9 @@ def process_accession(short_acc, long_acc, cfg: Config):
     os.makedirs(annot_folder, exist_ok=True)
 
     # 1) SRA download
-    
-    raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
 
+    raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
+    logger.info(f"Raw Files: {raw_files}")
     # 2) Assembly
     gfa_files = run_assembly(short_acc, raw_files, asm_folder, cfg)
     if not gfa_files:

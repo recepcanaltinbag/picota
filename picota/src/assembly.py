@@ -112,7 +112,10 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
     if assembly_skip_filtering == False:
         raw_read_filtering(raw_file_list, out_filtering, assembly_path_of_fastp, assembly_quiet)
         filtered_file_list = glob.glob(out_filtering + '/*.fastq')
-        the_final_file_list = filtered_file_list
+        if len(filtered_file_list) == 0: 
+            the_final_file_list = raw_file_list
+        else:
+            the_final_file_list = filtered_file_list
     else:
         filtered_file_list = glob.glob(out_filtering + '/*.fastq')
         if len(filtered_file_list) == 0: 
@@ -122,7 +125,7 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
     
     gfa_folder = os.path.join(main_out_folder, 'gfa_files')
     if not os.path.exists(gfa_folder):
-            os.mkdir(gfa_folder)
+        os.mkdir(gfa_folder)
     out_assembly_main = os.path.join(main_out_folder, 'assembly')
     if not os.path.exists(out_assembly_main):
         os.mkdir(out_assembly_main)
@@ -141,18 +144,28 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
         else:
             assembly_driver_megahit(assembly_path_of_megahit, the_final_file_list, out_assembly, main_out_folder, gfa_folder, gfa_name, assembly_threads, assembly_quiet, assembly_keep_temp_files, gfa_tools_path, path_of_bandage)
     else:
+        gfa_files = []
         for k_mer_l in assembly_k_mer_list.split(','):
             gfa_name = name_for_assembly + '_' + k_mer_l + '.gfa'
             out_assembly = os.path.join(out_assembly_main, name_for_assembly + '_' + k_mer_l)
             if not os.path.exists(out_assembly):
                 os.mkdir(out_assembly)
-
+            gfa_files.append(gfa_folder + '/' + gfa_name)
             if os.path.exists(gfa_folder + '/' + gfa_name):
                 print('GFA File exist, skipping,', gfa_folder + '/' + gfa_name)
             else:
-                assembly_driver_spades(assembly_path_of_spades, filtered_file_list, out_assembly, gfa_folder, \
+                assembly_driver_spades(assembly_path_of_spades, the_final_file_list, out_assembly, gfa_folder, \
                 gfa_name, assembly_threads, k_mer_l, assembly_quiet, assembly_keep_temp_files)
 
+        best_gfa = process_gfa_files(gfa_files, path_of_bandage)
+        if best_gfa:
+            # Dosyanın bulunduğu dizini al
+            destination_path = os.path.join(main_out_folder, os.path.basename(best_gfa))
+            shutil.copy(best_gfa, destination_path)
+
+            print(f"Best GFA copied to: {destination_path}")
+        else:
+            print("No best GFA file found to copy.")
 
 
 
