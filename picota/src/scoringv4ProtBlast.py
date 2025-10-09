@@ -389,7 +389,7 @@ def scoring_main(cycle_folder, picota_out_folder,
             for the_g_cds in gen_info[0].feature_list:
                 if the_g_cds.r_type == 'InsertionSequences':
                     IS_str.append(the_g_cds.product)
-                    IS_coords.append((the_g_cds.start, the_g_cds.end))
+                    IS_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
 
             # sonra diğerlerini ekle
             for the_g_cds in gen_info[0].feature_list:
@@ -400,10 +400,10 @@ def scoring_main(cycle_folder, picota_out_folder,
                     Ant_coords.append(f"{start}-{end}")
 
                 elif the_g_cds.r_type == 'Xenobiotics':
-                    # IS ile çakışma kontrolü
+                    # IS koordinatlarıyla çakışma kontrolü
                     overlap = any(
-                        not (end < is_start or start > is_end)  # aralık çakışma kontrolü
-                        for is_start, is_end in IS_coords
+                        not (end < int(is_start) or start > int(is_end))
+                        for is_start, is_end in (coord.split('-') for coord in IS_coords)
                     )
                     if not overlap:  # çakışmıyorsa ekle
                         Xeno_str.append(the_g_cds.product)
