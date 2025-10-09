@@ -379,18 +379,36 @@ def scoring_main(cycle_folder, picota_out_folder,
 
         # GeneticInfo sıralama ve final çıktılar
         sorted_genetic_info_list = sorted(genetic_info_list, key=lambda l: l[1], reverse=True)
+
         for gen_info in sorted_genetic_info_list:
-            IS_str, IS_coords, Ant_str, Ant_coords, Xeno_str, Xeno_coords = [], [], [], [], [], []
+            IS_str, IS_coords = [], []
+            Ant_str, Ant_coords = [], []
+            Xeno_str, Xeno_coords = [], []
+
+            # önce IS'leri topla
             for the_g_cds in gen_info[0].feature_list:
+                if the_g_cds.r_type == 'InsertionSequences':
+                    IS_str.append(the_g_cds.product)
+                    IS_coords.append((the_g_cds.start, the_g_cds.end))
+
+            # sonra diğerlerini ekle
+            for the_g_cds in gen_info[0].feature_list:
+                start, end = the_g_cds.start, the_g_cds.end
+
                 if the_g_cds.r_type == 'Antibiotics':
                     Ant_str.append(the_g_cds.product)
-                    Ant_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
+                    Ant_coords.append(f"{start}-{end}")
+
                 elif the_g_cds.r_type == 'Xenobiotics':
-                    Xeno_str.append(the_g_cds.product)
-                    Xeno_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
-                elif the_g_cds.r_type == 'InsertionSequences':
-                    IS_str.append(the_g_cds.product)
-                    IS_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
+                    # IS ile çakışma kontrolü
+                    overlap = any(
+                        not (end < is_start or start > is_end)  # aralık çakışma kontrolü
+                        for is_start, is_end in IS_coords
+                    )
+                    if not overlap:  # çakışmıyorsa ekle
+                        Xeno_str.append(the_g_cds.product)
+                        Xeno_coords.append(f"{start}-{end}")
+
 
             final_list_comps.append('\t'.join((
                 gen_info[0].seq_id,
