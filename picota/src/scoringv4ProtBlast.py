@@ -106,13 +106,21 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
     elif total_score_type == 2:
         for ant in lst_ant:
             antc += ant
+
         if len(lst_is) > 0:
             isc = 1
-        for xet in lst_xe:
-            xc += xet
-        if xc + antc == 0:
+
+        if len(lst_xe) > 0:   #existence 
+            xc = 1
+        else:
+            xc = 0
+
+        # if no ant or xc little encourage
+        if antc + xc == 0:
             antc = 50
-        total_score = ((antc + xc)*isc)**z_c_l
+
+        total_score = ((antc + xc) * isc) ** z_c_l
+
     else:
         raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2')
 
