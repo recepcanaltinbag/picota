@@ -242,6 +242,74 @@ def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, 
     return parsing_blast_file(result_path, r_type, threshold_blast, info_prod_dict)
 
 
+def diamond_driver(diamond_path, query_file, db_fasta, r_type, info_prod_dict, threshold_score, threads=24):
+    """
+    DIAMOND ile protein araması yapar, CodingRegion objelerini döndürür.
+    db_fasta: DB FASTA dosyası, yoksa .dmnd oluşturulur
+    """
+    import pandas as pd
+    import os
+    list_of_cds = []
+
+    # DB kontrolü
+    db_dmnd = f"{db_fasta}.dmnd"
+    if not os.path.exists(db_dmnd):
+        os.makedirs(os.path.dirname(db_dmnd), exist_ok=True)
+        args_makedb = f"{diamond_path} makedb --in {db_fasta} -d {db_dmnd}"
+        print(f"[+] Creating DIAMOND DB: {db_dmnd}")
+        subprocess.run(args_makedb, shell=True, executable='/bin/bash', check=True)
+
+    # Çıkış dosyası
+    result_file = f"{query_file}_{r_type}.m8"
+    os.makedirs(os.path.dirname(result_file), exist_ok=True)
+
+    # DIAMOND blastp
+    args_blast = f"{diamond_path} blastp -q {query_file} -d {db_dmnd} -o {result_file} " \
+                 f"-f 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen -p {threads}"
+    subprocess.run(args_blast, shell=True, executable='/bin/bash', check=True)
+
+    # Sonuçları oku
+    try:
+        df = pd.read_table(result_file, header=None)
+    except pd.errors.EmptyDataError:
+        return list_of_cds
+
+    df.columns = 'qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen'.split()
+    df_filtered = df[(df['pident'] >= 80.0) & (df['evalue'] < 1e-10)]
+
+    for qseqid, frame in df_filtered.groupby('qseqid'):
+        the_best_list = []
+
+        for idx in range(len(frame)):
+            match_len = int(frame.iloc[idx]['length'])
+            slen = int(frame.iloc[idx]['slen'])
+            score = (match_len / slen) * float(frame.iloc[idx]['pident'])
+            if score > threshold_score:
+                the_best_list.append((score, idx))
+
+        if the_best_list:
+            best_score, best_idx = sorted(the_best_list, key=lambda x: x[0], reverse=True)[0]
+
+            start = int(frame.iloc[best_idx]['qstart'])
+            end   = int(frame.iloc[best_idx]['qend'])
+            fullname = frame.iloc[best_idx]['sseqid']
+
+            # protein -> nucleotide koordinatına çevir
+            offset = int(info_prod_dict[qseqid][0])
+            start = (start - 1) * 3 + 1 + offset
+            end   = end * 3 + offset
+
+            strand = 1
+            if start > end:
+                strand = -1
+                start, end = end, start
+
+            # CodingRegion objesi
+            cds_obj = CodingRegion(start, end, strand, fullname, r_type, best_score)
+            list_of_cds.append(cds_obj)
+
+    return list_of_cds
+
 # --------------------------- Main Scoring ---------------------------
 
 def scoring_main(cycle_folder, picota_out_folder,
@@ -317,6 +385,9 @@ def scoring_main(cycle_folder, picota_out_folder,
                                              path_to_antibiotics, out_file_prot, 'Antibiotics', info_prod_dict,
                                              threshold_blast=50, db_type="prot"))
             if os.path.exists(path_to_xenobiotics):
+                #cds_list.extend(diamond_driver("diamond", out_file_prot, path_to_xenobiotics,
+                #                   'Xenobiotics', info_prod_dict, threshold_score=50))
+                #
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder,
                                              path_to_xenobiotics, out_file_prot, 'Xenobiotics', info_prod_dict,
                                              threshold_blast=50, db_type="prot"))
@@ -394,16 +465,17 @@ def scoring_main(cycle_folder, picota_out_folder,
                 if the_g_cds.r_type == 'InsertionSequences':
                     IS_str.append(the_g_cds.product)
                     IS_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
+                
 
+                
             # sonra diğerlerini ekle
             for the_g_cds in gen_info[0].feature_list:
                 start, end = the_g_cds.start, the_g_cds.end
-
                 if the_g_cds.r_type == 'Antibiotics':
                     Ant_str.append(the_g_cds.product)
                     Ant_coords.append(f"{start}-{end}")
 
-                elif the_g_cds.r_type == 'Xenobiotics':
+                if the_g_cds.r_type == 'Xenobiotics':
                     # IS koordinatlarıyla çakışma kontrolü
                     overlap = any(
                         not (end < int(is_start) or start > int(is_end))
