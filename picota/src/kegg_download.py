@@ -4,7 +4,7 @@ import time
 
 Entrez.email = "senin.emailin@example.com"  # Buraya mailini yaz
 
-output_folder = "bacteria_xeno_proteins"
+output_folder = "picota/DBs/Xenobiotics/tempData"
 os.makedirs(output_folder, exist_ok=True)
 
 search_terms = [
@@ -12,14 +12,18 @@ search_terms = [
     "cytochrome P450 AND bacteria[Organism]",
     "dehalogenase AND bacteria[Organism]",
     "monooxygenase AND bacteria[Organism]",
-    "dioxygenase AND bacteria[Organism]"
+    "dioxygenase AND bacteria[Organism]",
+    "transporter AND bacteria[Organism]",
+    "regulator AND bacteria[Organism]",
+    "oxygenase AND bacteria[Organism]",
+    "Rieske AND bacteria[Organism]",
 ]
 
 BATCH_SIZE = 200  # Batch halinde çekilecek kayıt sayısı
 
 def fetch_protein_ids(term):
     print(f"Aranıyor: {term}")
-    handle = Entrez.esearch(db="protein", term=term, retmax=100000)  # Çok büyük limit
+    handle = Entrez.esearch(db="protein", term=term, retmax=1000000)  # Çok büyük limit
     record = Entrez.read(handle)
     handle.close()
     print(f" - Toplam {len(record['IdList'])} protein bulundu.")

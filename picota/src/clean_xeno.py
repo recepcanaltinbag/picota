@@ -3,7 +3,7 @@ from Bio import SeqIO
 
 # ---- 1. Core enzymatic genes ----
 enzymatic_core = [
-    "hydrogenase", "oxygenase", "reductase", "dehydrogenase", 
+    "hydrogenase", "oxygenase", "reductase", "dehydrogenase", "dioxygenase", "rieske", "ferrodoxin", "transporter", "regulator",
     "kinase", "transferase", "ligase", "lyase", "isomerase", "mutase"
 ]
 
