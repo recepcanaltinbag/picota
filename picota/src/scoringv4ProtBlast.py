@@ -112,10 +112,10 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
             xc = 100
 
         # if no ant or xc little encourage
-        if antc + xc == 0:
-            antc = 50
+        # if antc + xc == 0:
+        #    antc = 50
 
-        total_score = ((antc + xc) * isc) ** z_c_l
+        total_score = ((antc + xc) * isc) + 100**z_c_l
 
     else:
         raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2')
