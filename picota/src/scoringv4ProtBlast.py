@@ -104,16 +104,12 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
         total_score = (antc + isc + xc)**z_c_l
 
     elif total_score_type == 2:
-        for ant in lst_ant:
-            antc += ant
-
+        if len(lst_ant) > 0:
+            antc = 100
         if len(lst_is) > 0:
             isc = 1
-
         if len(lst_xe) > 0:   #existence 
-            xc = 1
-        else:
-            xc = 0
+            xc = 100
 
         # if no ant or xc little encourage
         if antc + xc == 0:
