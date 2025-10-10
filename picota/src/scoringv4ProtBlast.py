@@ -218,12 +218,7 @@ def parsing_blast_file(blast_result_file, r_type, threshold_blast, info_prod_dic
 
 
 
-
 def parsing_blast_file_merged(blast_result_file, r_type, threshold_blast, info_prod_dict):
-    """
-    BLAST sonuçlarını parse eder ve aynı qseqid-sseqid için merge edilmiş HSP'leri kullanarak
-    coverage-aware score hesaplar.
-    """
     list_of_cds = []
 
     try:
@@ -234,33 +229,29 @@ def parsing_blast_file_merged(blast_result_file, r_type, threshold_blast, info_p
     cols = 'qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen'.split()
     blast_result.columns = cols
 
-    # minimum pident ve evalue filtresi
     df_filtered = blast_result[(blast_result['pident'] >= 80.0) & (blast_result['evalue'] < 1e10)]
 
     for qseqid, frame in df_filtered.groupby('qseqid'):
         for sseqid, subframe in frame.groupby('sseqid'):
             slen = int(subframe.iloc[0]['slen'])
 
-            # subject koordinatlarını al ve merge et
-            intervals = [(min(row.sstart, row.send), max(row.sstart, row.send)) for _, row in subframe.iterrows()]
-            merged_intervals = merge_intervals(intervals)
-            total_covered = sum(e - s + 1 for s, e in merged_intervals)
+            # subject koordinatlarını merge et
+            subj_intervals = [(min(row.sstart, row.send), max(row.sstart, row.send)) for _, row in subframe.iterrows()]
+            merged_subj = merge_intervals(subj_intervals)
+            total_covered = sum(e - s + 1 for s, e in merged_subj)
             mean_pident = subframe['pident'].mean()
 
             score = (total_covered / slen) * mean_pident
 
             if score > threshold_blast:
-                # start/end için en yüksek bitscore'u kullan
-                best_idx = subframe['bitscore'].idxmax()
-                start = int(subframe.loc[best_idx, 'qstart'])
-                end   = int(subframe.loc[best_idx, 'qend'])
-                fullname = sseqid
+                # query tarafında da aralıkları merge et
+                query_intervals = [(min(row.qstart, row.qend), max(row.qstart, row.qend)) for _, row in subframe.iterrows()]
+                merged_query = merge_intervals(query_intervals)
 
-                # protein -> nucleotide koordinatına çevir
-                if r_type not in ('InsertionSequences', 'CompTNs'):
-                    offset = int(info_prod_dict[qseqid][0])
-                    start = (start - 1) * 3 + 1 + offset
-                    end   = end * 3 + offset
+                # toplam aralığı belirle
+                start = merged_query[0][0]
+                end = merged_query[-1][1]
+                fullname = sseqid
 
                 strand = 1
                 if start > end:
@@ -270,11 +261,11 @@ def parsing_blast_file_merged(blast_result_file, r_type, threshold_blast, info_p
                 list_of_cds.append(CodingRegion(start, end, strand, fullname, r_type, score))
 
     if list_of_cds:
-        # score attribute'una göre sırala ve en yüksek skorluyu al
-        list_of_cds = sorted(list_of_cds, key=lambda x: x.score, reverse=True)
-        return [list_of_cds[0]]  # tek elemanlı liste olarak döndür
+        list_of_cds.sort(key=lambda x: x.score, reverse=True)
+        return [list_of_cds[0]]
     else:
         return []
+
 
 
 def merge_intervals(intervals):
