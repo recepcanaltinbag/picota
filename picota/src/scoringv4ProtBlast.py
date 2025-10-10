@@ -9,6 +9,7 @@ from datetime import date
 import pandas as pd
 import shutil
 import logging
+import re
 # --------------------------- Classes ---------------------------
 
 
@@ -70,7 +71,7 @@ def genbak_create(nuc_seq, seq_acc, seq_id, seq_description, feature_list, out_f
         SeqIO.write(record, output_file, 'genbank')
 
 
-def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe):
+def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number):
     min_z = 0
     z = (abs(len_of_cycle - mean_of_CompTns))/std_of_CompTns
     if z > max_z:
@@ -79,8 +80,8 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
         if len_of_cycle < mean_of_CompTns:
             z = 0
 
-
-    z_c_l = 1 - (z - min_z)/(max_z - min_z)
+    z_l = z + (abs(comp_number - 2))**(0.5)
+    z_c_l = 1 - (z_l - min_z)/(max_z - min_z)
     total_score = 0
     antc = 0
     isc = 0
@@ -524,12 +525,21 @@ def scoring_main(cycle_folder, picota_out_folder,
                 the_cy_lines = sc_f.readlines()
             len_of_cycle = sum(len(line.strip()) for line in the_cy_lines if not line.startswith('>'))
             nuc_of_cycle = ''.join(line.strip() for line in the_cy_lines if not line.startswith('>'))
+            header_line = next((line.strip() for line in the_cy_lines if line.startswith('>')), None)
 
+            # Component number'ı regex ile çek
+            comp_number = 0
+            if header_line:
+                match = re.search(r"-comp([A-Za-z0-9]+)-", header_line)
+                if match:
+                    comp_number = int(match.group(1))
+
+            logger.info(f"Component number: {comp_number}")
 
             # Score hesaplama
-            score0 = calculate_total_score(0, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe)
-            score1 = calculate_total_score(1, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe)
-            score2 = calculate_total_score(2, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe)
+            score0 = calculate_total_score(0, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
+            score1 = calculate_total_score(1, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
+            score2 = calculate_total_score(2, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
 
             t_score = [score0, score1, score2][total_score_type]
 

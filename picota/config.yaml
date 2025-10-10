@@ -55,7 +55,7 @@ options:
   k_mer_sim: 80
   threshold_sim: 80
   mapping_threads: 8
-  split_min_score: 95
+  split_min_score: 92
 
 
 # new parameters

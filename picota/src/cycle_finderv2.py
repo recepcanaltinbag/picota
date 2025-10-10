@@ -628,7 +628,7 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     
     for cycle_el in cycle_clear_list:
         name_it += 1
-        final_str_info += ">" + cycle_el.name + "-len" + str(cycle_el.length) + "-\n" + cycle_el.sequence + "\n" 
+        final_str_info += ">" + cycle_el.name + "-len" + str(cycle_el.length) + "-comp" + str(cycle_el.component_number) + "-\n" + cycle_el.sequence + "\n" 
         print(cycle_el.name, 'seq_len:', cycle_el.length, ' components:', cycle_el.component_number, cycle_el.path)
     
     f = open(out_cycle_file, "w")
