@@ -305,7 +305,7 @@ def merge_intervals(intervals):
 
 
 def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, blast_query,
-                 r_type, info_prod_dict, threshold_blast, db_out_path, db_type="nucl"):
+                 r_type, info_prod_dict, db_out_path, threshold_blast, db_type="nucl"):
 
     cycle_file_name = os.path.basename(db_path)
     db_dir = os.path.join(db_out_path, "blast_temp")
@@ -402,7 +402,7 @@ def diamond_driver(diamond_path, query_file, db_fasta, r_type, info_prod_dict, t
 # --------------------------- Main Scoring ---------------------------
 
 def scoring_main(cycle_folder, picota_out_folder,
-                 path_to_antibiotics, path_to_xenobiotics, path_to_ises, path_to_TNs, db_out_path
+                 path_to_antibiotics, path_to_xenobiotics, path_to_ises, path_to_TNs, db_out_path, 
                  mean_of_CompTns=5850, std_of_CompTns=2586,
                  total_score_type=0, threshold_final_score=50,
                  max_z=20, dist_type=1,
@@ -471,24 +471,24 @@ def scoring_main(cycle_folder, picota_out_folder,
             # BLAST
             if os.path.exists(path_to_antibiotics):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder,
-                                             path_to_antibiotics, out_file_prot, 'Antibiotics', info_prod_dict,
-                                             threshold_blast=50, db_out_path, db_type="prot"))
+                                             path_to_antibiotics, out_file_prot, 'Antibiotics', info_prod_dict, db_out_path,
+                                             threshold_blast=50, db_type="prot"))
             if os.path.exists(path_to_xenobiotics):
                 #cds_list.extend(diamond_driver("diamond", out_file_prot, path_to_xenobiotics,
                 #                   'Xenobiotics', info_prod_dict, threshold_score=50))
                 #
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder,
-                                             path_to_xenobiotics, out_file_prot, 'Xenobiotics', info_prod_dict,
-                                             threshold_blast=50, db_out_path, db_type="prot"))
+                                             path_to_xenobiotics, out_file_prot, 'Xenobiotics', info_prod_dict, db_out_path,
+                                             threshold_blast=50, db_type="prot"))
             if os.path.exists(path_to_ises):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder,
-                                             path_to_ises, splitted_cycle, 'InsertionSequences', info_prod_dict,
-                                             threshold_blast=50, db_out_path, db_type="nucl"))
+                                             path_to_ises, splitted_cycle, 'InsertionSequences', info_prod_dict, db_out_path,
+                                             threshold_blast=50, db_type="nucl"))
             
             if os.path.exists(path_to_TNs):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder,
-                                             path_to_TNs, splitted_cycle, 'CompTNs', info_prod_dict,
-                                             threshold_blast=80, db_out_path, db_type="nucl"))
+                                             path_to_TNs, splitted_cycle, 'CompTNs', info_prod_dict, db_out_path,
+                                             threshold_blast=80, db_type="nucl"))
 
 
 
