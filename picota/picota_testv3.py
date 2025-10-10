@@ -146,7 +146,7 @@ def run_scoring(acc, cycle_file, out_folder, cfg: Config):
     logger.info(f"[{acc}] Scoring başlatılıyor...")
     scoring_main(
         cycle_file, out_folder,
-        cfg.paths.path_to_antibiotics, cfg.paths.path_to_xenobiotics, cfg.paths.path_to_ises, 
+        cfg.paths.path_to_antibiotics, cfg.paths.path_to_xenobiotics, cfg.paths.path_to_ises, cfg.paths.path_to_TNs,
         cfg.options.mean_of_CompTns,
         cfg.options.std_of_CompTns,
         cfg.options.total_score_type,

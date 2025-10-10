@@ -35,6 +35,8 @@ paths:
   path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
   path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
   path_to_ises: "picota/DBs/ISes/tncentral_integrall_isfinder.fa"
+  path_to_TNs: "picota/DBs/CompTns/Known_Tns.fasta"
+
 
   # SRA
   find_all_path: true

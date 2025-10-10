@@ -58,6 +58,7 @@ class PathsConfig:
     path_to_antibiotics: str
     path_to_xenobiotics: str
     path_to_ises: str
+    path_to_TNs: str
     find_all_path: bool
     path_limit: int
 

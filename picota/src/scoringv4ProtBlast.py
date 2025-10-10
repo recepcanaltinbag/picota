@@ -202,7 +202,7 @@ def parsing_blast_file(blast_result_file, r_type, threshold_blast, info_prod_dic
             fullname = frame.iloc[best_idx]['sseqid']
 
             # Protein hits -> nucleotide koordinatına çevir
-            if r_type != 'InsertionSequences':
+            if r_type != 'InsertionSequences' and r_type != 'CompTNs':
                 offset = int(info_prod_dict[qseqid][0])
                 start = (start - 1) * 3 + 1 + offset
                 end   = end * 3 + offset
@@ -313,7 +313,7 @@ def diamond_driver(diamond_path, query_file, db_fasta, r_type, info_prod_dict, t
 # --------------------------- Main Scoring ---------------------------
 
 def scoring_main(cycle_folder, picota_out_folder,
-                 path_to_antibiotics, path_to_xenobiotics, path_to_ises,
+                 path_to_antibiotics, path_to_xenobiotics, path_to_ises, path_to_TNs,
                  mean_of_CompTns=5850, std_of_CompTns=2586,
                  total_score_type=0, threshold_final_score=50,
                  max_z=20, dist_type=1,
@@ -396,8 +396,19 @@ def scoring_main(cycle_folder, picota_out_folder,
                                              path_to_ises, splitted_cycle, 'InsertionSequences', info_prod_dict,
                                              threshold_blast=50, db_type="nucl"))
             
+            if os.path.exists(path_to_TNs):
+                cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder,
+                                             path_to_TNs, splitted_cycle, 'CompTNs', info_prod_dict,
+                                             threshold_blast=80, db_type="nucl"))
+
+
+
             # CDS score listeleri
-            lst_ant, lst_is, lst_xe = [], [], []
+            lst_ant, lst_is, lst_xe, lst_CmpTN = [], [], [], []
+            for the_cds in cds_list:
+                if the_cds.r_type == 'CompTNs':
+                    lst_CmpTN.append(the_cds.fullname)
+
             for the_cds in cds_list:
                 if the_cds.r_type == 'Antibiotics':
                     lst_ant.append(the_cds.score)
@@ -439,7 +450,7 @@ def scoring_main(cycle_folder, picota_out_folder,
                     f"{os.path.basename(splitted_cycle)} (score0): {score0}, (score1): {score1}, (score2): {score2}"
                 )
                 logger.info(
-                    f"Antibiotics: {len(lst_ant)}, Xenobiotics: {len(lst_xe)}, ISes: {len(lst_is)}"
+                    f"Antibiotics: {len(lst_ant)}, Xenobiotics: {len(lst_xe)}, ISes: {len(lst_is)}, CompTNs: {lst_CmpTN}"
                 )
                 logger.info('--------------------------------------------------------------------')
 
@@ -459,21 +470,24 @@ def scoring_main(cycle_folder, picota_out_folder,
             IS_str, IS_coords = [], []
             Ant_str, Ant_coords = [], []
             Xeno_str, Xeno_coords = [], []
+            CompTn_str, CompTn_coords = [], []
 
             # önce IS'leri topla
             for the_g_cds in gen_info[0].feature_list:
                 if the_g_cds.r_type == 'InsertionSequences':
                     IS_str.append(the_g_cds.product)
                     IS_coords.append(f"{the_g_cds.start}-{the_g_cds.end}")
-                
 
-                
             # sonra diğerlerini ekle
             for the_g_cds in gen_info[0].feature_list:
                 start, end = the_g_cds.start, the_g_cds.end
                 if the_g_cds.r_type == 'Antibiotics':
                     Ant_str.append(the_g_cds.product)
                     Ant_coords.append(f"{start}-{end}")
+                if the_g_cds.r_type == 'CompTNs':
+                    CompTn_str.append(the_g_cds.product)
+                    CompTn_coords.append(f"{start}-{end}")
+
 
                 if the_g_cds.r_type == 'Xenobiotics':
                     # IS koordinatlarıyla çakışma kontrolü
@@ -485,6 +499,8 @@ def scoring_main(cycle_folder, picota_out_folder,
                         Xeno_str.append(the_g_cds.product)
                         Xeno_coords.append(f"{start}-{end}")
 
+            if len(CompTn_str) == 0:
+                CompTn_str = ["Novel"]
 
             final_list_comps.append('\t'.join((
                 gen_info[0].seq_id,
@@ -495,7 +511,8 @@ def scoring_main(cycle_folder, picota_out_folder,
                 str(gen_info[0].score2),
                 str(len(IS_str)), ';'.join(IS_str), ';'.join(IS_coords),
                 str(len(Ant_str)), ';'.join(Ant_str), ';'.join(Ant_coords),
-                str(len(Xeno_str)), ';'.join(Xeno_str), ';'.join(Xeno_coords)
+                str(len(Xeno_str)), ';'.join(Xeno_str), ';'.join(Xeno_coords),
+                str(len(CompTn_str)), ';'.join(CompTn_str), ';'.join(CompTn_coords)
             )))
 
             # GenBank kaydı
@@ -508,6 +525,6 @@ def scoring_main(cycle_folder, picota_out_folder,
         f_out.write('\t'.join(['CycleID', 'SRAID', 'kmer', 'score0', 'score1', 'score2',
                                'NumIS', 'ISproducts', 'IScoords',
                                'NumAnt', 'Antproducts', 'Antcoords',
-                               'NumXeno', 'Xenoproducts', 'Xenocoords']) + '\n')
+                               'NumXeno', 'Xenoproducts', 'Xenocoords','NumCompTN','CompTN','CompTNscoords']) + '\n')
         for line in final_list_comps:
             f_out.write(line + '\n')
