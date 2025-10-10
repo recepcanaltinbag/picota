@@ -85,6 +85,7 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
     antc = 0
     isc = 0
     xc = 0
+    antcxc = 0
     if total_score_type == 0:
         for ant in lst_ant:
             antc += ant
@@ -105,17 +106,17 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
 
     elif total_score_type == 2:
         if len(lst_ant) > 0:
-            antc = 100
+            antcxc = 90
         if len(lst_is) > 0:
             isc = 1
         if len(lst_xe) > 0:   #existence 
-            xc = 100
+            antcxc = 90
 
         # if no ant or xc little encourage
         # if antc + xc == 0:
         #    antc = 50
 
-        total_score = ((antc + xc) * isc) + 100**z_c_l
+        total_score = ((antcxc) * isc) + 10**z_c_l
 
     else:
         raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2')
@@ -304,10 +305,10 @@ def merge_intervals(intervals):
 
 
 def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, blast_query,
-                 r_type, info_prod_dict, threshold_blast, db_type="nucl"):
+                 r_type, info_prod_dict, threshold_blast, db_out_path, db_type="nucl"):
 
     cycle_file_name = os.path.basename(db_path)
-    db_dir = os.path.join(out_blast_folder, "blast_temp")
+    db_dir = os.path.join(db_out_path, "blast_temp")
     db_output = os.path.join(db_dir, cycle_file_name)
     db_input = db_path
     result_path = os.path.join(out_blast_folder, "blast_files", f"{os.path.basename(blast_query)}_{r_type}.out")
@@ -401,7 +402,7 @@ def diamond_driver(diamond_path, query_file, db_fasta, r_type, info_prod_dict, t
 # --------------------------- Main Scoring ---------------------------
 
 def scoring_main(cycle_folder, picota_out_folder,
-                 path_to_antibiotics, path_to_xenobiotics, path_to_ises, path_to_TNs,
+                 path_to_antibiotics, path_to_xenobiotics, path_to_ises, path_to_TNs, db_out_path
                  mean_of_CompTns=5850, std_of_CompTns=2586,
                  total_score_type=0, threshold_final_score=50,
                  max_z=20, dist_type=1,
@@ -471,23 +472,23 @@ def scoring_main(cycle_folder, picota_out_folder,
             if os.path.exists(path_to_antibiotics):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder,
                                              path_to_antibiotics, out_file_prot, 'Antibiotics', info_prod_dict,
-                                             threshold_blast=50, db_type="prot"))
+                                             threshold_blast=50, db_out_path, db_type="prot"))
             if os.path.exists(path_to_xenobiotics):
                 #cds_list.extend(diamond_driver("diamond", out_file_prot, path_to_xenobiotics,
                 #                   'Xenobiotics', info_prod_dict, threshold_score=50))
                 #
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastp, out_blast_folder,
                                              path_to_xenobiotics, out_file_prot, 'Xenobiotics', info_prod_dict,
-                                             threshold_blast=50, db_type="prot"))
+                                             threshold_blast=50, db_out_path, db_type="prot"))
             if os.path.exists(path_to_ises):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder,
                                              path_to_ises, splitted_cycle, 'InsertionSequences', info_prod_dict,
-                                             threshold_blast=50, db_type="nucl"))
+                                             threshold_blast=50, db_out_path, db_type="nucl"))
             
             if os.path.exists(path_to_TNs):
                 cds_list.extend(blast_driver(path_of_makeblastdb, path_of_blastn, out_blast_folder,
                                              path_to_TNs, splitted_cycle, 'CompTNs', info_prod_dict,
-                                             threshold_blast=80, db_type="nucl"))
+                                             threshold_blast=80, db_out_path, db_type="nucl"))
 
 
 

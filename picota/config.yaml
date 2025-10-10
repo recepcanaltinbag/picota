@@ -3,7 +3,7 @@
 # -------------------------
 logging:
   log_file: "/media/lin-bio/back2/picota_project_longTestIS26/picota.log"
-  level: "DEBUG"
+  level: "INFO"
   logger_name: "picota_analysis"
 
 # -------------------------
@@ -34,7 +34,7 @@ paths:
   # Databases
   path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
   path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
-  path_to_ises: "picota/DBs/ISes/tncentral_integrall_isfinder.fa"
+  path_to_ises: "picota/DBs/ISes/tncentral_integrall_isfinder-TNs.fasta"
   path_to_TNs: "picota/DBs/CompTns/Known_Tns.fasta"
 
 
@@ -55,7 +55,7 @@ options:
   k_mer_sim: 80
   threshold_sim: 80
   mapping_threads: 8
-  split_min_score: 101
+  split_min_score: 95
 
 
 # new parameters
