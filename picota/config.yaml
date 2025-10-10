@@ -2,7 +2,7 @@
 # Logging
 # -------------------------
 logging:
-  log_file: "/media/lin-bio/back2/picota_project_BIOMIGTest/picota.log"
+  log_file: "/media/lin-bio/back2/picota_project_longTestIS26/picota.log"
   level: "DEBUG"
   logger_name: "picota_analysis"
 
@@ -11,8 +11,8 @@ logging:
 # -------------------------
 paths:
   # Pipeline
-  outdir: "/media/lin-bio/back2/picota_project_BIOMIGTest"
-  sra_id_file: "picota/sra_ids.tsv"
+  outdir: "/media/lin-bio/back2/picota_project_longTestIS26"
+  sra_id_file: "picota/selected_sra.csv"
   fastq_dump: "parallel-fastq-dump"
 
   # Assembly
@@ -24,7 +24,7 @@ paths:
   path_of_fastp: "fastp"
   skip_filtering: true
   #assembler_type: "megahit"
-  assembler_type: "spades"
+  assembler_type: "megahit"
   path_of_megahit: "megahit"
 
   # Tools

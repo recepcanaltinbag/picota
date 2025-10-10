@@ -217,6 +217,101 @@ def parsing_blast_file(blast_result_file, r_type, threshold_blast, info_prod_dic
     return list_of_cds
 
 
+
+
+def parsing_blast_file_merged(blast_result_file, r_type, threshold_blast, info_prod_dict):
+    """
+    BLAST sonuçlarını parse eder ve aynı qseqid-sseqid için merge edilmiş HSP'leri kullanarak
+    coverage-aware score hesaplar.
+    """
+    list_of_cds = []
+
+    try:
+        blast_result = pd.read_table(blast_result_file, header=None)
+    except pd.errors.EmptyDataError:
+        return list_of_cds
+
+    cols = 'qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen'.split()
+    blast_result.columns = cols
+
+    # minimum pident ve evalue filtresi
+    df_filtered = blast_result[(blast_result['pident'] >= 80.0) & (blast_result['evalue'] < 1e10)]
+
+    for qseqid, frame in df_filtered.groupby('qseqid'):
+        for sseqid, subframe in frame.groupby('sseqid'):
+            slen = int(subframe.iloc[0]['slen'])
+
+            # subject koordinatlarını al ve merge et
+            intervals = [(min(row.sstart, row.send), max(row.sstart, row.send)) for _, row in subframe.iterrows()]
+            merged_intervals = merge_intervals(intervals)
+            total_covered = sum(e - s + 1 for s, e in merged_intervals)
+            mean_pident = subframe['pident'].mean()
+
+            score = (total_covered / slen) * mean_pident
+
+            if score > threshold_blast:
+                # start/end için en yüksek bitscore'u kullan
+                best_idx = subframe['bitscore'].idxmax()
+                start = int(subframe.loc[best_idx, 'qstart'])
+                end   = int(subframe.loc[best_idx, 'qend'])
+                fullname = sseqid
+
+                # protein -> nucleotide koordinatına çevir
+                if r_type not in ('InsertionSequences', 'CompTNs'):
+                    offset = int(info_prod_dict[qseqid][0])
+                    start = (start - 1) * 3 + 1 + offset
+                    end   = end * 3 + offset
+
+                strand = 1
+                if start > end:
+                    strand = -1
+                    start, end = end, start
+
+                list_of_cds.append(CodingRegion(start, end, strand, fullname, r_type, score))
+
+    if list_of_cds:
+        # score attribute'una göre sırala ve en yüksek skorluyu al
+        list_of_cds = sorted(list_of_cds, key=lambda x: x.score, reverse=True)
+        return [list_of_cds[0]]  # tek elemanlı liste olarak döndür
+    else:
+        return []
+
+
+def merge_intervals(intervals):
+    """
+    Çakışan HSP'leri merge eder. Basit bir algoritma kullanıyor:
+    sıralı aralıkları üst üste bindir ve toplam kapsama hesapla.
+    """
+    if not intervals:
+        return []
+
+    intervals = sorted(intervals)
+    merged = [intervals[0]]
+
+    for start, end in intervals[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:  # çakışma varsa merge et
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+
+    return merged
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, blast_query,
                  r_type, info_prod_dict, threshold_blast, db_type="nucl"):
 
@@ -238,8 +333,10 @@ def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, 
         run_blast(path_of_blast, blast_query, db_output, result_path)
     except Exception as e:
         raise UserWarning('Blast Error') from e
-
-    return parsing_blast_file(result_path, r_type, threshold_blast, info_prod_dict)
+    if r_type == "CompTNs":
+        return parsing_blast_file_merged(result_path, r_type, threshold_blast, info_prod_dict)
+    else:
+        return parsing_blast_file(result_path, r_type, threshold_blast, info_prod_dict)
 
 
 def diamond_driver(diamond_path, query_file, db_fasta, r_type, info_prod_dict, threshold_score, threads=24):
@@ -485,7 +582,7 @@ def scoring_main(cycle_folder, picota_out_folder,
                     Ant_str.append(the_g_cds.product)
                     Ant_coords.append(f"{start}-{end}")
                 if the_g_cds.r_type == 'CompTNs':
-                    CompTn_str.append(the_g_cds.product)
+                    CompTn_str.append(the_g_cds.fullname)
                     CompTn_coords.append(f"{start}-{end}")
 
 
