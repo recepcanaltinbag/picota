@@ -198,7 +198,7 @@ def process_accession(short_acc, long_acc, cfg: Config):
     picota_final_tab = run_scoring(short_acc, out_cycle_file, scr_folder, cfg)
     
     annotated_fastas = split_cycles_from_picota(picota_final_tab, out_cycle_file, annot_folder, cfg.options.split_min_score)
-    print(annotated_fastas)
+    
     # 5) Long-read download + mapping
     long_fastq = None
     if long_acc:
@@ -211,6 +211,8 @@ def process_accession(short_acc, long_acc, cfg: Config):
             long_fastq = run_longread_download(long_acc, map_folder, long_sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
         except Exception as e:
             logger.error(f"[{long_acc}] Long-read download sırasında hata: {e}")
+
+    
 
     for fasta_record in annotated_fastas:
         if long_fastq:

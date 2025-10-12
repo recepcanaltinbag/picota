@@ -3,6 +3,7 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import os
 import pandas as pd
+import re
 
 def split_cycles_from_picota(picota_tab, cycle_fasta_file, output_dir, split_min_score=50):
     """
@@ -26,10 +27,12 @@ def split_cycles_from_picota(picota_tab, cycle_fasta_file, output_dir, split_min
         if pd.isna(row['IScoords']) or row['IScoords'] == "":
             continue
 
-        try:
-            seq_len = int(cycle_id.split('-len')[-1].replace('-', ''))
-        except:
-            continue
+        match = re.search(r'-len(\d+)-comp(\d+)-', cycle_id)
+        if match:
+            seq_len = int(match.group(1))
+            comp_number = int(match.group(2))
+        else:
+            continue  # format uymuyorsa atla
         if cycle_id not in fasta_records:
             continue
 
