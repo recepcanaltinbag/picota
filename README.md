@@ -1,114 +1,127 @@
 # PICOTA
 
 <p align="center">
-<img src="picota/logo/picota_logo.png" alt="PICOTA Logo" width="200" style="max-width: 100%; height: auto;">
+<img src="logo/picota_logo.png" alt="PICOTA Logo" width="150" style="margin: 20px 0;">
 </p>
 
-<div align="center">
+<p align="center">
+<strong>Pipeline for Identification of Composite Transposons from Assembly graphs</strong>
+</p>
 
-**Pipeline for Identification of Composite Transposons from Assembly graphs**
+<p align="center">
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Bioinformatics](https://img.shields.io/badge/Bioinformatics-Mobile%20Elements-brightgreen)]()
-[![Tests Passing](https://img.shields.io/badge/tests-177%20passing-success)]()
-[![Code Quality](https://img.shields.io/badge/code%20quality-production--ready-brightgreen)]()
+[![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue?style=flat-square)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
+[![Bioinformatics](https://img.shields.io/badge/Bioinformatics-Production%20Ready-brightgreen?style=flat-square)]()
+[![Tests](https://img.shields.io/badge/Tests-177%20passing-success?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Version-1.0.0--rc1-blue?style=flat-square)]()
 
-</div>
-
----
-
-## Overview
-
-PICOTA is a **production-ready bioinformatics pipeline** for detecting **composite transposons** in bacterial genomes assembled from short-read sequencing data. It operates directly on assembly graphs (GFA format), enabling the identification of mobile genetic elements—including antibiotic resistance genes and xenobiotic metabolism clusters—**even in incomplete draft genomes**.
-
-### Why PICOTA?
-
-Short-read assemblers (SPAdes, MEGAHIT) typically **fail to resolve repetitive transposon structures** into contiguous sequences. PICOTA exploits the **cyclic topology** that composite transposons form in assembly graphs to:
-- ✅ Detect transposons even in fragmented assemblies  
-- ✅ Identify antibiotic resistance genes and xenobiotic clusters
-- ✅ Validate findings with long-read sequencing (optional)
-- ✅ Score candidates by homology to curated databases
+</p>
 
 ---
 
-## Scientific Background
+## About
 
-### Composite Transposons
+PICOTA is a **production-ready bioinformatics pipeline** for detecting **composite transposons** in bacterial genomes assembled from short-read sequencing data. By analyzing assembly graphs (GFA format), PICOTA identifies mobile genetic elements—antibiotic resistance genes, xenobiotic metabolism clusters, and other cargo sequences—even in incomplete draft genomes where traditional assembly approaches fail.
 
-Composite transposons are mobile genetic elements formed when **cargo sequences** (e.g., antibiotic resistance genes, metabolic clusters) are flanked by two **insertion sequences (IS elements)**:
+### The Problem
+
+Short-read assemblers (SPAdes, MEGAHIT) cannot properly resolve **repetitive transposon structures**. When cargo genes are flanked by two identical insertion sequences (IS elements), the inverted repeats create ambiguous paths in the assembly graph, resulting in collapsed or fragmented contigs.
+
+### The Solution
+
+PICOTA detects and resolves these ambiguities by:
+- ✅ **Identifying cycles in GFA graphs** → Hallmark of composite transposon structure
+- ✅ **Scoring by homology** → CARD database (antibiotics), IS-finder (IS elements), KEGG (xenobiotics)  
+- ✅ **Validating with long reads** → Optional: confirm circular topology with ONT reads
+- ✅ **Annotating boundaries** → Precise IS/cargo gene locations in GenBank format
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|------------|
+| 🔄 **Cycle Detection** | DFS-based identification of transposon-associated cycles directly from GFA |
+| 🗄️ **Multi-DB Scoring** | CARD, IS-finder, TnCentral, KEGG databases for comprehensive annotation |
+| 📖 **Long-read Support** | Optional minimap2 + SAM validation with Oxford Nanopore reads |
+| 🧬 **Smart Deduplication** | Automatic removal of reverse-complement duplicates (strand-aware) |
+| ⚙️ **Flexible Assembly** | SPAdes or MEGAHIT with configurable k-mer ranges  |
+| 🔒 **Production Ready** | Type hints, 177 unit tests, comprehensive error handling |
+| ⚡ **Performance** | 2-10x faster: optimized scoring, file I/O, and string operations |
+
+---
+
+## How It Works
+
+### Pipeline Flow
 
 ```
- ┌──────────────────────────────────────────────────────────┐
- │  [ IS element ] ──── [ cargo genes ] ──── [ IS element ] │
- │                                                             │
- │  Example: [ IS26 ] ─── [aadA1] (streptomycin) ─── [ IS26] │
- └──────────────────────────────────────────────────────────┘
-         ↓
-      Inverted repeat creates CYCLE in assembly graph
-         ↓
-      Detected by graph traversal → Scored by BLAST
+┌─────────────────┐
+│  Raw reads      │  FASTQ files
+│  (Illumina)     │
+└────────┬────────┘
+         │
+         ├─→ [1] QC Filtering  (fastp) ─→ High-quality reads
+         │
+         ├─→ [2] Assembly      (SPAdes/MEGAHIT) ─→ GFA graph
+         │
+         ├─→ [3] Cycle Detect  (DFS) ─→ Candidate sequences
+         │
+         ├─→ [4] Gene Call     (Prodigal) ─→ ORFs
+         │
+         ├─→ [5] BLAST Search  (4 databases) ─→ Homology matches
+         │
+         ├─→ [6] Scoring       (Z-score + DB) ─→ Ranked results
+         │
+         ├─→ [7] Annotation    (IS boundaries) ─→ GenBank
+         │
+         └─→ [8] Validation    (minimap2, optional) ─→ Circular evidence
+         
+         Result: Annotated composite transposon sequences
 ```
 
-These structures can be transferred between organisms via **horizontal gene transfer**, making them critical for understanding antibiotic resistance spread and bacterial evolution.
-
----
-
-## Key Features
-
-- 🔍 **Assembly-graph-aware**: Detects transposon-associated cycles directly from GFA graphs  
-- 🗄️ **Multi-database scoring**: CARD (antibiotics), IS-finder/TnCentral (IS elements), KEGG (xenobiotics)
-- 📖 **Long-read validation**: Optional Oxford Nanopore mapping for circular read evidence
-- 🧬 **Strand-aware deduplication**: Removes reverse-complement duplicates automatically
-- ⚙️ **Flexible assembly**: Supports SPAdes & MEGAHIT with configurable k-mer ranges
-- 🔒 **Production-ready**: Type hints, comprehensive tests, professional documentation
-- ⚡ **High performance**: 2-10x optimization vs. earlier versions
-
----
-
-## Pipeline Overview
+### Composite Transposon Detection
 
 ```
-Raw reads (FASTQ)
-      │
-      ├─→ [1] Quality filtering        fastp
-      │         │
-      ├─→ [2] Genome assembly         SPAdes / MEGAHIT  →  GFA
-      │         │
-      ├─→ [3] Cycle detection         DFS traversal  →  FASTA candidates
-      │         │
-      ├─→ [4] Gene prediction         Prodigal (meta)  →  ORFs
-      │         │
-      ├─→ [5] Database search         BLAST (multi-db)  →  matches
-      │         │
-      ├─→ [6] Composite scoring       Z-score + homology  →  ranked list
-      │         │
-      ├─→ [7] Boundary annotation     IS/cargo regions  →  GenBank
-      │         │
-      └─→ [8] Long-read validation    minimap2 (optional)  →  evidence
+FASTA-level view:
+┌──────────────────────────────────────────────┐
+│ [ IS26 ]──[ aadA1 ]──[ aacA4 ]──[ IS26 ]    │
+│           └─ Streptomycin resistance ─┘      │
+│ └────────── Composite Transposon ───────────┘
+└──────────────────────────────────────────────┘
+
+Assembly graph view:
+      The inverted repeat (IS26~IS26)
+      creates a circular path (CYCLE)
       
-Result: Annotated transposon sequences (FASTA/GenBank)
+      Node₁ ──→ Node₂ ──→ Node₃ ──→ Node₄
+       ↑↑                            ↓↓
+       └─────── DFS detects cycle ──┘
+       
+      Cycle nodes are extracted as FASTA
+      then BLAST against CARD/IS-finder/KEGG
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Installation via Conda (Recommended)
+### 1. Installation
 
 ```bash
 # Clone repository
 git clone https://github.com/recepcanaltinbag/picota.git
 cd picota
 
-# Create environment with all dependencies
+# Create conda environment (recommended)
 conda create -n picota -c bioconda -c conda-forge \
     python=3.9 prodigal blast megahit spades fastp \
     minimap2 samtools biopython pandas pyyaml tqdm
 
 conda activate picota
 
-# Install PICOTA
+# Install Python dependencies
 pip install -r requirements.txt
 ```
 
@@ -118,367 +131,237 @@ pip install -r requirements.txt
 mkdir -p databases
 cd databases
 
-# CARD (Antibiotic Resistance Gene Database)
+# CARD (Antibiotic Resistance)
 wget https://card.mcmaster.ca/download/5.2.0/broadstreet-v5.2.0.tar.bz2
 tar -xjf broadstreet-v5.2.0.tar.bz2
 
-# IS-finder
+# IS-finder (Insertion Sequences)
 wget https://www-archbac.u-psud.fr/archbac/Bank/Isfinder/Insertion_sequences.fasta
 
-# TnCentral (Transposon sequences)
+# TnCentral (Transposon database)  
 wget https://www.ficarre.u-psud.fr/TnCentral/TnCentral_complete.fasta
-
-# KEGG Xenobiotics (if using local installation)
-# [Custom download or API access]
 
 cd ..
 ```
 
-### 3. Run on Test Data
+### 3. Run Pipeline
 
 ```bash
-# Download example assembly graph
-wget https://example.com/test_assembly.gfa
-
-# Run PICOTA
-python picota/picota.py --all \
-    --gfa test_assembly.gfa \
+# From SRA accession (end-to-end)
+python picota/picota.py all \
+    --sra SRR11362851 \
     --output results/ \
-    --config picota/config.yaml
+    --threads 8
 
-# View results
-ls -la results/picota_final_tab/
+# From local assembly
+python picota/picota.py analysis \
+    --gfa assembly.gfa \
+    --output results/
 ```
 
 ---
 
 ## Usage
 
-PICOTA supports both **individual modules** and **all-in-one pipeline**:
-
-### Command Structure
+### Commands
 
 ```bash
-python picota/picota.py [COMMAND] [OPTIONS]
+# Download from NCBI SRA
+python picota/picota.py sra_download --sra SRR11362851
+
+# Assemble reads → GFA
+python picota/picota.py assembly --fastq reads.fq --threads 8
+
+# Detect & score cycles
+python picota/picota.py analysis --gfa assembly.gfa --output cycles/
+
+# Download reference databases
+python picota/picota.py db --db_type all
+
+# Score candidates (if already have cycles)
+python picota/picota.py scoring --cycle_folder cycles/ --output results/
+
+# Run everything in one command
+python picota/picota.py all --sra SRR11362851 --output results/
 ```
 
-### Available Commands
+### Configuration
 
-| Command | Purpose | Input | Output |
-|---------|---------|-------|--------|
-| `sra_download` | Download from NCBI SRA | SRR ID | FASTQ files |
-| `assembly` | Assemble reads → GFA | FASTQ | GFA graph |
-| `analysis` | Detect & score cycles | GFA | Annotated FASTA |
-| `db` | Download reference DBs | - | Local databases |
-| `scoring` | Score candidates | Cycles + DBs | Results table |
-| `all` | Complete pipeline | FASTQ/SRA | Final results |
+Edit `config.yaml` to customize:
+- BLAST parameters (e-value, identity threshold)
+- Scoring thresholds (Z-score cutoff)
+- Cycle deduplication (k-mer similarity)
+- Output formats (GenBank, FASTA, GFF)
 
-### Examples
-
-**End-to-end from SRA accession:**
-```bash
-python picota/picota.py all \
-    --sra SRR11362851 \
-    --output results/ \
-    --threads 8
-```
-
-**From local assembly:**
-```bash
-python picota/picota.py analysis \
-    --gfa assembly.gfa \
-    --cycle_folder cycles/ \
-    --output results/ \
-    --scoring_threshold 50
-```
-
-**Module-by-module:**
-```bash
-# 1. Assembly
-python picota/picota.py assembly --fastq reads.fq --output assembly_out/
-
-# 2. Cycle detection
-python picota/picota.py analysis --gfa assembly_out/assembly.gfa --output cycles/
-
-# 3. Scoring (requires downloaded databases)
-python picota/picota.py scoring --cycle_folder cycles/ --output final_results/
+```yaml
+# Example config.yaml
+blast:
+  evalue: 1e-10
+  identity: 80.0
+  
+scoring:
+  z_threshold: 50
+  dist_type: 1  # 0=normal, 1=penalize-short
+  
+cycles:
+  kmer_similarity: 0.85
+  path_limit: 15
 ```
 
 ---
 
 ## Requirements
 
-### System Requirements
+### Minimum System
 - **OS**: Linux (macOS/Windows not fully tested)
-- **Python**: 3.8 or later
-- **RAM**: ≥8 GB recommended (16+ for large genomes)
-- **Disk**: ≥50 GB for databases
+- **Python**: 3.8+
+- **RAM**: 8 GB (16 GB recommended)
+- **Disk**: 50 GB for databases
 
-### Python Dependencies
-
-Install via `requirements.txt`:
-```
-biopython >= 1.79
-pandas >= 1.3
-pyyaml >= 6.0
-tqdm >= 4.0
-requests >= 2.27
-```
-
-### External Tools (Required)
-
-| Tool | Version | Purpose | Installation |
-|------|---------|---------|--------------|
-| **BLAST+** | ≥2.12 | Sequence search | conda/bioconda |
-| **Prodigal** | ≥2.6 | Gene prediction | conda/bioconda |
-| **SPAdes** | ≥3.13 | Assembly | conda/bioconda |
-| **MEGAHIT** | ≥1.2 | Assembly (alternative) | conda/bioconda |
-
-### External Tools (Optional)
+### Essential Tools (conda)
 
 | Tool | Purpose | Installation |
 |------|---------|--------------|
-| **fastp** | Read QC/filtering | conda/bioconda |
-| **minimap2** | Long-read mapping | conda/bioconda |
-| **samtools** | BAM/SAM processing | conda/bioconda |
+| BLAST+ | Sequence search | `conda install -c bioconda blast` |
+| Prodigal | Gene prediction | `conda install -c bioconda prodigal` |
+| SPAdes/MEGAHIT | Genome assembly | `conda install -c bioconda spades megahit` |
 
-All tools are available via conda:
-```bash
-conda install -c bioconda prodigal blast megahit spades fastp minimap2 samtools
+### Optional Tools
+
+| Tool | Purpose | Installation |
+|------|---------|--------------|
+| fastp | Read QC | `conda install -c bioconda fastp` |
+| minimap2 | Long-read mapping | `conda install -c bioconda minimap2` |
+| samtools | BAM processing | `conda install -c bioconda samtools` |
+
+---
+
+## Output
+
+PICOTA generates:
+- **FASTA**: Nucleotide sequences of detected transposons
+- **GenBank**: Annotated with IS/cargo gene locations
+- **TSV**: Summary table (scores, gene counts, databases)
+- **BAM** (optional): minimap2 alignment for validation
+
+Example output directory:
+```
+results/
+├── transposon_candidates.tsv      # Summary table
+├── Cycle_1.fasta                   # Sequence
+├── Cycle_1.gbk                     # Annotated GenBank
+├── Cycle_1_summary.txt             # Score details
+└── mapping/
+    └── long_reads.bam              # Validation alignment
 ```
 
 ---
 
-## Reference Databases
+## Performance
 
-PICOTA requires curated databases for scoring:
-
-### Required Databases
-
-1. **CARD** (Comprehensive Antibiotic Resistance Database)
-   - Source: https://card.mcmaster.ca/
-   - Format: FASTA (proteins)
-   - Update frequency: Monthly
-
-2. **IS-finder** (Insertion Sequences)
-   - Source: https://www-archbac.u-psud.fr/archbac/Bank/Isfinder/
-   - Format: FASTA (nucleotides)
-   - Includes: IS sequences, classification, organization
-
-3. **TnCentral** (Transposon Database)
-   - Source: https://www.ficarre.u-psud.fr/TnCentral/
-   - Format: FASTA
-   - Includes: Composite transposon sequences, cargo genes
-
-### Optional Databases
-
-4. **KEGG** (Xenobiotics)
-   - Via NCBI Entrez or local installation
-   - Metabolic pathway genes
+**v1.0.0-rc1 Optimizations**:
+| Change | Speedup | Details |
+|--------|---------|---------|
+| Loop → `sum()` | 2-3x | Scoring |
+| Efficient I/O | 5x | File reading |
+| String caching | 2-3x | Reduce splits |
+| Streaming decompress | -70% RAM | Large files |
 
 ---
 
 ## Testing
 
-PICOTA includes a comprehensive test suite:
-
 ```bash
-# Install test dependencies
-pip install pytest pytest-cov
-
-# Run all tests
+# Run test suite
 pytest tests/ -v
 
-# Run specific test module
-pytest tests/test_scoring.py -v
-
-# Generate coverage report
+# Coverage report
 pytest tests/ --cov=picota --cov-report=html
-```
 
-**Test Results:**
-```
-======================== 177 passed, 3 skipped in 5.88s ========================
-✅ Module imports & configuration
-✅ GFA parsing & graph generation
-✅ Cycle detection & deduplication  
-✅ BLAST integration
-✅ Scoring functions
-✅ Long-read mapping
-```
-
----
-
-## Performance & Optimizations
-
-### v1.0.0-rc1 Improvements
-
-| Optimization | Speedup | Details |
-|--------------|---------|---------|
-| `sum()` vs loops | 2-3x | Scoring calculations |
-| File I/O optimization | 5x | Read only needed lines |
-| String caching | 2-3x | Reduce split() calls |
-| Streaming decompression | -70% memory | Large file handling |
-| Shell→subprocess list | 🔒 Security | Eliminates injection risk |
-
----
-
-## Output Format
-
-PICOTA generates annotated GenBank and FASTA files:
-
-### Output Files
-
-```
-results/
-├── picota_final_tab/                    # Summary table
-│   └── transposon_candidates.tsv        # Tab-separated results
-├── Cycle_X_split/
-│   ├── Cycle_X.fasta                    # Nucleotide sequence
-│   ├── Cycle_X.gbk                      # GenBank annotation
-│   └── Cycle_X.gff                      # GFF3 features
-└── mapping/ (if long-reads provided)
-    ├── minimap2_results.bam
-    └── coverage_analysis.txt
-```
-
-### TSV Format
-
-```
-cycle_id    sra_id    kmer    score0  antibiotics    is_elements    xenobiotics
-Cycle_1     SRR123    39      87.5    aadA1,aacA4    IS26,IS1       nah_cluster
+# Result: 177 passed ✅
 ```
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
-
-**Issue: `prodigal: command not found`**
+**"prodigal not found"**
 ```bash
-# Solution: Install prodigal
 conda install -c bioconda prodigal
 ```
 
-**Issue: `No GFA files generated`**
-```bash
-# Check SPAdes output
-ls -la assembly_output/
-cat assembly_output/spades.log  # Check for errors
+**Low transposon detection rate**
+- Check assembly quality: `quast assembly.fasta`
+- Try different k-mer values: `-k 39,59,79`
+- Lower cycle threshold: `--kmer_sim 0.80`
 
-# Verify FASTQ format
-file reads.fastq
-```
+**Out of memory**
+- Reduce threads: `--threads 4`
+- Skip long-reads: remove `--long_reads` flag
 
-**Issue: Low cycle detection rate**
-```bash
-# Potential causes:
-# 1. Complex repeats → try different k-mer values
-# 2. Shallow coverage → increase minimum k-mer
-# 3. Small transposons → may not form clear cycles
-
-# Solution: Tune config
-python picota/picota.py analysis --gfa assembly.gfa \
-    --kmer_sim 0.85 \  # Lower threshold for similar cycles
-    --path_limit 20    # Allow longer paths
-```
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for more help.
 
 ---
 
-## How to Cite
-
-If you use PICOTA, please cite:
+## Citation
 
 ```bibtex
-@article{can2024picota,
-  title={PICOTA: Pipeline for Identification of Composite Transposons from Assembly graphs},
-  author={Canaltinbag, Recep and Contributors},
-  journal={Bioinformatics},
-  year={2024},
-  doi={pending}
+@software{picota2024,
+  author = {Canaltinbag, Recep},
+  title = {PICOTA: Pipeline for Identification of Composite Transposons from Assembly graphs},
+  url = {https://github.com/recepcanaltinbag/picota},
+  year = {2024}
 }
 ```
 
-For now, please reference the GitHub repository:
-```
-https://github.com/recepcanaltinbag/picota
-```
+Or cite directly: https://github.com/recepcanaltinbag/picota
 
 ---
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for:
+Interested in contributing? See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
 - Development setup
-- Code style guidelines
+- Code style & type hints
 - Testing requirements
 - Pull request process
-
-### Report Issues
-
-Found a bug? Please open an [issue](https://github.com/recepcanaltinbag/picota/issues) with:
-- Python version & OS
-- Minimal reproducible example
-- Error message & traceback
-- Tool versions (SPAdes, BLAST+, etc.)
 
 ---
 
 ## License
 
-PICOTA is licensed under the [MIT License](./LICENSE) - see LICENSE file for details.
+MIT License - See [LICENSE](./LICENSE) for details.
 
 ---
 
 ## FAQ
 
-**Q: Can PICOTA work on Windows/macOS?**  
-A: Currently optimized for Linux. Other OSes may require adjustments to external tool paths.
+**Q: Windows support?**  
+A: Primarily Linux. macOS/Windows may need path adjustments.
 
-**Q: What assembly graph formats are supported?**  
-A: Currently GFA 1.0 format. GFA 2.0 support planned.
+**Q: Which assembler is better, SPAdes or MEGAHIT?**  
+A: SPAdes is more accurate; MEGAHIT is faster. Try both!
 
-**Q: Can I use PICOTA with my own databases?**  
-A: Yes! Edit `config.yaml` to specify custom database paths.
+**Q: Can I use my own databases?**  
+A: Yes! Edit `config.yaml` to point to custom DBs.
 
-**Q: How long does analysis take?**  
-A: Depends on genome size:
-  - Small genomes (< 5 Mb): 30 min - 1 hour
-  - Large genomes (5-10 Mb): 2-4 hours
-  - Very large (> 10 Mb): 4+ hours
-  - Runtime: O(n) in cycle count
+**Q: How long does it take?**  
+A: 30 min–4 hours depending on genome size & complexity.
 
 **Q: Are long reads required?**  
-A: No, optional. Improves confidence but not required.
+A: No, optional. Improves confidence in results.
 
 ---
 
-## Acknowledgments
+## Support
 
-PICOTA builds on excellent open-source tools:
-- **SPAdes/MEGAHIT**: Genome assembly
-- **Prodigal**: Gene prediction
-- **BLAST+**: Sequence homology search
-- **BioPython**: Sequence processing
-
-Special thanks to:
-- CARD database maintainers
-- IS-finder and TnCentral communities
-- NCBI/KEGG for curated data
+- 📖 **Documentation**: [README](./README.md)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/recepcanaltinbag/picota/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/recepcanaltinbag/picota/discussions)
 
 ---
 
-## Contact & Support
-
-- 📧 Email: [Add contact email]
-- 💬 GitHub Discussions: [Link to discussions]
-- 🐛 Bug Reports: [GitHub Issues](https://github.com/recepcanaltinbag/picota/issues)
-- 📖 Documentation: [See wiki](https://github.com/recepcanaltinbag/picota/wiki)
-
----
-
-**Last Updated**: April 2, 2024 | **Version**: 1.0.0-rc1
+**Status**: ✅ Production Ready | **Version**: 1.0.0-rc1 | **Python**: 3.8+
 
 ## Installation
 
