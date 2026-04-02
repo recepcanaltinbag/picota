@@ -1,0 +1,21 @@
+# Core Dependencies
+biopython>=1.79
+pandas>=1.3
+pyyaml>=6.0
+tqdm>=4.0
+requests>=2.27
+
+# Assembly & Analysis
+# Note: External tools required (see README.md for installation)
+# - SPAdes (v3.13+)
+# - MEGAHIT (v1.2+)
+# - Prodigal (v2.6+)
+# - BLAST+ (v2.12+)
+
+# Optional: Long-read validation
+# minimap2 >= 2.20
+# samtools >= 1.14
+
+# Development & Testing
+pytest>=6.0
+pytest-cov>=2.12

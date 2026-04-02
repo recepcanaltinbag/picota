@@ -34,7 +34,7 @@ paths:
   # Databases
   path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
   path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
-  path_to_ises: "picota/DBs/ISes/_tncentral_nointegrall_isfinder-TNs.fasta"
+  path_to_ises: "picota/DBs/ISes/tncentral_integrall_isfinder-TNs.fasta"
   path_to_TNs: "picota/DBs/CompTns/Known_Tns.fasta"
 
 
@@ -48,7 +48,7 @@ paths:
 options:
   delete_fastq_files: true
   min_size_of_cycle: 2000
-  max_size_of_cycle: 40000
+  max_size_of_cycle: 30000
   name_prefix_cycle: "Cycle"
   min_component_number: 1
   max_component_number: 25

@@ -1,6 +1,7 @@
 import subprocess
 import os
 import glob
+from typing import List, Dict, Tuple, Optional
 from Bio import SeqIO
 import pandas as pd
 import shutil
@@ -45,7 +46,10 @@ def genbak_create(nuc_seq, seq_acc, seq_id, seq_description, feature_list, out_f
 
 
 
-def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe):
+def calculate_total_score(total_score_type: int, dist_type: int, max_z: float, 
+                         mean_of_CompTns: float, std_of_CompTns: float, 
+                         len_of_cycle: int, lst_ant: List[float], 
+                         lst_is: List[float], lst_xe: List[float]) -> float:
     min_z = 0
     z = (abs(len_of_cycle - mean_of_CompTns))/std_of_CompTns
     if z > max_z:
@@ -89,7 +93,7 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
             antc = 50
         total_score = ((antc + xc)*isc)**z_c_l
     else:
-        raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2')
+        raise ValueError(f'Invalid total_score_type={total_score_type}. Must be 0, 1, or 2')
 
     return total_score
 
@@ -117,20 +121,29 @@ class GeneticInfo:
         self.score2 = score2
 
 
-def control_cycle_file(cycle_file_path):
-    with open(cycle_file_path) as f:
-        the_lines = f.readlines()
-        len_of_lines = len(the_lines)
-        if len_of_lines == 0:
-            return False
-        if 'Error' in the_lines[0]:
-            return False
-        if len_of_lines > 1:
-            return True
+def control_cycle_file(cycle_file_path: str) -> bool:
+    """Check if cycle file is valid (has content, no errors)"""
+    try:
+        with open(cycle_file_path) as f:
+            the_lines = f.readlines()
+            len_of_lines = len(the_lines)
+            if len_of_lines == 0:
+                return False
+            if 'Error' in the_lines[0]:
+                return False
+            if len_of_lines > 1:
+                return True
+    except (FileNotFoundError, IOError):
+        return False
+    return False
 
 def prodigal_driver(path_of_prodigal, cycle_file,  out_file_gbk, out_file_nuc):
-    args = f"{path_of_prodigal} -i {cycle_file} -p meta -o {out_file_gbk} -d {out_file_nuc} -q" 
-    my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True)
+    """Run Prodigal for ORF prediction (gene calling)"""
+    cmd = [path_of_prodigal, '-i', cycle_file, '-p', 'meta', '-o', out_file_gbk, '-d', out_file_nuc, '-q']
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f'Prodigal failed for {cycle_file}: {e}') from e
    
 
 def split_fasta(in_file, out_folder):
@@ -350,8 +363,8 @@ def scoring_main(cycle_folder, picota_out_folder, \
                 out_file_nuc = prodigal_out_for_cycle + '/' + os.path.basename(splitted_cycle) + '.fasta'
                 try:
                     prodigal_driver(path_of_prodigal, splitted_cycle,  out_file_gbk, out_file_nuc)
-                except:
-                    raise Exception('Prodigal Error, control the program')
+                except (subprocess.CalledProcessError, OSError) as e:
+                    raise RuntimeError(f'Prodigal failed for {splitted_cycle}: {e}') from e
                 else:
                     #print('Prodigal was finished, filen in:', out_file_nuc)
                     
@@ -396,17 +409,20 @@ def scoring_main(cycle_folder, picota_out_folder, \
                         if the_cds.r_type == 'Antibiotics':
                             lst_ant.append(the_cds.score)
                             try:
-                                the_cds.product = the_cds.fullname.split('|')[-2]
-                                the_cds.gene = the_cds.fullname.split('|')[-1]
-                            except:
+                                parts = the_cds.fullname.split('|')
+                                the_cds.product = parts[-2] if len(parts) >= 2 else the_cds.fullname
+                                the_cds.gene = parts[-1] if len(parts) >= 1 else the_cds.fullname
+                            except (IndexError, ValueError):
                                 the_cds.product = the_cds.fullname
                                 the_cds.gene = the_cds.fullname
                         if the_cds.r_type == 'Xenobiotics':
                             lst_xe.append(the_cds.score)
                             try:
-                                the_cds.product = the_cds.fullname.split('|')[0].split(':')[0]
-                                the_cds.gene = the_cds.fullname.split('|')[0].split(':')[1]
-                            except:
+                                parts_pipe = the_cds.fullname.split('|')[0]
+                                parts_colon = parts_pipe.split(':')
+                                the_cds.product = parts_colon[0] if len(parts_colon) >= 1 else the_cds.fullname
+                                the_cds.gene = parts_colon[1] if len(parts_colon) >= 2 else the_cds.fullname
+                            except (IndexError, ValueError):
                                 the_cds.product = the_cds.fullname
                                 the_cds.gene = the_cds.fullname
             
@@ -416,9 +432,9 @@ def scoring_main(cycle_folder, picota_out_folder, \
                     
 
                     with open(splitted_cycle, 'r') as sc_f:
-                        the_cy_lines = sc_f.readlines()
-                    len_of_cycle = len(the_cy_lines[1])
-                    nuc_of_cycle = the_cy_lines[1]
+                        sc_f.readline()  # Skip header
+                        nuc_of_cycle = sc_f.readline().strip()
+                    len_of_cycle = len(nuc_of_cycle)
 
 
                     score0 = calculate_total_score(0, int(dist_type), max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe)
@@ -433,7 +449,7 @@ def scoring_main(cycle_folder, picota_out_folder, \
                     elif int(total_score_type) == 2:
                         t_score = score2
                     else:
-                        raise Exception('Error, total_score_type is no valid, it can oen of these: 0, 1, 2')
+                        raise ValueError(f'Invalid total_score_type={total_score_type}. Must be 0, 1, or 2')
 
                     if t_score > threshold_final_score:
                         print(f'\nAnalyzing: {os.path.basename(splitted_cycle)}\n')

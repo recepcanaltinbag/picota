@@ -503,17 +503,21 @@ def scoring_main(cycle_folder, picota_out_folder,
                 if the_cds.r_type == 'Antibiotics':
                     lst_ant.append(the_cds.score)
                     try:
-                        the_cds.product = the_cds.fullname.split('|')[-2]
-                        the_cds.gene = the_cds.fullname.split('|')[-1]
-                    except:
+                        parts = the_cds.fullname.split('|')
+                        the_cds.product = parts[-2] if len(parts) >= 2 else the_cds.fullname
+                        the_cds.gene = parts[-1] if len(parts) >= 1 else the_cds.fullname
+                    except (IndexError, AttributeError):
                         the_cds.product = the_cds.fullname
                         the_cds.gene = the_cds.fullname
                 elif the_cds.r_type == 'Xenobiotics':
                     lst_xe.append(the_cds.score)
                     try:
-                        the_cds.product = the_cds.fullname.split('|')[0].split(':')[0]
-                        the_cds.gene = the_cds.fullname.split('|')[0].split(':')[1]
-                    except:
+                        xeno_parts = the_cds.fullname.split('|')
+                        first_field = xeno_parts[0] if xeno_parts else the_cds.fullname
+                        colon_parts = first_field.split(':')
+                        the_cds.product = colon_parts[0] if len(colon_parts) >= 1 else the_cds.fullname
+                        the_cds.gene = colon_parts[1] if len(colon_parts) >= 2 else the_cds.fullname
+                    except (IndexError, AttributeError):
                         the_cds.product = the_cds.fullname
                         the_cds.gene = the_cds.fullname
                 elif the_cds.r_type == 'InsertionSequences':
@@ -601,10 +605,13 @@ def scoring_main(cycle_folder, picota_out_folder,
             if len(CompTn_str) == 0:
                 CompTn_str = ["Novel"]
 
+            _basename_parts = os.path.basename(cycle_file).split('.')[0].split('_')
+            _sra_id  = _basename_parts[0]
+            _kmer_id = _basename_parts[1] if len(_basename_parts) > 1 else ''
             final_list_comps.append('\t'.join((
                 gen_info[0].seq_id,
-                os.path.basename(cycle_file).split('.')[0].split('_')[0],
-                os.path.basename(cycle_file).split('.')[0].split('_')[1],
+                _sra_id,
+                _kmer_id,
                 str(gen_info[0].score0),
                 str(gen_info[0].score1),
                 str(gen_info[0].score2),

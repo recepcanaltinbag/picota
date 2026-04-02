@@ -1,5 +1,6 @@
 from collections import defaultdict
 import sys
+import math
 
 def reverse_complement(seq):
     complement_dict = {"A":"T", "T":"A", "G":"C", "C":"G", "a":"t", "t":"a", "g":"c", "c":"g"}
@@ -64,39 +65,58 @@ def filter_cycles_with_kmer_old(cycle_info_list, k_mer_sim, threshold_sim, name_
 
 
 def filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle):
-    kmer_hashes = []  # Hem normal hem de reverse için tutacağız
-    cycle_clear_list = []
-    name_it = 0
-    print(len(cycle_info_list))
-    
+    """
+    Benzer cycle'ları k-mer benzerliğine göre filtreler.
+
+    Optimizasyon: inverted index (kmer → kabul edilen cycle indeksleri).
+    Her yeni cycle sadece ortak k-mer paylaşan önceki cycle'larla karşılaştırılır.
+    Ortalama karmaşıklık O(n) yerine O(n²) — büyük listelerde önemli fark.
+    """
     if len(cycle_info_list) == 0:
         print('Print empty Cycle List')
         return cycle_info_list
 
+    print(len(cycle_info_list))
     print(cycle_info_list[0].name)
 
-    for i, cycle_el in enumerate(cycle_info_list):
-        reverse_ori = ''
-        if cycle_el.reverseOriented:
-            reverse_ori = 'reverseoriented_'
+    # accepted_combined[i] = i. kabul edilen cycle'ın (fwd | rc) k-mer seti
+    accepted_combined = []
+    # kmer_index: k-mer → [accepted cycle indeksleri]
+    kmer_index = defaultdict(list)
 
-        # Hem normal hem reverse complement k-mer setini al
+    cycle_clear_list = []
+    name_it = 0
+
+    for i, cycle_el in enumerate(cycle_info_list):
+        reverse_ori = 'reverseoriented_' if cycle_el.reverseOriented else ''
+
         seq = cycle_el.sequence
         rev_seq = reverse_complement(seq)
 
-        current_kmer_hashes = get_kmer_hashes(seq, k_mer_sim)
-        rev_kmer_hashes = get_kmer_hashes(rev_seq, k_mer_sim)
+        fwd_kmers = get_kmer_hashes(seq, k_mer_sim)
+        rc_kmers  = get_kmer_hashes(rev_seq, k_mer_sim)
+
+        if not fwd_kmers:
+            # Sekans k_mer_sim'den kısa — benzerlik hesaplanamaz, doğrudan ekle
+            name_it += 1
+            cycle_el.name = f"{name_prefix_cycle}_{reverse_ori}{name_it}"
+            cycle_clear_list.append(cycle_el)
+            print_progress_bar(i, len(cycle_info_list), prefix='Processing:', suffix='Complete')
+            continue
+
+        # Inverted index üzerinden aday cycle'ları bul
+        all_query_kmers = fwd_kmers | rc_kmers
+        candidate_indices = set()
+        for km in all_query_kmers:
+            candidate_indices.update(kmer_index[km])
 
         is_similar = False
-        
-        for other_kmer_hashes in kmer_hashes:
-            common1 = len(current_kmer_hashes.intersection(other_kmer_hashes))
-            common2 = len(rev_kmer_hashes.intersection(other_kmer_hashes))
-
-            sim1 = (common1 / len(current_kmer_hashes)) * 100
-            sim2 = (common2 / len(rev_kmer_hashes)) * 100
-
-            if sim1 >= threshold_sim or sim2 >= threshold_sim:
+        for cidx in candidate_indices:
+            other = accepted_combined[cidx]
+            common1 = len(fwd_kmers.intersection(other))
+            common2 = len(rc_kmers.intersection(other))
+            if (common1 / len(fwd_kmers)) * 100 >= threshold_sim or \
+               (common2 / len(rc_kmers))  * 100 >= threshold_sim:
                 is_similar = True
                 break
 
@@ -104,11 +124,14 @@ def filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_pref
             name_it += 1
             cycle_el.name = f"{name_prefix_cycle}_{reverse_ori}{name_it}"
             cycle_clear_list.append(cycle_el)
-            # Hem normal hem reverse'i sakla ki gelecek cycle'lar da karşılaştırabilsin
-            kmer_hashes.append(current_kmer_hashes)
-            kmer_hashes.append(rev_kmer_hashes)
+
+            cidx = len(accepted_combined)
+            combined = fwd_kmers | rc_kmers
+            accepted_combined.append(combined)
+            for km in combined:
+                kmer_index[km].append(cidx)
 
         print_progress_bar(i, len(cycle_info_list), prefix='Processing:', suffix='Complete')
-    
+
     print('\n')
     return cycle_clear_list

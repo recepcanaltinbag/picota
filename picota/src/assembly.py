@@ -3,6 +3,8 @@ import glob
 import os
 import shutil
 import logging
+import shlex
+from typing import List
 
 logger: logging.Logger = None
 
@@ -15,83 +17,84 @@ fastp -i in.R1.fq.gz -I in.R2.fq.gz -o out.R1.fq.gz -O out.R2.fq.gz
 
 '''
 # file path is list
-def raw_read_filtering(raw_file, out_folder, fastp_path, quiet_mode):
-
+def raw_read_filtering(raw_file: List[str], out_folder: str, fastp_path: str, quiet_mode: bool) -> None:
+    """Filter raw reads with fastp (supports single or paired-end)"""
+    from pathlib import Path
+    
     if not os.path.exists(out_folder):
         os.mkdir(out_folder)
 
     if len(raw_file) == 1:
         raw_file_1_path = raw_file[0]
-        filtered_raw_file_1_name = "filtered_" + raw_file_1_path.split('/')[-1].split('.')[0] 
-        f1_path = out_folder + "/" + filtered_raw_file_1_name +".fastq"
-        args = f"{fastp_path} -i {raw_file_1_path} -o {f1_path} -h {f1_path}.html"
-        logger.info('Command will be run:')
-        logger.info(f"{args}")
-        logger.info('-------')
-        my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
-
-
+        filtered_raw_file_1_name = "filtered_" + Path(raw_file_1_path).stem
+        f1_path = os.path.join(out_folder, filtered_raw_file_1_name + ".fastq")
+        cmd = [fastp_path, '-i', raw_file_1_path, '-o', f1_path, '-h', f1_path + '.html']
+        
     elif len(raw_file) == 2:
         raw_file_1_path = raw_file[0]
         raw_file_2_path = raw_file[1]
-        filtered_raw_file_1_name = "filtered_" + raw_file_1_path.split('/')[-1].split('.')[0]
-        filtered_raw_file_2_name = "filtered_" + raw_file_2_path.split('/')[-1].split('.')[0]
-        f1_path = out_folder + "/" + filtered_raw_file_1_name +".fastq"
-        f2_path = out_folder + "/" + filtered_raw_file_2_name +".fastq"
-        args = f"{fastp_path} -i {raw_file_1_path} -I {raw_file_2_path} \
-            -o {f1_path} -O {f2_path} -h {f1_path}.html" 
-        logger.info('Command will be run:')
-        logger.info(f"{args}")
-        logger.info('-------')
-        my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
-
-
+        filtered_raw_file_1_name = "filtered_" + Path(raw_file_1_path).stem
+        filtered_raw_file_2_name = "filtered_" + Path(raw_file_2_path).stem
+        f1_path = os.path.join(out_folder, filtered_raw_file_1_name + ".fastq")
+        f2_path = os.path.join(out_folder, filtered_raw_file_2_name + ".fastq")
+        cmd = [fastp_path, '-i', raw_file_1_path, '-I', raw_file_2_path, 
+               '-o', f1_path, '-O', f2_path, '-h', f1_path + '.html']
     else:
-        logger.info('More than 2 file or no file exist, error!')
+        raise ValueError(f'Invalid number of input files: {len(raw_file)}. Expected 1 or 2.')
+    
+    logger.info(f'Running fastp: {" ".join(cmd)}')
+    stdout_pipe = subprocess.DEVNULL if quiet_mode else None
+    subprocess.run(cmd, check=True, stdout=stdout_pipe, stderr=subprocess.DEVNULL, text=True)
 
 
 
 #k_mer_list = '39,59,79,99'
-def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_name, threads, k_mer, quiet_mode, assembly_keep_temp_files):
+def _run_spades_assembly(spades_path: str, file_path: List[str], out_folder: str, 
+                        gfa_folder: str, gfa_name: str, threads: int, k_mer: str, 
+                        quiet_mode: bool, assembly_keep_temp_files: bool) -> None:
+    """Helper function to run SPAdes assembly (reduces code duplication)"""
+    from pathlib import Path
+    
+    # Input validation
+    for fpath in file_path:
+        if not Path(fpath).exists():
+            raise FileNotFoundError(f"Input file not found: {fpath}")
+    
+    # Build SPAdes command using list (prevents shell injection)
+    cmd = [spades_path, '-o', out_folder, '-t', str(threads), '-k', k_mer]
+    
     if len(file_path) == 1:
-        args = f"{spades_path} -1 {file_path[0]} -o {out_folder} -t {str(threads)}  -k {k_mer}" 
-        logger.info('Command will be run:')
-        logger.info(f"{args}")
-        logger.info('-------')
-        my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
-        gfa_files = glob.glob(out_folder + '/*.gfa')
-        if len(gfa_files) == 0:
-            raise Exception('There is no gfa files, there can be error in assembly process')
-        else:
-            args = f"cp {gfa_files[0]} {os.path.join(gfa_folder, gfa_name)}"
-            my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True)
-
-        if assembly_keep_temp_files == False:
-            shutil.rmtree(out_folder)
-            for file_pt in file_path:
-                if os.path.exists(file_pt):
-                    os.remove(file_pt)
-            logger.info('Temp Files deleted., if you want to keep them use --keep_temp_files')
-                
-
+        cmd.extend(['-1', file_path[0]])
     elif len(file_path) == 2:
-        args = f"{spades_path} -1 {file_path[0]} -2 {file_path[1]} -o {out_folder} -t {str(threads)} -k {k_mer}" 
-        logger.info('Command will be run:')
-        logger.info(f"{args}")
-        logger.info('-------')
-        my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True, capture_output=quiet_mode)
-        gfa_files = glob.glob(out_folder + '/*.gfa')
-
-        if len(gfa_files) == 0:
-            raise Exception('There is no gfa files, there can be error in assembly process')
-        else:
-            args = f"cp {gfa_files[0]} {os.path.join(gfa_folder, gfa_name)}"
-            my_process = subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True)
-        
-        
-
+        cmd.extend(['-1', file_path[0], '-2', file_path[1]])
     else:
-        logger.info('Error, there is no fastq file or more than two fastq file!')
+        raise ValueError(f"Invalid number of input files: {len(file_path)}. Expected 1 or 2.")
+    
+    # Run assembly
+    logger.info(f"Running SPAdes: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True, capture_output=quiet_mode, text=True)
+    
+    # Find and copy GFA file
+    gfa_files = glob.glob(os.path.join(out_folder, '*.gfa'))
+    if not gfa_files:
+        raise RuntimeError('No GFA files generated during assembly. Check SPAdes output.')
+    
+    # Copy best GFA to destination
+    shutil.copy(gfa_files[0], os.path.join(gfa_folder, gfa_name))
+    logger.info(f'GFA file copied to {os.path.join(gfa_folder, gfa_name)}')
+    
+    # Cleanup temporary files if requested
+    if not assembly_keep_temp_files:
+        shutil.rmtree(out_folder)
+        for file_pt in file_path:
+            if Path(file_pt).exists():
+                Path(file_pt).unlink()
+        logger.info('Temporary files deleted. Use --keep_temp_files to preserve.')
+
+
+def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_name, threads, k_mer, quiet_mode, assembly_keep_temp_files):
+    """Main SPAdes driver - calls helper function"""
+    _run_spades_assembly(spades_path, file_path, out_folder, gfa_folder, gfa_name, threads, k_mer, quiet_mode, assembly_keep_temp_files)
 
 
 
@@ -288,7 +291,7 @@ def process_gfa_files(gfa_files, path_of_bandage):
 def compute_score_from_gfa(gfa_file, path_of_bandage):
     # Bandage ile dead ends sayısını al
     logger.info(f'gfa_process: {gfa_file}')
-    cmd = f'{path_of_bandage} info {gfa_file} | grep "Dead ends" | grep -oP "\\d+"'
+    cmd = f'{shlex.quote(path_of_bandage)} info {shlex.quote(gfa_file)} | grep "Dead ends" | grep -oP "\\d+"'
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, executable='/bin/bash')
     try:
         dead_ends = int(result.stdout.strip())

@@ -1,17 +1,20 @@
 import re
 import zstandard as zstd
+import shutil
 
 def zst_file(zst_file_path, output_file_path):
-
-    # Decompress and write the file
-    with open(zst_file_path, "rb") as compressed_file:
-        dctx = zstd.ZstdDecompressor()
-        decompressed_data = dctx.decompress(compressed_file.read())
-
-    with open(output_file_path, "wb") as output_file:
-        output_file.write(decompressed_data)
-
-    print(f"Decompressed data written to {output_file_path}")
+    """Decompress zst file using streaming to avoid loading entire file in memory"""
+    try:
+        with open(zst_file_path, "rb") as compressed_file:
+            with open(output_file_path, "wb") as output_file:
+                dctx = zstd.ZstdDecompressor()
+                reader = dctx.stream_reader(compressed_file)
+                shutil.copyfileobj(reader, output_file)
+        print(f"Decompressed data written to {output_file_path}")
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Input file not found: {zst_file_path}")
+    except Exception as e:
+        raise RuntimeError(f"Decompression failed: {e}") from e
 
 
 def fasta_to_gfa(fasta_file, gfa_file):

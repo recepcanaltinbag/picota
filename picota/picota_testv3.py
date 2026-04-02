@@ -180,11 +180,14 @@ def process_accession(short_acc, long_acc, cfg: Config):
     os.makedirs(annot_folder, exist_ok=True)
 
     # 1) SRA download
-
-    raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
-    logger.info(f"Raw Files: {raw_files}")
-    # 2) Assembly
-    gfa_files = run_assembly(short_acc, raw_files, asm_folder, cfg, cfg.logging.logger_name)
+    gfa_files = glob.glob(os.path.join(asm_folder, "*.gfa"))
+    if gfa_files:
+        logger.info(f"[{short_acc}] Assembly zaten var, atlandı.")
+    else:
+        raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
+        logger.info(f"Raw Files: {raw_files}")
+        # 2) Assembly
+        gfa_files = run_assembly(short_acc, raw_files, asm_folder, cfg, cfg.logging.logger_name)
     if not gfa_files:
         logger.warning(f"[{short_acc}] Assembly başarısız, GFA bulunamadı.")
         return
@@ -196,7 +199,7 @@ def process_accession(short_acc, long_acc, cfg: Config):
 
     # 4) Scoring
     picota_final_tab = run_scoring(short_acc, out_cycle_file, scr_folder, cfg)
-    
+
     annotated_fastas = split_cycles_from_picota(picota_final_tab, out_cycle_file, annot_folder, cfg.options.split_min_score)
     
     # 5) Long-read download + mapping

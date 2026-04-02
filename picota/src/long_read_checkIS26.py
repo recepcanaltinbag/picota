@@ -84,6 +84,8 @@ def find_circular_reads_old(bam_file, ref_name, ref_len, fastq_file, outdir, tol
 
     circular_reads = []
     for qname, aligns in reads.items():
+        if qname not in fastq_dict:
+            continue
         read_len = len(fastq_dict[qname].seq)
         #read_len = max(end for start, end in aligns) - min(start for start, end in aligns)
 

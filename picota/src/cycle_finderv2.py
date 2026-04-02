@@ -42,6 +42,10 @@ class GraphWork:
         self.cycles = []    # Tespit edilen döngüler
         self.reverse_or_cycles = []  # Ters döngüler
 
+        # Aynı (src, dest) çifti için find_paths'i birden fazla çağırmayı önler.
+        # Aynı kenar farklı DFS yollarından tekrar keşfedilebilir; path sonuçları aynıdır.
+        _searched_pairs = set()
+
         # Grafın tüm düğümleri üzerinden iterasyon
         for start_node in G.adj.copy():
             if start_node not in discovered:
@@ -59,10 +63,13 @@ class GraphWork:
                         # Döngü kontrolü
                         if neighbor in discovered:
                             self.cycles.append((current_node, neighbor))
-                            if self.find_all_path:
-                                self.capturePaths(G, neighbor, current_node, reverse=False)
-                            else:
-                                self.find_paths(neighbor, current_node, G)
+                            pair = (neighbor, current_node)
+                            if pair not in _searched_pairs:
+                                _searched_pairs.add(pair)
+                                if self.find_all_path:
+                                    self.capturePaths(G, neighbor, current_node, reverse=False)
+                                else:
+                                    self.find_paths(neighbor, current_node, G)
                             continue
 
                         elif neighbor.replace('-', '+') in discovered or neighbor.replace('+', '-') in discovered:
@@ -71,10 +78,13 @@ class GraphWork:
                                 neighbor.replace('-', '+') if neighbor.replace('-', '+') in discovered
                                 else neighbor.replace('+', '-')
                             )
-                            if self.find_all_path:
-                                self.capturePaths(G, the_changed_v, current_node, reverse=True)
-                            else:
-                                self.find_paths(the_changed_v, current_node, G)
+                            pair = (the_changed_v, current_node)
+                            if pair not in _searched_pairs:
+                                _searched_pairs.add(pair)
+                                if self.find_all_path:
+                                    self.capturePaths(G, the_changed_v, current_node, reverse=True)
+                                else:
+                                    self.find_paths(the_changed_v, current_node, G)
                             continue
 
                         if neighbor not in finished:
@@ -224,29 +234,38 @@ class GraphWork:
         node_dict = {}
         print(path_to_gfa)
         with open(path_to_gfa, "r") as gfa:
-
             for line in gfa:
-
-                #Add sequences as nodes, one node for each strand of the DNA
                 if line.startswith("S"):
-                    temp = line.strip("\n").split("\t")
-                    node_dict[temp[1] + "+"] = {"Name": temp[1] + "+", "Sequence": temp[2]}
-                    node_dict[temp[1] + "-"] = {"Name": temp[1] + "-", "Sequence": self.reverse_complement(temp[2])}
+                    # split a single time, take only the fields we need
+                    temp = line.split("\t", 3)
+                    node_id = temp[1]
+                    seq = temp[2].rstrip()  # trailing newline / whitespace kaldır
+                    node_dict[node_id + "+"] = {"Name": node_id + "+", "Sequence": seq}
+                    node_dict[node_id + "-"] = {"Name": node_id + "-", "Sequence": self.reverse_complement(seq)}
 
-                # Add links as edges, one edge for each link. Since two nodes for each sequence exits reverse links are also
-                # generated and added as edges.
                 elif line.startswith("L"):
-                    temp = line.strip("\n").split("\t")
-                    if (temp[1] + temp[2], temp[3] + temp[4]) not in edge_dict.keys() and (
-                            temp[3] + self.reverse_sign(temp[4]), temp[1] + self.reverse_sign(temp[2])) not in edge_dict.keys():
-                    
-                        edge_dict[(temp[1] + temp[2], temp[3] + temp[4])] = {"From": temp[1] + temp[2],
-                                                                            "To": temp[3] + temp[4], "FromOrient": temp[2],
-                                                                            "ToOrient": temp[4], "Overlap": temp[5]}
+                    temp = line.split("\t", 6)
+                    # Compute orientations once — avoids 4 separate reverse_sign calls
+                    from_id, from_ori = temp[1], temp[2]
+                    to_id,   to_ori   = temp[3], temp[4]
+                    overlap           = temp[5].rstrip("\n")
+                    rev_from_ori = self.reverse_sign(to_ori)
+                    rev_to_ori   = self.reverse_sign(from_ori)
 
-                        edge_dict[(temp[3] + self.reverse_sign(temp[4]), temp[1] + self.reverse_sign(temp[2]))] = {
-                            "From": temp[3] + self.reverse_sign(temp[4]), "To": temp[1] + self.reverse_sign(temp[2]),
-                            "FromOrient": self.reverse_sign(temp[4]), "ToOrient": self.reverse_sign(temp[2]), "Overlap": temp[5]}
+                    fwd_key = (from_id + from_ori, to_id + to_ori)
+                    rev_key = (to_id + rev_from_ori, from_id + rev_to_ori)
+
+                    if fwd_key not in edge_dict and rev_key not in edge_dict:
+                        edge_dict[fwd_key] = {
+                            "From": fwd_key[0], "To": fwd_key[1],
+                            "FromOrient": from_ori, "ToOrient": to_ori,
+                            "Overlap": overlap,
+                        }
+                        edge_dict[rev_key] = {
+                            "From": rev_key[0], "To": rev_key[1],
+                            "FromOrient": rev_from_ori, "ToOrient": rev_to_ori,
+                            "Overlap": overlap,
+                        }
         return node_dict, edge_dict
 
 
@@ -331,15 +350,20 @@ def cycle_match_based_on_contig_id(path, nodes_len, new_parts, threshold=70):
     if not new_parts:
         return True
 
+    # Strand-agnostic node seti: '14349+' ve '14349-' → '14349'
+    # Aynı fiziksel contig'lerden oluşan ama ters strand'da gezilen path'ler aynı
+    # composite transpozon yapısını temsil eder — duplicate olarak işaretle.
+    path_nodes_stripped = frozenset(n[:-1] for n in path)
+    for part in new_parts:
+        if frozenset(n[:-1] for n in part) == path_nodes_stripped:
+            return False
+
     # Path'i new_parts içinde yer alan her path ile karşılaştır ve benzerliği kontrol et
     path_set = set(path)
-    #path_length = sum(nodes_len.get(node, 0) for node in path)
-
-    
     path_length = sum(nodes_len.get(node, 0) for node in path)
 
     for part in new_parts:
-    
+
         existing_path_set = set(part)
         common_nodes = path_set.intersection(existing_path_set)
 
@@ -364,30 +388,28 @@ def cycle_match_based_on_contig_id(path, nodes_len, new_parts, threshold=70):
     return True
 
 
-def cycle_info_optimized(path, nodes, edges, cycle_info_list):   
+def cycle_info_optimized(path, nodes, edges, cycle_info_list):
     component_number = len(path)
     total_lem = 0
-    the_final_seq = ''
 
     # Prepare sequences and overlap checks upfront
     sequences = [nodes[path[i]]["Sequence"] for i in range(component_number)]
     overlaps = [edges[path[i], path[i + 1]]["Overlap"] for i in range(component_number - 1)]
 
-    # Build the final sequence
+    # Build the final sequence using a list to avoid O(n²) string concatenation
+    seq_parts = []
     for i in range(component_number - 1):
         overlap = overlaps[i]
         if overlap == "*":
             print(f"At least one of the edges has a non-specified overlap in this cycle: {path}\nSkipping cycle...")
             return None
-    
+
         overlap_length = find_overlap_length(overlap)
         total_lem += len(sequences[i])
-        
-        # Append sequence with or without overlap
-        the_final_seq += sequences[i][:-overlap_length] if overlap_length else sequences[i]
+        seq_parts.append(sequences[i][:-overlap_length] if overlap_length else sequences[i])
 
-    # Append the last sequence after processing the penultimate
-    the_final_seq += sequences[-1]
+    seq_parts.append(sequences[-1])
+    the_final_seq = ''.join(seq_parts)
 
     # Reverse complement calculation done only once
     reverse_final_seq = reverse_complement(the_final_seq)
@@ -407,6 +429,7 @@ def cycle_info(path, nodes, edges, cycle_info_list):
     
     the_final_seq = ''
     total_lem = 0
+    overlap_length = 0
 
     #Self Circuit İdentification
     if component_number == 1:
@@ -414,7 +437,7 @@ def cycle_info(path, nodes, edges, cycle_info_list):
         the_edge = edges[path[0],path[0]]
         overlap = the_edge["Overlap"]
         if overlap == "*":
-            print(f"At least on of the edges has non-specified overlap in this cycle: {cycle}\n Skipping cycle...")
+            print(f"At least on of the edges has non-specified overlap in this cycle: {path}\n Skipping cycle...")
             return None
         overlap_length = find_overlap_length(overlap)
     else:
@@ -425,7 +448,7 @@ def cycle_info(path, nodes, edges, cycle_info_list):
             total_lem += len(first_node_seq)
             overlap = the_edge["Overlap"]
             if overlap == "*":
-                print(f"At least on of the edges has non-specified overlap in this cycle: {cycle}\n Skipping cycle...")
+                print(f"At least on of the edges has non-specified overlap in this cycle: {path}\n Skipping cycle...")
                 return None
             overlap_length = find_overlap_length(overlap)
             if overlap_length != 0:
@@ -436,16 +459,14 @@ def cycle_info(path, nodes, edges, cycle_info_list):
                 the_final_seq += second_node_seq
 
     for elm in cycle_info_list:
-
-
-       if overlap_length != 0:
-           if elm.sequence in (the_final_seq[:-overlap_length] + the_final_seq) or elm.sequence in (reverse_complement(the_final_seq)[:-overlap_length] + reverse_complement(the_final_seq)):
-               #There is an exact cycle so dont take it
-               return 'Pass'
-       else:
-           if elm.sequence in (the_final_seq + the_final_seq) or elm.sequence in (reverse_complement(the_final_seq) + reverse_complement(the_final_seq)):
-               #There is an exact cycle so dont take it
-               return 'Pass'
+        if overlap_length != 0:
+            if elm.sequence in (the_final_seq[:-overlap_length] + the_final_seq) or elm.sequence in (reverse_complement(the_final_seq)[:-overlap_length] + reverse_complement(the_final_seq)):
+                #There is an exact cycle so dont take it
+                return 'Pass'
+        else:
+            if elm.sequence in (the_final_seq + the_final_seq) or elm.sequence in (reverse_complement(the_final_seq) + reverse_complement(the_final_seq)):
+                #There is an exact cycle so dont take it
+                return 'Pass'
 
 
     return Cycle('name', the_final_seq, len(the_final_seq), component_number, path)
