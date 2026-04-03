@@ -410,16 +410,15 @@ def run_pipeline(sra_list_file: str, output_dir: str, gfa_mode: bool = False,
     if cfg is None:
         cfg = load_config(os.path.join(_here, 'picota', 'config.yaml'))
 
-    # Resolve relative tool paths in config against the picota/ directory.
-    # Only touch paths that look like relative file paths (contain a separator
-    # or start with ./), not bare command names like "megahit" or "fastp"
-    # that should be resolved via PATH at runtime.
-    _picota_dir = os.path.join(_here, 'picota')
+    # Resolve relative tool paths against the script directory (_here).
+    # Config paths like "./picota/tools/..." are written relative to the
+    # repo root (same dir as this script), so we resolve against _here.
+    # Bare command names ("megahit", "fastp") are left untouched.
     for attr in ('gfa_tools_path', 'path_of_bandage', 'path_of_spades',
                  'path_of_megahit', 'path_of_fastp'):
         val = getattr(cfg.paths, attr, '')
         if val and not os.path.isabs(val) and (val.startswith('./') or os.sep in val):
-            setattr(cfg.paths, attr, os.path.normpath(os.path.join(_picota_dir, val)))
+            setattr(cfg.paths, attr, os.path.normpath(os.path.join(_here, val)))
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
