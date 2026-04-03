@@ -4,6 +4,8 @@ import logging
 import argparse
 import subprocess
 import csv
+import time
+from datetime import datetime
 
 from src.cycle_finderv2 import cycle_analysis
 from src.sra_download import run_sra_down
@@ -16,15 +18,40 @@ from src.logger_setup import setup_logger_from_config
 from src.config_loader import load_config, Config, LoggingConfig, ToleranceConfig
 
 
-
-
 logger: logging.Logger = None
 
-'''
-# --- Global ---
-cfg: Config = load_config("picota/config.yaml")
-logger: logging.Logger = setup_logger_from_config(cfg)
-'''
+# ─── Step-progress helpers ────────────────────────────────────────────────────
+
+_BANNER_WIDTH = 70
+
+
+def _banner(msg: str, char: str = "═") -> str:
+    return char * _BANNER_WIDTH + f"\n  {msg}\n" + char * _BANNER_WIDTH
+
+
+def step_start(step_num: int, total: int, description: str, sample: str = ""):
+    tag = f"[{sample}] " if sample else ""
+    header = f"STEP {step_num}/{total}: {tag}{description}"
+    logger.info(_banner(header))
+
+
+def step_done(description: str, sample: str = "", elapsed: float = None):
+    tag = f"[{sample}] " if sample else ""
+    elapsed_str = f"  ({elapsed:.1f}s)" if elapsed is not None else ""
+    logger.info(f"  ✓ {tag}{description}{elapsed_str}")
+    logger.info("─" * _BANNER_WIDTH)
+
+
+def step_skip(description: str, sample: str = "", reason: str = "already done"):
+    tag = f"[{sample}] " if sample else ""
+    logger.info(f"  ⤼ {tag}{description} — {reason}")
+    logger.info("─" * _BANNER_WIDTH)
+
+
+def step_warn(description: str, sample: str = "", reason: str = ""):
+    tag = f"[{sample}] " if sample else ""
+    logger.warning(f"  ⚠  {tag}{description}" + (f" — {reason}" if reason else ""))
+    logger.info("─" * _BANNER_WIDTH)
 
 # --- SRA pairs can be short, long sra ids ---
 def load_sra_pairs(sra_id_file: str):
@@ -164,59 +191,90 @@ def run_scoring(acc, cycle_file, out_folder, cfg: Config):
 
 
 # --- Pipeline per accession ---
+TOTAL_STEPS = 5
+
+
 def process_accession(short_acc, long_acc, cfg: Config):
-    logger.info(f"=== Başlatıldı: {short_acc} ===")
+    t0_total = time.time()
+    logger.info("\n" + "█" * _BANNER_WIDTH)
+    logger.info(f"  PICOTA  ▸  Sample: {short_acc}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("█" * _BANNER_WIDTH + "\n")
+
     project_root = cfg.paths.outdir
-
-    sra_folder = os.path.join(project_root, "raw", short_acc)
-    asm_folder = os.path.join(project_root, "assembly", short_acc)
-    cyc_folder = os.path.join(project_root, "cycles")
-    scr_folder = os.path.join(project_root, "scoring", short_acc)
+    sra_folder   = os.path.join(project_root, "raw", short_acc)
+    asm_folder   = os.path.join(project_root, "assembly", short_acc)
+    cyc_folder   = os.path.join(project_root, "cycles")
+    scr_folder   = os.path.join(project_root, "scoring", short_acc)
     annot_folder = os.path.join(project_root, "annot", short_acc)
-    os.makedirs(sra_folder, exist_ok=True)
-    os.makedirs(asm_folder, exist_ok=True)
-    os.makedirs(cyc_folder, exist_ok=True)
-    os.makedirs(scr_folder, exist_ok=True)
-    os.makedirs(annot_folder, exist_ok=True)
+    for d in (sra_folder, asm_folder, cyc_folder, scr_folder, annot_folder):
+        os.makedirs(d, exist_ok=True)
 
-    # 1) SRA download
+    # ── STEP 1 / 5 : SRA Download + Assembly ─────────────────────────────────
+    step_start(1, TOTAL_STEPS, "SRA Download + Genome Assembly", short_acc)
+    t0 = time.time()
     gfa_files = glob.glob(os.path.join(asm_folder, "*.gfa"))
     if gfa_files:
-        logger.info(f"[{short_acc}] Assembly zaten var, atlandı.")
+        step_skip("SRA Download + Assembly", short_acc, "GFA already present")
     else:
         raw_files = run_sra_download(short_acc, asm_folder, sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
-        logger.info(f"Raw Files: {raw_files}")
-        # 2) Assembly
+        logger.info(f"  Raw FASTQ files: {raw_files}")
         gfa_files = run_assembly(short_acc, raw_files, asm_folder, cfg, cfg.logging.logger_name)
-    if not gfa_files:
-        logger.warning(f"[{short_acc}] Assembly başarısız, GFA bulunamadı.")
-        return
+        if not gfa_files:
+            step_warn("Assembly failed — no GFA produced", short_acc)
+            logger.error(f"[{short_acc}] Aborting: no assembly output.")
+            return
+        step_done("SRA Download + Assembly", short_acc, time.time() - t0)
 
-    # 3) Cycle analysis
-    gfa_file = gfa_files[0]
+    # ── STEP 2 / 5 : Cycle Detection ─────────────────────────────────────────
+    step_start(2, TOTAL_STEPS, "Assembly-graph Cycle Detection", short_acc)
+    t0 = time.time()
+    gfa_file      = gfa_files[0]
     out_cycle_file = os.path.join(cyc_folder, f"{short_acc}_{os.path.basename(gfa_file)}.fasta")
-    run_cycle_analysis(short_acc, gfa_file, out_cycle_file, cfg)
+    if os.path.exists(out_cycle_file):
+        step_skip("Cycle Detection", short_acc, "FASTA already exists")
+    else:
+        run_cycle_analysis(short_acc, gfa_file, out_cycle_file, cfg)
+        n_cyc = sum(1 for l in open(out_cycle_file) if l.startswith('>')) if os.path.exists(out_cycle_file) else 0
+        step_done(f"Cycle Detection — {n_cyc} candidate cycles found", short_acc, time.time() - t0)
 
-    # 4) Scoring
+    # ── STEP 3 / 5 : BLAST Scoring ───────────────────────────────────────────
+    step_start(3, TOTAL_STEPS, "BLAST Scoring (AMR / IS / Xenobiotics)", short_acc)
+    t0 = time.time()
     picota_final_tab = run_scoring(short_acc, out_cycle_file, scr_folder, cfg)
+    n_hits = 0
+    if picota_final_tab and os.path.exists(picota_final_tab):
+        with open(picota_final_tab) as _f:
+            n_hits = sum(1 for _ in _f) - 1  # exclude header
+    enriched_csv = os.path.join(scr_folder, 'picota_enriched.csv')
+    if os.path.exists(enriched_csv):
+        step_done(
+            f"Scoring — {n_hits} candidates above threshold  |  enriched CSV: {enriched_csv}",
+            short_acc, time.time() - t0
+        )
+    else:
+        step_done(f"Scoring — {n_hits} candidates above threshold", short_acc, time.time() - t0)
 
+    # ── STEP 4 / 5 : Annotation Split ────────────────────────────────────────
+    step_start(4, TOTAL_STEPS, "Transposon / Cargo Boundary Annotation", short_acc)
+    t0 = time.time()
     annotated_fastas = split_cycles_from_picota(picota_final_tab, out_cycle_file, annot_folder, cfg.options.split_min_score)
-    
-    # 5) Long-read download + mapping
+    step_done(f"Annotation — {len(annotated_fastas)} annotated FASTA(s) written", short_acc, time.time() - t0)
+
+    # ── STEP 5 / 5 : Long-read Validation ────────────────────────────────────
+    step_start(5, TOTAL_STEPS, "Long-read Validation (minimap2 + BAM analysis)", short_acc)
+    t0 = time.time()
     long_fastq = None
     if long_acc:
-        map_folder = os.path.join(project_root, "mapping", long_acc)
-        os.makedirs(map_folder, exist_ok=True)
+        map_folder      = os.path.join(project_root, "mapping", long_acc)
         long_sra_folder = os.path.join(project_root, "raw_long", long_acc)
+        os.makedirs(map_folder, exist_ok=True)
         os.makedirs(long_sra_folder, exist_ok=True)
-
         try:
             long_fastq = run_longread_download(long_acc, map_folder, long_sra_folder, cfg.paths.fastq_dump, cfg.logging.logger_name)
         except Exception as e:
-            logger.error(f"[{long_acc}] Long-read download sırasında hata: {e}")
+            logger.error(f"[{long_acc}] Long-read download error: {e}")
 
-    
-
+    n_mapped = 0
     for fasta_record in annotated_fastas:
         if long_fastq:
             try:
@@ -227,13 +285,24 @@ def process_accession(short_acc, long_acc, cfg: Config):
                     run_dir=os.path.join(project_root, "mapping", long_acc)
                 )
                 out_bam_analysis = os.path.join(map_folder, f"{long_acc}_{os.path.basename(fasta_record)}_full")
-                out_bam_analysis_partial = os.path.join(map_folder, f"{long_acc}_{os.path.basename(fasta_record)}_partial")
-                bam_file_analyze(sorted_bam, out_bam_analysis, out_bam_analysis_partial)
-                analyze_blocks(out_bam_analysis_partial, out_bam_analysis, map_folder, os.path.basename(fasta_record), cfg)
+                out_bam_partial  = os.path.join(map_folder, f"{long_acc}_{os.path.basename(fasta_record)}_partial")
+                bam_file_analyze(sorted_bam, out_bam_analysis, out_bam_partial)
+                analyze_blocks(out_bam_partial, out_bam_analysis, map_folder, os.path.basename(fasta_record), cfg)
+                n_mapped += 1
             except Exception as e:
-                logger.error(f"[{long_acc}] Mapping veya BAM analiz sırasında hata: {e}")
+                logger.error(f"[{long_acc}] Mapping/BAM error: {e}")
 
-    logger.info(f"✅ Tamamlandı: {short_acc}")
+    if long_acc and long_fastq:
+        step_done(f"Long-read Validation — {n_mapped} FASTA(s) mapped", short_acc, time.time() - t0)
+    else:
+        step_skip("Long-read Validation", short_acc, "no long-read accession provided")
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    total_elapsed = time.time() - t0_total
+    logger.info("\n" + "═" * _BANNER_WIDTH)
+    logger.info(f"  ✅  {short_acc} COMPLETED  |  total time: {total_elapsed:.1f}s")
+    logger.info(f"  Output: {scr_folder}")
+    logger.info("═" * _BANNER_WIDTH + "\n")
 
 
 # --- Main ---
