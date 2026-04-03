@@ -32,16 +32,16 @@ from datetime import datetime
 from pathlib import Path
 
 # Add picota src to path
-SRC_DIR = os.path.join(os.path.dirname(__file__), 'picota', 'src')
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'picota'))
+SRC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota', 'src')
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota'))
 sys.path.insert(0, SRC_DIR)
 
 from src.logger_professional import PICOTALogger, AnalysisProgress, ResultsFormatter
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 BANNER_WIDTH = 70
-TEST_GFA     = os.path.join(os.path.dirname(__file__), 'picota', 'test_data', 'testNitro.gfa')
-DB_BASE      = os.path.join(os.path.dirname(__file__), 'picota', 'DBs')
+TEST_GFA     = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota', 'test_data', 'testNitro.gfa')
+DB_BASE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota', 'DBs')
 
 
 def db_path(*parts):
@@ -329,7 +329,7 @@ Examples:
         """
     )
     parser.add_argument('--sra_list', '-s',
-                        default=os.path.join(os.path.dirname(__file__), 'picota', 'test_sra_ids.csv'),
+                        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota', 'test_sra_ids.csv'),
                         help='CSV with sra_short_id,sra_long_id columns')
     parser.add_argument('--output', '-o', default='picota_results',
                         help='Output directory (default: picota_results)')
@@ -342,7 +342,7 @@ Examples:
 
     # In GFA mode create a minimal SRA list if none exists
     if args.gfa_mode:
-        default_csv = os.path.join(os.path.dirname(__file__), 'picota', 'test_sra_ids.csv')
+        default_csv = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota', 'test_sra_ids.csv')
         if not os.path.exists(default_csv):
             with open(default_csv, 'w') as fh:
                 fh.write('sra_short_id,sra_long_id\n')
