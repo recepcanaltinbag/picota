@@ -188,11 +188,12 @@ def step_assembly(short_id: str, raw_files: list, asm_dir: str,
     logger.info(f"  Running assembly for {short_id} ...")
     assembly_main(
         short_id, raw_files, asm_dir,
-        threads, "99", quiet=True,
-        keep_temp_files=False, path_of_spades="spades.py",
-        path_of_fastp="fastp", skip_filtering=False,
-        assembler_type="megahit", path_of_megahit="megahit",
-        gfa_tools_path="", path_of_bandage="", logger_name='picota_complete'
+        threads, "99",
+        True,   # assembly_quiet
+        False,  # assembly_keep_temp_files
+        "spades.py", "fastp", False,
+        "megahit", "megahit",
+        "", "", 'picota_complete'
     )
     return [str(f) for f in Path(asm_dir).glob('*.gfa')]
 
