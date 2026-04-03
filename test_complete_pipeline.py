@@ -252,26 +252,38 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
 
     # ── Step 3/5: BLAST scoring ───────────────────────────────────────────────
     logger.info(f"\n  [3/{STEPS}] BLAST Scoring")
-    if missing_tools:
+    score_dir = str(sample_dir / 'scoring')
+    final_tab = os.path.join(score_dir, 'picota_final_tab')
+    enriched_csv = os.path.join(score_dir, 'picota_enriched.csv')
+
+    if os.path.exists(final_tab) and os.path.exists(enriched_csv):
+        logger.info(f"  ⤼ Scoring already done — loading existing results")
+        enriched = step_load_enriched(score_dir, logger)
+    elif missing_tools:
         logger.warning(f"  ⚠  Scoring skipped — missing: {', '.join(missing_tools)}")
         return []
+    else:
+        t0 = time.time()
+        os.makedirs(score_dir, exist_ok=True)
+        final_tab = step_scoring(cycle_fasta, score_dir, logger)
+        enriched  = step_load_enriched(score_dir, logger)
+        logger.info(f"  ✓ {len(enriched)} enriched rows  ({time.time()-t0:.1f}s)")
 
-    t0 = time.time()
-    score_dir = str(sample_dir / 'scoring')
-    os.makedirs(score_dir, exist_ok=True)
-    final_tab = step_scoring(cycle_fasta, score_dir, logger)
-    enriched  = step_load_enriched(score_dir, logger)
     for row in enriched:
         row['SRA_ID'] = short_id
-    logger.info(f"  ✓ {len(enriched)} enriched rows  ({time.time()-t0:.1f}s)")
 
     # ── Step 4/5: Annotation split ────────────────────────────────────────────
     logger.info(f"\n  [4/{STEPS}] Annotation Split")
-    t0 = time.time()
-    from src.split_cycle_coords_for_is import split_cycles_from_picota
     annot_dir = str(sample_dir / 'annot')
-    annotated = split_cycles_from_picota(final_tab, cycle_fasta, annot_dir, 0)
-    logger.info(f"  ✓ {len(annotated)} annotated FASTA(s)  ({time.time()-t0:.1f}s)")
+    existing_annot = list(Path(annot_dir).glob('*.fasta')) if os.path.isdir(annot_dir) else []
+    if existing_annot:
+        logger.info(f"  ⤼ Annotation already exists — {len(existing_annot)} FASTA(s)")
+        annotated = [str(f) for f in existing_annot]
+    else:
+        t0 = time.time()
+        from src.split_cycle_coords_for_is import split_cycles_from_picota
+        annotated = split_cycles_from_picota(final_tab, cycle_fasta, annot_dir, 0)
+        logger.info(f"  ✓ {len(annotated)} annotated FASTA(s)  ({time.time()-t0:.1f}s)")
 
     # ── Step 5/5: Long-read validation ────────────────────────────────────────
     logger.info(f"\n  [5/{STEPS}] Long-read Validation")
