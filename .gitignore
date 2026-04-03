@@ -82,6 +82,11 @@ log.txt
 fastp.json
 test_results.txt
 
+# Pipeline run outputs
+picota_results/
+test_results/
+results/
+
 # Temporary files
 *.tmp
 *.bak
