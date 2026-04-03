@@ -634,3 +634,12 @@ def scoring_main(cycle_folder, picota_out_folder,
                                'NumXeno', 'Xenoproducts', 'Xenocoords','NumCompTN','CompTN','CompTNscoords']) + '\n')
         for line in final_list_comps:
             f_out.write(line + '\n')
+
+    # Enriched CSV output
+    try:
+        from output_formatter import write_enriched_csv
+        enriched_csv = os.path.join(picota_out_folder, 'picota_enriched.csv')
+        n_cts = write_enriched_csv(picota_final_tab, enriched_csv)
+        logger.info(f"[+] Enriched CSV written: {enriched_csv} ({n_cts} composite transposons)")
+    except Exception as _fmt_err:
+        logger.warning(f"Enriched CSV generation skipped: {_fmt_err}")
