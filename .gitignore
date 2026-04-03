@@ -74,6 +74,8 @@ assembly_graph_big.gfa
 /merged
 /DBs/
 /picota/DBs/
+# But track the generated ISFinder taxonomy TSV (small, derived from IS.fna)
+!/picota/DBs/ISes/isfinder_taxonomy.tsv
 /picota/IS26_CompoundTransposons/
 /IS26_CompoundTransposons/
 /picota/picota.log
