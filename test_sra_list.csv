@@ -1,0 +1,4 @@
+short_read_id,long_read_id,description
+SRR11362851,SRX8840872,Klebsiella pneumoniae with antibiotic resistance
+SRR10000000,-,E. coli (short-reads only)
+SRR12345678,SRR98765432,Acinetobacter baumannii with novel CTns
