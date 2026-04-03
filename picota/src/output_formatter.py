@@ -311,23 +311,34 @@ def query_sra_organism(sra_id: str):
         return cache[sra_id]
 
     try:
-        url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi'
-        params = {
-            'db': 'sra',
-            'id': sra_id,
-            'retmode': 'json'
-        }
-        query = f"{url}?{urllib.parse.urlencode(params)}"
-        with urllib.request.urlopen(query, timeout=20) as resp:
-            data = json.load(resp)
-        docs = data.get('result', {}).get(sra_id)
-        if docs and isinstance(docs, dict):
-            organism = docs.get('expx', {}).get('organism') or docs.get('organism') or docs.get('scientificname')
-            if organism:
-                cache[sra_id] = organism
-                with open(cache_path, 'w', encoding='utf-8') as fh:
-                    json.dump(cache, fh, indent=2)
-                return organism
+        # Step 1: resolve accession → internal numeric UID via esearch
+        esearch_url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
+        esearch_params = {'db': 'sra', 'term': sra_id, 'retmode': 'json'}
+        esearch_query = f"{esearch_url}?{urllib.parse.urlencode(esearch_params)}"
+        with urllib.request.urlopen(esearch_query, timeout=20) as resp:
+            esearch_data = json.load(resp)
+        uid_list = esearch_data.get('esearchresult', {}).get('idlist', [])
+        if not uid_list:
+            raise ValueError("No UID found for accession")
+        uid = uid_list[0]
+
+        # Step 2: esummary with numeric UID → expxml contains ScientificName
+        esummary_url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi'
+        esummary_params = {'db': 'sra', 'id': uid, 'retmode': 'json'}
+        esummary_query = f"{esummary_url}?{urllib.parse.urlencode(esummary_params)}"
+        with urllib.request.urlopen(esummary_query, timeout=20) as resp:
+            esummary_data = json.load(resp)
+        doc = esummary_data.get('result', {}).get(uid, {})
+        expxml = doc.get('expxml', '')
+
+        # Organism is stored as <Organism taxid="..." ScientificName="..."/>
+        m = re.search(r'<Organism[^>]+ScientificName="([^"]+)"', expxml)
+        if m:
+            organism = m.group(1).strip()
+            cache[sra_id] = organism
+            with open(cache_path, 'w', encoding='utf-8') as fh:
+                json.dump(cache, fh, indent=2)
+            return organism
     except Exception:
         pass
 
