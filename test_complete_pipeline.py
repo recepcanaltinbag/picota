@@ -37,6 +37,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pic
 sys.path.insert(0, SRC_DIR)
 
 from src.logger_professional import PICOTALogger, AnalysisProgress, ResultsFormatter
+from src.config_loader import load_config
+from src.output_formatter import query_sra_organism
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 BANNER_WIDTH = 70
@@ -59,7 +61,8 @@ def step_cycle_detection(gfa_file: str, out_fasta: str, logger) -> int:
     from src.cycle_finderv2 import cycle_analysis
 
     if os.path.exists(out_fasta):
-        n = sum(1 for l in open(out_fasta) if l.startswith('>'))
+        with open(out_fasta) as _f:
+            n = sum(1 for l in _f if l.startswith('>'))
         logger.info(f"  Cycle FASTA already exists — {n} cycles (skipping)")
         return n
 
@@ -71,7 +74,11 @@ def step_cycle_detection(gfa_file: str, out_fasta: str, logger) -> int:
         min_component_number=1, max_component_number=25,
         k_mer_sim=200, threshold_sim=99
     )
-    n = sum(1 for l in open(out_fasta) if l.startswith('>')) if os.path.exists(out_fasta) else 0
+    if os.path.exists(out_fasta):
+        with open(out_fasta) as _f:
+            n = sum(1 for l in _f if l.startswith('>'))
+    else:
+        n = 0
     logger.info(f"  Detected {n} candidate cycles")
     return n
 
@@ -82,7 +89,8 @@ def step_scoring(cycle_fasta: str, out_dir: str, logger) -> str:
 
     final_tab = os.path.join(out_dir, 'picota_final_tab')
     if os.path.exists(final_tab):
-        n = sum(1 for _ in open(final_tab)) - 1
+        with open(final_tab) as _f:
+            n = sum(1 for _ in _f) - 1
         logger.info(f"  Scoring already done — {n} hits (skipping)")
         return final_tab
 
@@ -103,7 +111,11 @@ def step_scoring(cycle_fasta: str, out_dir: str, logger) -> str:
         path_of_blastp='blastp',
         logger_name='picota_complete'
     )
-    n = (sum(1 for _ in open(final_tab)) - 1) if os.path.exists(final_tab) else 0
+    if os.path.exists(final_tab):
+        with open(final_tab) as _f:
+            n = sum(1 for _ in _f) - 1
+    else:
+        n = 0
     logger.info(f"  Scored {n} cycles above threshold")
     return final_tab
 
@@ -159,41 +171,96 @@ def step_long_read_mapping(fasta_record: str, long_fastq: str,
 # ─── SRA + Assembly helpers (full mode) ──────────────────────────────────────
 
 def step_sra_download(short_id: str, raw_dir: str, sra_dir: str,
-                      fastq_dump_path: str, logger) -> list:
-    """Download SRA FASTQ files if not already present. Returns list of FASTQ paths."""
+                      fastq_dump_path: str, logger) -> tuple:
+    """Download SRA FASTQ files if not already present.
+
+    Returns tuple: (list of valid FASTQ paths, organism name)
+    """
     from src.sra_download import run_sra_down
 
     expected = [os.path.join(raw_dir, f"{short_id}_{i}.fastq") for i in (1, 2)]
-    missing  = [f for f in expected if not os.path.exists(f)]
-    if not missing:
-        logger.info(f"  FASTQ already present — skipping download")
-        return [f for f in expected if os.path.exists(f)]
+
+    def _valid_fastqs(paths):
+        return [f for f in paths if os.path.exists(f) and os.path.getsize(f) > 0]
+
+    current = _valid_fastqs(expected)
+
+    if len(current) == 2:
+        logger.info(f"  FASTQ already present and valid — skipping download")
+        sra_organism = query_sra_organism(short_id)  # cached lookup — fast
+        return current, sra_organism
+
+    sra_organism = query_sra_organism(short_id)
+    if sra_organism and sra_organism != 'Unknown':
+        logger.info(f"  SRA organism: {sra_organism}")
+        os.makedirs(sra_dir, exist_ok=True)
+        with open(os.path.join(sra_dir, 'sra_organism.txt'), 'w', encoding='utf-8') as fh:
+            fh.write(sra_organism + '\n')
 
     logger.info(f"  Downloading {short_id} from SRA ...")
     run_sra_down(short_id, raw_dir, sra_dir, fastq_dump_path,
                  keep_sra_file=True, the_force=False, logger_name='picota_complete')
-    return [f for f in expected if os.path.exists(f)]
+
+    current = _valid_fastqs(expected)
+    if len(current) != 2:
+        logger.warning(f"  FASTQ download incomplete for {short_id}; retrying with force")
+        # Clear possibly-corrupted fastq files and retry
+        for f in expected:
+            try:
+                if os.path.exists(f):
+                    os.remove(f)
+            except Exception:
+                pass
+        run_sra_down(short_id, raw_dir, sra_dir, fastq_dump_path,
+                     keep_sra_file=True, the_force=True, logger_name='picota_complete')
+        current = _valid_fastqs(expected)
+
+    if len(current) != 2:
+        logger.error(f"  Unable to obtain both FASTQ files for {short_id}")
+
+    return current, sra_organism
 
 
 def step_assembly(short_id: str, raw_files: list, asm_dir: str,
-                  threads: int, logger) -> list:
+                  threads: int, logger, cfg) -> list:
     """Run MEGAHIT assembly if no GFA exists yet. Returns list of GFA paths."""
     from src.assembly import assembly_main
 
     gfa_files = [f for f in (Path(asm_dir).glob('*.gfa'))]
     if gfa_files:
         logger.info(f"  Assembly already exists — skipping")
+
+        # Kullanıcıya skorları ve en iyi GFA'yı göster
+        try:
+            from src.assembly import process_gfa_files
+            best = process_gfa_files([str(f) for f in gfa_files], cfg.paths.path_of_bandage)
+            if best:
+                logger.info(f"  Existing best GFA: {best}")
+                print(f"Existing best GFA: {best}")
+        except Exception as e:
+            logger.warning(f"  Unable to evaluate existing GFAs: {e}")
+
         return [str(f) for f in gfa_files]
+
+    assembly_kmer_list = cfg.paths.assembly_k_mer_list
+    assembly_keep_temp_files = cfg.paths.keep_temp_files
+    assembly_path_of_spades = cfg.paths.path_of_spades
+    assembly_path_of_fastp = cfg.paths.path_of_fastp
+    assembly_skip_filtering = cfg.paths.skip_filtering
+    assembler_type = cfg.paths.assembler_type
+    assembly_path_of_megahit = cfg.paths.path_of_megahit
+    gfa_tools_path = cfg.paths.gfa_tools_path
+    path_of_bandage = cfg.paths.path_of_bandage
 
     logger.info(f"  Running assembly for {short_id} ...")
     assembly_main(
         short_id, raw_files, asm_dir,
-        threads, "99",
-        True,   # assembly_quiet
-        False,  # assembly_keep_temp_files
-        "spades.py", "fastp", False,
-        "megahit", "megahit",
-        "", "", 'picota_complete'
+        threads, assembly_kmer_list,
+        getattr(cfg.paths, 'quiet', True),
+        assembly_keep_temp_files,
+        assembly_path_of_spades, assembly_path_of_fastp, assembly_skip_filtering,
+        assembler_type, assembly_path_of_megahit,
+        gfa_tools_path, path_of_bandage, 'picota_complete'
     )
     return [str(f) for f in Path(asm_dir).glob('*.gfa')]
 
@@ -201,7 +268,7 @@ def step_assembly(short_id: str, raw_files: list, asm_dir: str,
 # ─── Main pipeline ───────────────────────────────────────────────────────────
 
 def _process_sample(short_id, long_id, output_path, gfa_mode,
-                    missing_tools, long_read_threads, logger):
+                    missing_tools, long_read_threads, logger, cfg):
     """Run the full pipeline for a single sample. Returns list of enriched rows."""
     STEPS = 5
     logger.info("\n" + "═" * BANNER_WIDTH)
@@ -210,6 +277,23 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
 
     sample_dir = output_path / short_id
     sample_dir.mkdir(exist_ok=True)
+
+    scoring_dir = sample_dir / 'scoring'
+    enriched_csv_path = scoring_dir / 'picota_enriched.csv'
+
+    required_columns = {'SRA_Organism', 'ARO_ID', 'ARO_Name', 'ARO_Drug_Class'}
+    if enriched_csv_path.exists():
+        try:
+            with open(enriched_csv_path, newline='', encoding='utf-8') as fh:
+                existing_cols = set(csv.DictReader(fh).fieldnames or [])
+        except Exception:
+            existing_cols = set()
+
+        if not required_columns.issubset(existing_cols):
+            logger.info(f"  ⤼ Sample {short_id} enriched file present but missing new columns; rerunning pipeline")
+        else:
+            logger.info(f"  ⤼ Sample {short_id} already has enriched output with required columns; skipping full pipeline")
+            return step_load_enriched(str(scoring_dir), logger)
 
     # ── Step 1/5: SRA download + Assembly ────────────────────────────────────
     logger.info(f"\n  [1/{STEPS}] SRA Download + Assembly")
@@ -225,18 +309,27 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
         os.makedirs(sra_dir, exist_ok=True)
         os.makedirs(asm_dir, exist_ok=True)
 
-        raw_files = step_sra_download(short_id, raw_dir, sra_dir,
-                                      'parallel-fastq-dump', logger)
-        if not raw_files:
-            logger.error(f"  ✗ No FASTQ files found after download — aborting {short_id}")
-            return []
+        # Önce FASTQ indir ve her koşulda assembly işlemini yeniden çalıştır (yeni sonuç üret).
+        raw_files, sra_organism = step_sra_download(short_id, raw_dir, sra_dir,
+                                                    'parallel-fastq-dump', logger)
 
-        gfa_list = step_assembly(short_id, raw_files, asm_dir,
-                                 threads=4, logger=logger)
-        if not gfa_list:
-            logger.error(f"  ✗ Assembly produced no GFA — aborting {short_id}")
-            return []
-        gfa_file = gfa_list[0]
+        if not raw_files:
+            logger.warning(f"  ⤼ No FASTQ files after download, checking assembly folder")
+            existing_gfa = list(Path(asm_dir).glob('*.gfa'))
+            if existing_gfa:
+                gfa_file = str(existing_gfa[0])
+                logger.info(f"  ⤼ Found existing assembly despite missing FASTQ, using existing {gfa_file}")
+            else:
+                logger.error(f"  ✗ No FASTQ files found after download and no existing assembly — aborting {short_id}")
+                return []
+        else:
+            # Assembly yeniden hesaplanıp gfa üzerine yazılacak.
+            gfa_list = step_assembly(short_id, raw_files, asm_dir,
+                                     threads=4, logger=logger, cfg=cfg)
+            if not gfa_list:
+                logger.error(f"  ✗ Assembly produced no GFA — aborting {short_id}")
+                return []
+            gfa_file = gfa_list[0]
 
     logger.info(f"  ✓ GFA ready: {gfa_file}  ({time.time()-t0:.1f}s)")
 
@@ -310,8 +403,23 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
 
 
 def run_pipeline(sra_list_file: str, output_dir: str, gfa_mode: bool = False,
-                 long_read_threads: int = 4):
+                 long_read_threads: int = 4, cfg=None):
     """Execute the complete PICOTA pipeline for all samples in sra_list_file."""
+
+    _here = os.path.dirname(os.path.abspath(__file__))
+    if cfg is None:
+        cfg = load_config(os.path.join(_here, 'picota', 'config.yaml'))
+
+    # Resolve relative tool paths in config against the picota/ directory.
+    # Only touch paths that look like relative file paths (contain a separator
+    # or start with ./), not bare command names like "megahit" or "fastp"
+    # that should be resolved via PATH at runtime.
+    _picota_dir = os.path.join(_here, 'picota')
+    for attr in ('gfa_tools_path', 'path_of_bandage', 'path_of_spades',
+                 'path_of_megahit', 'path_of_fastp'):
+        val = getattr(cfg.paths, attr, '')
+        if val and not os.path.isabs(val) and (val.startswith('./') or os.sep in val):
+            setattr(cfg.paths, attr, os.path.normpath(os.path.join(_picota_dir, val)))
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -369,7 +477,8 @@ def run_pipeline(sra_list_file: str, output_dir: str, gfa_mode: bool = False,
         logger.info(f"{'█'*BANNER_WIDTH}")
         try:
             rows = _process_sample(short_id, long_id, output_path,
-                                   gfa_mode, missing, long_read_threads, logger)
+                                   gfa_mode, missing, long_read_threads, logger,
+                                   cfg)
             all_enriched.extend(rows)
             logger.info(f"\n  ✅ {short_id} done — {len(rows)} enriched rows")
         except Exception as e:
@@ -384,6 +493,13 @@ def run_pipeline(sra_list_file: str, output_dir: str, gfa_mode: bool = False,
     if all_enriched:
         csv_out  = output_path / 'picota_enriched_combined.csv'
         json_out = output_path / 'picota_enriched_combined.json'
+
+        # Önce varsa eski sonuçları sil, sonra yaz (overwrite garanti)
+        if csv_out.exists():
+            csv_out.unlink()
+        if json_out.exists():
+            json_out.unlink()
+
         ResultsFormatter.to_csv(all_enriched,  str(csv_out))
         ResultsFormatter.to_json(all_enriched, str(json_out))
         logger.info(f"\n  CSV  → {csv_out}")
