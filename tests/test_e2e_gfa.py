@@ -409,6 +409,43 @@ class TestE2E_OutputFormatter:
         from src.output_formatter import infer_is_family
         group, family = infer_is_family('ISEcp1')
         assert group == 'IS1380'
+        assert family == 'ISEcp'
+
+    def test_is_family_inference_is10(self):
+        # IS10 is in IS4 superfamily, NOT IS1
+        from src.output_formatter import infer_is_family
+        group, family = infer_is_family('IS10')
+        assert group == 'IS4'
+        assert family == 'IS10'
+
+    def test_is_family_inference_is10_variant(self):
+        from src.output_formatter import infer_is_family
+        group, family = infer_is_family('IS10_B')
+        assert group == 'IS4'
+
+    def test_is_family_inference_is21(self):
+        # IS21 is its own superfamily, NOT IS3
+        from src.output_formatter import infer_is_family
+        group, family = infer_is_family('IS21')
+        assert group == 'IS21'
+
+    def test_is_family_inference_is26_variant(self):
+        from src.output_formatter import infer_is_family
+        group, family = infer_is_family('IS26_1')
+        assert group == 'IS6'
+        assert family == 'IS26'
+
+    def test_is_family_inference_is2_superfamily(self):
+        # IS2 element belongs to IS3 superfamily
+        from src.output_formatter import infer_is_family
+        group, family = infer_is_family('IS2')
+        assert group == 'IS3'
+
+    def test_is_family_inference_iscr(self):
+        from src.output_formatter import infer_is_family
+        group, family = infer_is_family('ISCR3')
+        assert group == 'IS91'
+        assert family == 'ISCR'
 
     def test_is_family_unknown(self):
         from src.output_formatter import infer_is_family

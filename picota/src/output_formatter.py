@@ -9,45 +9,147 @@ Reads picota_final_tab (TSV) and produces picota_enriched.csv where:
 """
 
 import csv
+import json
 import os
 import re
+import urllib.request
+import urllib.parse
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# IS-element family lookup
-# Keys are case-insensitive prefixes; values are (IS_Group, IS_Family).
-# Based on ISFinder/ISFDB taxonomy.
+# IS-element family lookup — ISFinder/ISFDB superfamily taxonomy
+# (Siguier et al. 2006, NAR; updated from ISFinder 2023)
+#
+# Strategy (applied in order):
+#   1. Strip variant suffix (IS26_1 → IS26, ISEcp1B → ISEcp1B)
+#   2. Exact lookup in _IS_EXACT dict (case-insensitive key)
+#   3. Regex-prefix rules (longest first) for named series not in exact dict
+#   4. Fallback: return IS+digits as both group and family
+#
+# This avoids the classic prefix-collision errors:
+#   IS10 starts with IS1  → would incorrectly land in IS1 superfamily
+#   IS26 starts with IS2  → would incorrectly land in IS3 superfamily
+#   IS21 starts with IS2  → same trap
 # ---------------------------------------------------------------------------
-_IS_PREFIX_MAP = [
-    ("IS1 ",    ("IS1",    "IS1")),
-    ("IS1$",    ("IS1",    "IS1")),
-    ("IS2",     ("IS3",    "IS3")),
-    ("IS3",     ("IS3",    "IS3")),
-    ("IS4",     ("IS4",    "IS4")),
-    ("IS5",     ("IS5",    "IS5")),
-    ("IS6",     ("IS6",    "IS6")),
-    ("IS10",    ("IS4",    "IS10")),
-    ("IS21",    ("IS21",   "IS21")),
-    ("IS26",    ("IS6",    "IS26")),
-    ("IS30",    ("IS30",   "IS30")),
-    ("IS66",    ("IS66",   "IS66")),
-    ("IS91",    ("IS91",   "IS91")),
-    ("IS110",   ("IS110",  "IS110")),
-    ("IS200",   ("IS200",  "IS200/IS605")),
-    ("IS256",   ("IS256",  "IS256")),
-    ("IS481",   ("IS481",  "IS481")),
-    ("IS630",   ("IS630",  "IS630")),
-    ("IS701",   ("IS701",  "IS701")),
-    ("IS982",   ("IS982",  "IS982")),
-    ("IS1111",  ("IS1111", "IS1111")),
-    ("IS1380",  ("IS1380", "IS1380")),
-    ("IS1595",  ("IS1595", "IS1595")),
-    ("IS3000",  ("ISAs1",  "ISAs1")),
-    ("ISEcp",   ("IS1380", "ISEcp")),
-    ("ISCR",    ("IS91",   "ISCR")),
-    ("ISApl",   ("IS256",  "ISApl")),
-    ("ISSen",   ("IS1",    "ISSen")),
-    ("Tn",      ("Composite", "Composite")),
-]
+
+# Exact base-name → (IS_Group / superfamily, IS_Family) mapping.
+# Keys are lowercase. IS_Group = ISFinder superfamily designation.
+_IS_EXACT: dict = {
+    # IS1 superfamily
+    "is1":    ("IS1",          "IS1"),
+    "is1a":   ("IS1",          "IS1"),
+    "is1b":   ("IS1",          "IS1"),
+    "issen":  ("IS1",          "ISSen"),
+    "issen1": ("IS1",          "ISSen"),
+    "issen2": ("IS1",          "ISSen"),
+    # IS3 superfamily (IS2 is an IS3-family element, not IS1!)
+    "is2":    ("IS3",          "IS2"),
+    "is3":    ("IS3",          "IS3"),
+    "is150":  ("IS3",          "IS150"),
+    "is407":  ("IS3",          "IS407"),
+    "is51":   ("IS3",          "IS51"),
+    "is679":  ("IS3",          "IS679"),
+    # IS4 superfamily
+    "is4":    ("IS4",          "IS4"),
+    "is10":   ("IS4",          "IS10"),
+    "is231":  ("IS4",          "IS231"),
+    "is1151": ("IS4",          "IS1151"),
+    # IS5 superfamily
+    "is5":    ("IS5",          "IS5"),
+    "is427":  ("IS5",          "IS427"),
+    "is903":  ("IS5",          "IS903"),
+    "is1031": ("IS5",          "IS1031"),
+    # IS6 superfamily  ← IS26 lives here, NOT IS3
+    "is6":    ("IS6",          "IS6"),
+    "is15":   ("IS6",          "IS15"),
+    "is26":   ("IS6",          "IS26"),
+    "is257":  ("IS6",          "IS257"),
+    "is1936": ("IS6",          "IS1936"),
+    # IS21 superfamily
+    "is21":   ("IS21",         "IS21"),
+    "is408":  ("IS21",         "IS408"),
+    # IS30 superfamily
+    "is30":   ("IS30",         "IS30"),
+    "is1655": ("IS30",         "IS1655"),
+    # IS66 superfamily
+    "is66":   ("IS66",         "IS66"),
+    "is1133": ("IS66",         "IS1133"),
+    # IS91 superfamily
+    "is91":   ("IS91",         "IS91"),
+    "iscr":   ("IS91",         "ISCR"),
+    "iscr1":  ("IS91",         "ISCR"),
+    "iscr2":  ("IS91",         "ISCR"),
+    "iscr3":  ("IS91",         "ISCR"),
+    # IS110 superfamily
+    "is110":  ("IS110",        "IS110"),
+    "is492":  ("IS110",        "IS492"),
+    # IS200/IS605 superfamily
+    "is200":  ("IS200/IS605",  "IS200"),
+    "is605":  ("IS200/IS605",  "IS605"),
+    "is608":  ("IS200/IS605",  "IS608"),
+    # IS256 superfamily
+    "is256":  ("IS256",        "IS256"),
+    "is1294": ("IS256",        "IS1294"),
+    "is1301": ("IS256",        "IS1301"),
+    "isapl":  ("IS256",        "ISApl"),
+    "isapl1": ("IS256",        "ISApl"),
+    "isapl2": ("IS256",        "ISApl"),
+    # IS481 superfamily
+    "is481":  ("IS481",        "IS481"),
+    # IS630 superfamily
+    "is630":  ("IS630",        "IS630"),
+    "is869":  ("IS630",        "IS869"),
+    # IS701 superfamily
+    "is701":  ("IS701",        "IS701"),
+    # IS982 superfamily
+    "is982":  ("IS982",        "IS982"),
+    # IS1111 superfamily
+    "is1111": ("IS1111",       "IS1111"),
+    # IS1380 superfamily  ← ISEcp1 lives here
+    "is1380": ("IS1380",       "IS1380"),
+    "isecp":  ("IS1380",       "ISEcp"),
+    "isecp1": ("IS1380",       "ISEcp"),
+    "isecp1b":("IS1380",       "ISEcp"),
+    # IS1595 superfamily
+    "is1595": ("IS1595",       "IS1595"),
+    "isncy":  ("IS1595",       "ISNcy"),
+    # ISAs1 superfamily
+    "isas1":  ("ISAs1",        "ISAs1"),
+    "is3000": ("ISAs1",        "ISAs1"),
+    # Composite / Tn
+    "tn":     ("Composite",    "Composite"),
+}
+
+# Regex prefix rules for IS *series* variants not individually listed above.
+# Checked after exact lookup fails. Sorted longest-pattern first (greedy).
+# Format: (compiled_re, IS_Group/superfamily, IS_Family)
+_IS_REGEX_RULES = sorted([
+    (re.compile(r'^IS26\b',   re.I), "IS6",          "IS26"),
+    (re.compile(r'^IS10\b',   re.I), "IS4",          "IS10"),
+    (re.compile(r'^IS21\b',   re.I), "IS21",         "IS21"),
+    (re.compile(r'^IS30\b',   re.I), "IS30",         "IS30"),
+    (re.compile(r'^IS66\b',   re.I), "IS66",         "IS66"),
+    (re.compile(r'^IS91\b',   re.I), "IS91",         "IS91"),
+    (re.compile(r'^ISCR\b',   re.I), "IS91",         "ISCR"),
+    (re.compile(r'^IS110\b',  re.I), "IS110",        "IS110"),
+    (re.compile(r'^IS256\b',  re.I), "IS256",        "IS256"),
+    (re.compile(r'^IS481\b',  re.I), "IS481",        "IS481"),
+    (re.compile(r'^IS630\b',  re.I), "IS630",        "IS630"),
+    (re.compile(r'^IS701\b',  re.I), "IS701",        "IS701"),
+    (re.compile(r'^IS982\b',  re.I), "IS982",        "IS982"),
+    (re.compile(r'^IS1111\b', re.I), "IS1111",       "IS1111"),
+    (re.compile(r'^IS1380\b', re.I), "IS1380",       "IS1380"),
+    (re.compile(r'^IS1595\b', re.I), "IS1595",       "IS1595"),
+    (re.compile(r'^ISEcp\b',  re.I), "IS1380",       "ISEcp"),
+    (re.compile(r'^ISApl\b',  re.I), "IS256",        "ISApl"),
+    (re.compile(r'^ISAs1\b',  re.I), "ISAs1",        "ISAs1"),
+    (re.compile(r'^IS6\b',    re.I), "IS6",          "IS6"),
+    (re.compile(r'^IS5\b',    re.I), "IS5",          "IS5"),
+    (re.compile(r'^IS4\b',    re.I), "IS4",          "IS4"),
+    (re.compile(r'^IS3\b',    re.I), "IS3",          "IS3"),
+    (re.compile(r'^IS2\b',    re.I), "IS3",          "IS2"),    # IS2 ∈ IS3 superfamily
+    (re.compile(r'^IS1\b',    re.I), "IS1",          "IS1"),
+], key=lambda x: len(x[0].pattern), reverse=True)
 
 # Compiled patterns for antibiotic class inference from gene/product names
 _AMR_CLASS_PATTERNS = [
@@ -79,19 +181,53 @@ _AMR_CLASS_PATTERNS = [
 ]
 
 
-def infer_is_family(is_name: str):
-    """Return (IS_Group, IS_Family) for a given IS element name."""
+def infer_is_family(is_name: str) -> tuple:
+    """
+    Return (IS_Group, IS_Family) for a given IS element name.
+
+    Lookup order:
+      1. Strip variant suffixes (_1, -like, :gene) and do exact dict lookup.
+      2. Exact lookup on the full name (handles e.g. ISEcp1B).
+      3. Regex-prefix rules (longest pattern first).
+      4. Fallback: IS+digits → return those digits as both group and family.
+
+    Examples:
+      IS26       → ("IS6",   "IS26")    # IS6 superfamily, not IS3
+      IS26_1     → ("IS6",   "IS26")    # variant stripped
+      IS10       → ("IS4",   "IS10")    # IS4 superfamily, not IS1
+      IS21       → ("IS21",  "IS21")    # own superfamily, not IS3
+      ISEcp1B    → ("IS1380","ISEcp")
+      ISCR3      → ("IS91",  "ISCR")
+      IS2        → ("IS3",   "IS2")     # IS2 belongs to IS3 superfamily
+    """
     name = is_name.strip()
-    # Sort by prefix length descending so more-specific entries win (e.g. IS26 before IS2)
-    for prefix, (group, family) in sorted(_IS_PREFIX_MAP, key=lambda x: len(x[0]), reverse=True):
-        pat = prefix.rstrip('$').rstrip()
-        if name.upper().startswith(pat.upper()):
-            return group, family
-    # Fallback: try to extract IS prefix with digits
+    if not name:
+        return ("Unknown", "Unknown")
+
+    # Step 1 — base name (strip variant suffix: _n, -like, :annotation)
+    base = re.split(r'[_\-:]', name)[0]
+
+    entry = _IS_EXACT.get(base.lower())
+    if entry:
+        return entry
+
+    # Step 2 — full name exact (e.g. ISEcp1B → key "isecp1b")
+    entry = _IS_EXACT.get(name.lower())
+    if entry:
+        return entry
+
+    # Step 3 — regex prefix rules (longest pattern first, applied to base)
+    for pattern, group, family in _IS_REGEX_RULES:
+        if pattern.match(base):
+            return (group, family)
+
+    # Step 4 — fallback: IS+digits
     m = re.match(r'(IS\d+)', name, re.I)
     if m:
-        return m.group(1).upper(), m.group(1).upper()
-    return "Unknown", "Unknown"
+        num = m.group(1).upper()
+        return (num, num)
+
+    return ("Unknown", "Unknown")
 
 
 def infer_antibiotic_class(gene_or_product: str) -> str:
@@ -101,6 +237,121 @@ def infer_antibiotic_class(gene_or_product: str) -> str:
         if pattern.search(text):
             return cls
     return "Other"
+
+
+_aro_data = None
+_MODULE_DIR = Path(__file__).resolve().parent.parent  # picota/picota/
+
+
+def load_aro_data():
+    global _aro_data
+    if _aro_data is not None:
+        return _aro_data
+
+    aro_index_path = _MODULE_DIR / 'DBs' / 'Antibiotics' / 'card-data' / 'aro_index.tsv'
+    if not aro_index_path.exists():
+        _aro_data = {}
+        return _aro_data
+
+    aro_data = {}
+    with open(aro_index_path, 'r', encoding='utf-8', errors='replace') as fh:
+        header = fh.readline().strip().split('\t')
+        for line in fh:
+            parts = line.strip().split('\t')
+            if len(parts) < 12:
+                continue
+            row = dict(zip(header, parts))
+            aro_id = row.get('ARO Accession', '').strip()
+            if aro_id:
+                aro_data[aro_id.upper()] = {
+                    'ARO_Name': row.get('ARO Name', '').strip(),
+                    'Drug_Class': row.get('Drug Class', '').strip(),
+                    'Model_Name': row.get('Model Name', '').strip()
+                }
+    _aro_data = aro_data
+    return aro_data
+
+
+def get_aro_metadata(resistance_gene: str):
+    """Return aro_id, aro_name, drug_class for a Resistance_Gene value."""
+    if 'ARO::' in resistance_gene:
+        aro_id = resistance_gene.split('ARO::')[-1].strip()
+        if aro_id and not aro_id.upper().startswith('ARO:'):
+            aro_id = 'ARO:' + aro_id
+    elif resistance_gene.upper().startswith('ARO:'):
+        aro_id = resistance_gene.strip().upper()
+    else:
+        aro_id = None
+
+    if not aro_id:
+        return None, None, None
+
+    aro_data = load_aro_data()
+    entry = aro_data.get(aro_id.upper())
+    if entry:
+        return aro_id.upper(), entry.get('ARO_Name', ''), entry.get('Drug_Class', '')
+    return aro_id.upper(), None, None
+
+
+def query_sra_organism(sra_id: str):
+    cache_path = _MODULE_DIR / 'DBs' / 'cache' / 'sra_taxonomy_cache.json'
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache = {}
+    if cache_path.exists():
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as fh:
+                cache = json.load(fh)
+        except Exception:
+            cache = {}
+
+    if not sra_id:
+        return 'Unknown'
+
+    if sra_id in cache:
+        return cache[sra_id]
+
+    try:
+        url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi'
+        params = {
+            'db': 'sra',
+            'id': sra_id,
+            'retmode': 'json'
+        }
+        query = f"{url}?{urllib.parse.urlencode(params)}"
+        with urllib.request.urlopen(query, timeout=20) as resp:
+            data = json.load(resp)
+        docs = data.get('result', {}).get(sra_id)
+        if docs and isinstance(docs, dict):
+            organism = docs.get('expx', {}).get('organism') or docs.get('organism') or docs.get('scientificname')
+            if organism:
+                cache[sra_id] = organism
+                with open(cache_path, 'w', encoding='utf-8') as fh:
+                    json.dump(cache, fh, indent=2)
+                return organism
+    except Exception:
+        pass
+
+    # Second fallback: pysradb ile direkt SRA metadata çek
+    try:
+        from pysradb import SRAweb
+        db = SRAweb()
+        df = db.sra_metadata(sra_id)
+        if not df.empty and 'organism_name' in df.columns:
+            organism = str(df.loc[0, 'organism_name']).strip()
+            if organism:
+                cache[sra_id] = organism
+                with open(cache_path, 'w', encoding='utf-8') as fh:
+                    json.dump(cache, fh, indent=2)
+                return organism
+    except Exception:
+        # pysradb olabilir yüklü değil veya internet/dönüş yok
+        pass
+
+    cache[sra_id] = 'Unknown'
+    with open(cache_path, 'w', encoding='utf-8') as fh:
+        json.dump(cache, fh, indent=2)
+
+    return 'Unknown'
 
 
 def parse_ct_length(cycle_id: str) -> int:
@@ -136,9 +387,10 @@ _TAB_COLS = [
 
 # Output columns for enriched CSV
 ENRICHED_COLS = [
-    'CT_Tag', 'Category', 'CycleID', 'SRA_ID',
+    'CT_Tag', 'Category', 'CycleID', 'SRA_ID', 'SRA_Organism',
     'CT_Length_bp', 'Score', 'NumIS', 'IS_Group', 'IS_Family', 'IS_Length_bp',
     'IS_Names', 'NumAMR', 'Antibiotic_Class', 'Resistance_Gene',
+    'ARO_ID', 'ARO_Name', 'ARO_Drug_Class',
     'NumXeno', 'Xenobiotic_Functions',
     'NumCompTN', 'Known_CompTN',
 ]
@@ -235,7 +487,26 @@ def build_enriched_rows(tab_path: str, ct_tag_offset: int = 0) -> list:
             for cls, gene in class_gene_pairs:
                 row = dict(base)
                 row['Antibiotic_Class'] = cls
-                row['Resistance_Gene']  = gene
+                row['Resistance_Gene'] = gene
+
+                aro_id, aro_name, aro_drug_class = get_aro_metadata(gene)
+                if aro_id:
+                    row['ARO_ID'] = aro_id
+                    row['ARO_Name'] = aro_name or ''
+                    row['ARO_Drug_Class'] = aro_drug_class or cls
+                    # if the ARO class exists, prefer it
+                    if aro_drug_class:
+                        row['Antibiotic_Class'] = aro_drug_class
+                else:
+                    row['ARO_ID'] = ''
+                    row['ARO_Name'] = ''
+                    row['ARO_Drug_Class'] = ''
+
+                if sra_id:
+                    row['SRA_Organism'] = query_sra_organism(sra_id)
+                else:
+                    row['SRA_Organism'] = 'Unknown'
+
                 rows.append(row)
 
     return rows
