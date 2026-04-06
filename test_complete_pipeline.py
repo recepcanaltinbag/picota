@@ -309,19 +309,8 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
     scoring_dir = sample_dir / 'scoring'
     enriched_csv_path = scoring_dir / 'picota_enriched.csv'
 
-    required_columns = {'SRA_Organism', 'ARO_ID', 'ARO_Name', 'ARO_Drug_Class'}
-    if enriched_csv_path.exists():
-        try:
-            with open(enriched_csv_path, newline='', encoding='utf-8') as fh:
-                existing_cols = set(csv.DictReader(fh).fieldnames or [])
-        except Exception:
-            existing_cols = set()
-
-        if not required_columns.issubset(existing_cols):
-            logger.info(f"  ⤼ Sample {short_id} enriched file present but missing new columns; rerunning pipeline")
-        else:
-            logger.info(f"  ⤼ Sample {short_id} already has enriched output with required columns; skipping full pipeline")
-            return step_load_enriched(str(scoring_dir), logger)
+    # enriched CSV is always regenerated at the end — do not skip the pipeline
+    # based on its existence. Each individual step has its own resume logic.
 
     # ── Step 1/5: SRA download + Assembly ────────────────────────────────────
     logger.info(f"\n  [1/{STEPS}] SRA Download + Assembly")
@@ -387,8 +376,11 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
     final_tab    = os.path.join(score_dir, 'picota_final_tab')
     enriched_csv = os.path.join(score_dir, 'picota_enriched.csv')
 
-    if os.path.exists(final_tab) and os.path.exists(enriched_csv):
-        logger.info(f"  ⤼ Scoring already done — loading existing results")
+    if os.path.exists(final_tab):
+        # BLAST results exist — regenerate enriched CSV (always overwrite)
+        logger.info(f"  ⤼ BLAST already done — regenerating enriched CSV")
+        from src.output_formatter import write_enriched_csv
+        write_enriched_csv(final_tab, enriched_csv)
         enriched = step_load_enriched(score_dir, logger)
     elif missing_tools:
         logger.warning(f"  ⚠  Scoring skipped — missing: {', '.join(missing_tools)}")
