@@ -31,7 +31,13 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-# PICOTA paths will be set up in main() based on --picota_dir
+# Ensure picota/src is importable regardless of working directory.
+# setup_picota_paths() may extend these further at runtime via --picota_dir.
+_here = os.path.dirname(os.path.abspath(__file__))
+for _p in (os.path.join(_here, 'picota', 'src'),
+           os.path.join(_here, 'picota')):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from src.logger_professional import PICOTALogger, AnalysisProgress, ResultsFormatter
 from src.config_loader import load_config
