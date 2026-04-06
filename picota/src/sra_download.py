@@ -90,12 +90,16 @@ def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, 
     pfd_cmd = f"{path_of_fastq_dump} -s {file_sra} -O {out_path} --split-files -t 12"
     success = _run_fastq_dump(pfd_cmd)
 
-    # Try 2: fasterq-dump with local .sra file
+    # fasterq-dump writes large temp files; use out_path as temp dir to avoid
+    # filling /tmp on the system disk (fasterq-dump -t flag controls temp location)
+    _tmp_dir = out_path
+
+    # Try 2: fasterq-dump with local .sra file, temp on output drive
     if not success:
         logger.warning('parallel-fastq-dump failed, trying fasterq-dump with .sra file')
         _clear_partial()
         if shutil.which('fasterq-dump'):
-            fq_cmd = f"fasterq-dump --split-files -O {out_path} {file_sra}"
+            fq_cmd = f"fasterq-dump --split-files -O {out_path} -t {_tmp_dir} {file_sra}"
             success = _run_fastq_dump(fq_cmd)
         else:
             logger.warning('fasterq-dump not available')
@@ -105,7 +109,7 @@ def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, 
         logger.warning('fasterq-dump with .sra failed, trying direct accession streaming')
         _clear_partial()
         if shutil.which('fasterq-dump'):
-            fq_cmd = f"fasterq-dump --split-files -O {out_path} {sra_acc}"
+            fq_cmd = f"fasterq-dump --split-files -O {out_path} -t {_tmp_dir} {sra_acc}"
             success = _run_fastq_dump(fq_cmd)
         else:
             logger.warning('fasterq-dump not available for direct streaming')
@@ -118,7 +122,7 @@ def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, 
             prefetch_dir = os.path.join(out_path, sra_acc)
             prefetch_cmd = f"prefetch {sra_acc} -O {prefetch_dir}"
             if _run_fastq_dump(prefetch_cmd):
-                fq_cmd = f"fasterq-dump --split-files -O {out_path} {prefetch_dir}"
+                fq_cmd = f"fasterq-dump --split-files -O {out_path} -t {_tmp_dir} {prefetch_dir}"
                 success = _run_fastq_dump(fq_cmd)
         else:
             logger.warning('prefetch or fasterq-dump not available')
