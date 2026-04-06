@@ -413,7 +413,8 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
     else:
         t0 = time.time()
         from src.split_cycle_coords_for_is import split_cycles_from_picota
-        annotated = split_cycles_from_picota(final_tab, cycle_fasta, annot_dir, 0)
+        split_min_score = getattr(getattr(cfg, 'options', None), 'split_min_score', 0) if cfg else 0
+        annotated = split_cycles_from_picota(final_tab, cycle_fasta, annot_dir, split_min_score)
         logger.info(f"  ✓ {len(annotated)} annotated FASTA(s)  ({time.time()-t0:.1f}s)")
 
     # ── Step 5/5: Long-read validation ────────────────────────────────────────
@@ -431,7 +432,9 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
                 long_raw_dir.mkdir(parents=True, exist_ok=True)
                 long_sra_dir.mkdir(parents=True, exist_ok=True)
                 fastq_dump = getattr(cfg.paths, 'fastq_dump', 'parallel-fastq-dump') if cfg else 'parallel-fastq-dump'
-                run_sra_down(long_id, str(long_raw_dir), str(long_sra_dir), fastq_dump)
+                run_sra_down(long_id, str(long_raw_dir), str(long_sra_dir), fastq_dump,
+                             keep_sra_file=True, the_force=True,
+                             logger_name='picota_complete')
                 logger.info(f"  Downloaded {long_id}")
             except Exception as e:
                 logger.warning(f"  Long-read download failed: {e}")
