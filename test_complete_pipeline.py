@@ -361,6 +361,16 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
                 return []
             gfa_file = gfa_list[0]
 
+            # Delete raw FASTQs after successful assembly if config says so
+            delete_fastq = getattr(getattr(cfg, 'options', None), 'delete_fastq_files', False) if cfg else False
+            if delete_fastq:
+                for f in raw_files:
+                    try:
+                        os.remove(f)
+                    except Exception:
+                        pass
+                logger.info(f"  ✓ Raw FASTQs deleted (delete_fastq_files=true)")
+
     logger.info(f"  ✓ GFA ready: {gfa_file}  ({time.time()-t0:.1f}s)")
 
     # ── Step 2/5: Cycle detection ─────────────────────────────────────────────
