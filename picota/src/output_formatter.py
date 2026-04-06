@@ -266,6 +266,16 @@ def infer_is_family(is_name: str) -> tuple:
     if not name:
         return ("Unknown", "Unknown")
 
+    # Strip database source prefixes added by PICOTA's BLAST pipeline
+    # e.g. "ISFinder_IS26" → "IS26", "ISFinder_ISEcp1" → "ISEcp1"
+    for _prefix in ('ISFinder_', 'ISFDB_', 'TNcentral_'):
+        if name.startswith(_prefix):
+            name = name[len(_prefix):]
+            break
+
+    # Strip accession suffixes: "IS26-MH257753" → "IS26", "IS1216E-KR349520.1" → "IS1216E"
+    # (done later via base split, but also handle hyphen-accession pattern here)
+
     table = _load_isfinder_table()
 
     # Step 1a — full name in ISFinder TSV
@@ -295,6 +305,10 @@ def infer_is_family(is_name: str) -> tuple:
     if m:
         num = m.group(1).upper()
         return (num, num)
+
+    # Step 5 — Tn (composite transposon, not an IS element per se)
+    if re.match(r'^Tn\d', name, re.I):
+        return ("Composite", "Composite")
 
     return ("Unknown", "Unknown")
 
