@@ -337,21 +337,19 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
         os.makedirs(sra_dir, exist_ok=True)
         os.makedirs(asm_dir, exist_ok=True)
 
-        # Önce FASTQ indir ve her koşulda assembly işlemini yeniden çalıştır (yeni sonuç üret).
         fastq_dump = getattr(getattr(cfg, 'paths', None), 'fastq_dump', 'parallel-fastq-dump') if cfg else 'parallel-fastq-dump'
-        raw_files, sra_organism = step_sra_download(short_id, raw_dir, sra_dir,
-                                                    fastq_dump, logger)
 
-        if not raw_files:
-            logger.warning(f"  ⤼ No FASTQ files after download, checking assembly folder")
-            existing_gfa = list(Path(asm_dir).glob('*.gfa'))
-            if existing_gfa:
-                gfa_file = str(existing_gfa[0])
-                logger.info(f"  ⤼ Found existing assembly despite missing FASTQ, using existing {gfa_file}")
-            else:
-                logger.error(f"  ✗ No FASTQ files found after download and no existing assembly — aborting {short_id}")
-                return []
+        # If GFA already exists, skip download + assembly entirely (FASTQs may have been deleted)
+        existing_gfa = list(Path(asm_dir).glob('*.gfa'))
+        if existing_gfa:
+            gfa_file = str(existing_gfa[0])
+            logger.info(f"  ⤼ Assembly already exists — skipping download ({gfa_file})")
         else:
+            raw_files, sra_organism = step_sra_download(short_id, raw_dir, sra_dir,
+                                                        fastq_dump, logger)
+            if not raw_files:
+                logger.error(f"  ✗ No FASTQ files and no existing assembly — aborting {short_id}")
+                return []
             # Assembly yeniden hesaplanıp gfa üzerine yazılacak.
             asm_threads = getattr(getattr(cfg, 'paths', None), 'assembly_threads', 4) if cfg else 4
             gfa_list = step_assembly(short_id, raw_files, asm_dir,
