@@ -71,7 +71,7 @@ def tool_available(name: str) -> bool:
 
 # ─── Real pipeline steps ─────────────────────────────────────────────────────
 
-def step_cycle_detection(gfa_file: str, out_fasta: str, logger) -> int:
+def step_cycle_detection(gfa_file: str, out_fasta: str, logger, cfg=None) -> int:
     """Run cycle detection on a GFA file. Returns number of cycles found."""
     from src.cycle_finderv2 import cycle_analysis
 
@@ -81,13 +81,20 @@ def step_cycle_detection(gfa_file: str, out_fasta: str, logger) -> int:
         logger.info(f"  Cycle FASTA already exists — {n} cycles (skipping)")
         return n
 
+    # Read params from config if available, otherwise use safe defaults
+    opt = getattr(cfg, 'options', None) if cfg else None
+    pth = getattr(cfg, 'paths',   None) if cfg else None
     cycle_analysis(
         gfa_file, out_fasta,
-        find_all_path=False, path_limit=15,
-        min_size_of_cycle=3000, max_size_of_cycle=100_000,
-        name_prefix_cycle='Cycle',
-        min_component_number=1, max_component_number=25,
-        k_mer_sim=200, threshold_sim=99
+        find_all_path     = getattr(pth, 'find_all_path',        False),
+        path_limit        = getattr(pth, 'path_limit',           15),
+        min_size_of_cycle = getattr(opt, 'min_size_of_cycle',    3000),
+        max_size_of_cycle = getattr(opt, 'max_size_of_cycle',    100_000),
+        name_prefix_cycle = getattr(opt, 'name_prefix_cycle',    'Cycle'),
+        min_component_number = getattr(opt, 'min_component_number', 1),
+        max_component_number = getattr(opt, 'max_component_number', 25),
+        k_mer_sim         = getattr(opt, 'k_mer_sim',            200),
+        threshold_sim     = getattr(opt, 'threshold_sim',        99),
     )
     if os.path.exists(out_fasta):
         with open(out_fasta) as _f:
@@ -98,7 +105,7 @@ def step_cycle_detection(gfa_file: str, out_fasta: str, logger) -> int:
     return n
 
 
-def step_scoring(cycle_fasta: str, out_dir: str, logger) -> str:
+def step_scoring(cycle_fasta: str, out_dir: str, logger, cfg=None) -> str:
     """Run BLAST scoring. Returns path to picota_final_tab."""
     from src.scoringv4ProtBlast import scoring_main
 
@@ -109,6 +116,9 @@ def step_scoring(cycle_fasta: str, out_dir: str, logger) -> str:
         logger.info(f"  Scoring already done — {n} hits (skipping)")
         return final_tab
 
+    # Read scoring params from config if available
+    opt = getattr(cfg, 'options', None) if cfg else None
+    pth = getattr(cfg, 'paths',   None) if cfg else None
     scoring_main(
         cycle_fasta, out_dir,
         db_path('Antibiotics', 'protein_fasta_protein_homolog_model.fasta'),
@@ -116,15 +126,18 @@ def step_scoring(cycle_fasta: str, out_dir: str, logger) -> str:
         db_path('ISes', '_tncentral_nointegrall_isfinder-TNs.fasta'),
         db_path('CompTns', 'Known_Tns.fasta'),
         out_dir,
-        mean_of_CompTns=5850, std_of_CompTns=2586,
-        total_score_type=0, threshold_final_score=0,
-        max_z=20, dist_type=1,
-        path_of_prodigal='prodigal',
-        path_of_blastn='blastn',
-        path_of_makeblastdb='makeblastdb',
-        path_of_blastx='blastx',
-        path_of_blastp='blastp',
-        logger_name='picota_complete'
+        mean_of_CompTns       = getattr(opt, 'mean_of_CompTns',       5850),
+        std_of_CompTns        = getattr(opt, 'std_of_CompTns',        2586),
+        total_score_type      = getattr(opt, 'total_score_type',      0),
+        threshold_final_score = getattr(opt, 'threshold_final_score', 0),
+        max_z                 = getattr(opt, 'max_z',                 20),
+        dist_type             = getattr(opt, 'dist_type',             1),
+        path_of_prodigal      = getattr(pth, 'path_of_prodigal',     'prodigal'),
+        path_of_blastn        = getattr(pth, 'path_of_blastn',       'blastn'),
+        path_of_makeblastdb   = getattr(pth, 'path_of_makeblastdb',  'makeblastdb'),
+        path_of_blastx        = getattr(pth, 'path_of_blastx',       'blastx'),
+        path_of_blastp        = getattr(pth, 'path_of_blastp',       'blastp'),
+        logger_name           = 'picota_complete',
     )
     if os.path.exists(final_tab):
         with open(final_tab) as _f:
@@ -325,8 +338,9 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
         os.makedirs(asm_dir, exist_ok=True)
 
         # Önce FASTQ indir ve her koşulda assembly işlemini yeniden çalıştır (yeni sonuç üret).
+        fastq_dump = getattr(getattr(cfg, 'paths', None), 'fastq_dump', 'parallel-fastq-dump') if cfg else 'parallel-fastq-dump'
         raw_files, sra_organism = step_sra_download(short_id, raw_dir, sra_dir,
-                                                    'parallel-fastq-dump', logger)
+                                                    fastq_dump, logger)
 
         if not raw_files:
             logger.warning(f"  ⤼ No FASTQ files after download, checking assembly folder")
@@ -339,8 +353,9 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
                 return []
         else:
             # Assembly yeniden hesaplanıp gfa üzerine yazılacak.
+            asm_threads = getattr(getattr(cfg, 'paths', None), 'assembly_threads', 4) if cfg else 4
             gfa_list = step_assembly(short_id, raw_files, asm_dir,
-                                     threads=4, logger=logger, cfg=cfg)
+                                     threads=asm_threads, logger=logger, cfg=cfg)
             if not gfa_list:
                 logger.error(f"  ✗ Assembly produced no GFA — aborting {short_id}")
                 return []
@@ -352,7 +367,7 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
     logger.info(f"\n  [2/{STEPS}] Cycle Detection")
     t0 = time.time()
     cycle_fasta = str(sample_dir / f'{short_id}_cycles.fasta')
-    n_cycles = step_cycle_detection(gfa_file, cycle_fasta, logger)
+    n_cycles = step_cycle_detection(gfa_file, cycle_fasta, logger, cfg)
     if n_cycles == 0:
         logger.warning(f"  ⚠  No cycles detected — skipping scoring")
         return []
@@ -360,8 +375,8 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
 
     # ── Step 3/5: BLAST scoring ───────────────────────────────────────────────
     logger.info(f"\n  [3/{STEPS}] BLAST Scoring")
-    score_dir = str(sample_dir / 'scoring')
-    final_tab = os.path.join(score_dir, 'picota_final_tab')
+    score_dir    = str(sample_dir / 'scoring')
+    final_tab    = os.path.join(score_dir, 'picota_final_tab')
     enriched_csv = os.path.join(score_dir, 'picota_enriched.csv')
 
     if os.path.exists(final_tab) and os.path.exists(enriched_csv):
@@ -373,7 +388,7 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
     else:
         t0 = time.time()
         os.makedirs(score_dir, exist_ok=True)
-        final_tab = step_scoring(cycle_fasta, score_dir, logger)
+        final_tab = step_scoring(cycle_fasta, score_dir, logger, cfg)
         enriched  = step_load_enriched(score_dir, logger)
         logger.info(f"  ✓ {len(enriched)} enriched rows  ({time.time()-t0:.1f}s)")
 
