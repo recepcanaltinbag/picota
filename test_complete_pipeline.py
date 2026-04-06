@@ -572,16 +572,36 @@ Examples:
     # Set up paths based on picota_dir
     setup_picota_paths(args.picota_dir)
 
+    # Load config if given
+    cfg = None
+    if args.config:
+        cfg = load_config(args.config)
+
+    # Config can supply defaults for --sra_list and --output;
+    # CLI args take priority when explicitly provided by the user.
+    # argparse sets defaults, so we check if the user actually passed the flag.
+    _defaults = parser.parse_args([])  # parse with no args to get bare defaults
+    if cfg is not None:
+        cfg_paths = getattr(cfg, 'paths', cfg)
+        if args.sra_list == _defaults.sra_list:
+            cfg_sra = getattr(cfg_paths, 'sra_id_file', None)
+            if cfg_sra:
+                args.sra_list = cfg_sra
+        if args.output == _defaults.output:
+            cfg_out = getattr(cfg_paths, 'outdir', None)
+            if cfg_out:
+                args.output = cfg_out
+        if args.threads == _defaults.threads:
+            cfg_threads = getattr(cfg_paths, 'assembly_threads', None)
+            if cfg_threads:
+                args.threads = int(cfg_threads)
+
     # --gfa_mode: always use a single testNitro entry (ignores real SRA IDs)
     if args.gfa_mode:
         gfa_csv = os.path.join(args.picota_dir, 'picota', 'testNitro_sra_ids.csv')
         with open(gfa_csv, 'w') as fh:
             fh.write('sra_short_id,sra_long_id\ntestNitro,-\n')
         args.sra_list = gfa_csv
-
-    cfg = None
-    if args.config:
-        cfg = load_config(args.config)
 
     run_pipeline(args.sra_list, args.output,
                  gfa_mode=args.gfa_mode,
