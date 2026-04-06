@@ -417,14 +417,23 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
             t0 = time.time()
             map_dir = str(output_path / 'mapping' / long_id)
             n_mapped = 0
+            mapping_threads = getattr(getattr(cfg, 'options', None), 'mapping_threads', long_read_threads) if cfg else long_read_threads
             for fa in annotated:
                 try:
-                    step_long_read_mapping(fa, str(long_fastq), map_dir,
-                                           long_id, long_read_threads, logger)
+                    sorted_bam = step_long_read_mapping(fa, str(long_fastq), map_dir,
+                                                        long_id, mapping_threads, logger)
+                    # BAM analysis — same as picota_testv3.py
+                    from src.bam_analyse import bam_file_analyze
+                    from src.analyze_blocksv3 import analyze_blocks
+                    fa_base = os.path.basename(fa)
+                    out_full    = os.path.join(map_dir, f"{long_id}_{fa_base}_full")
+                    out_partial = os.path.join(map_dir, f"{long_id}_{fa_base}_partial")
+                    bam_file_analyze(sorted_bam, out_full, out_partial)
+                    analyze_blocks(out_partial, out_full, map_dir, fa_base, cfg)
                     n_mapped += 1
                 except Exception as e:
-                    logger.error(f"  Mapping error: {e}")
-            logger.info(f"  ✓ {n_mapped} FASTA(s) mapped  ({time.time()-t0:.1f}s)")
+                    logger.error(f"  Mapping/BAM error: {e}")
+            logger.info(f"  ✓ {n_mapped} FASTA(s) mapped + analysed  ({time.time()-t0:.1f}s)")
         else:
             logger.info(f"  ⤼ Long-read FASTQ not available after download attempt: {long_fastq}")
     else:
