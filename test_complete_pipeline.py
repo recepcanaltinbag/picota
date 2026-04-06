@@ -31,10 +31,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-# Add picota src to path
-SRC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota', 'src')
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota'))
-sys.path.insert(0, SRC_DIR)
+# PICOTA paths will be set up in main() based on --picota_dir
 
 from src.logger_professional import PICOTALogger, AnalysisProgress, ResultsFormatter
 from src.config_loader import load_config
@@ -42,8 +39,20 @@ from src.output_formatter import query_sra_organism
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 BANNER_WIDTH = 70
-TEST_GFA     = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota', 'test_data', 'testNitro.gfa')
-DB_BASE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picota', 'DBs')
+TEST_GFA     = None  # Will be set by setup_picota_paths
+DB_BASE      = None  # Will be set by setup_picota_paths
+
+
+def setup_picota_paths(picota_dir: str):
+    """Set up global paths based on picota_dir."""
+    global TEST_GFA, DB_BASE, SRC_DIR
+
+    SRC_DIR = os.path.join(picota_dir, 'picota', 'src')
+    sys.path.insert(0, os.path.join(picota_dir, 'picota'))
+    sys.path.insert(0, SRC_DIR)
+
+    TEST_GFA = os.path.join(picota_dir, 'picota', 'test_data', 'testNitro.gfa')
+    DB_BASE = os.path.join(picota_dir, 'picota', 'DBs')
 
 
 def db_path(*parts):
@@ -536,6 +545,10 @@ Examples:
   # Full run from real SRA accessions:
   conda run -n evobiomig python3 test_complete_pipeline.py \\
       --sra_list picota/test_sra_ids.csv --output /data/picota_results/
+
+  # Run with PICOTA code from a different directory:
+  conda run -n evobiomig python3 /path/to/test_complete_pipeline.py \\
+      --picota_dir /path/to/picota --output /data/picota_results/
         """
     )
     parser.add_argument('--sra_list', '-s',
@@ -547,19 +560,33 @@ Examples:
                         help='Quick test: use bundled testNitro.gfa, skip SRA/assembly')
     parser.add_argument('--threads', '-t', type=int, default=4,
                         help='Assembly / mapping threads (default: 4)')
+    parser.add_argument('--picota_dir', '-p',
+                        default=_here,
+                        help='Directory containing PICOTA source code (default: script dir)')
+    parser.add_argument('--config', '-c',
+                        default=None,
+                        help='Path to config YAML (default: picota_dir/picota/config.yaml)')
 
     args = parser.parse_args()
 
+    # Set up paths based on picota_dir
+    setup_picota_paths(args.picota_dir)
+
     # --gfa_mode: always use a single testNitro entry (ignores real SRA IDs)
     if args.gfa_mode:
-        gfa_csv = os.path.join(_here, 'picota', 'testNitro_sra_ids.csv')
+        gfa_csv = os.path.join(args.picota_dir, 'picota', 'testNitro_sra_ids.csv')
         with open(gfa_csv, 'w') as fh:
             fh.write('sra_short_id,sra_long_id\ntestNitro,-\n')
         args.sra_list = gfa_csv
 
+    cfg = None
+    if args.config:
+        cfg = load_config(args.config)
+
     run_pipeline(args.sra_list, args.output,
                  gfa_mode=args.gfa_mode,
-                 long_read_threads=args.threads)
+                 long_read_threads=args.threads,
+                 cfg=cfg)
 
 
 if __name__ == '__main__':
