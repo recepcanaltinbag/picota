@@ -568,6 +568,24 @@ def run_pipeline(sra_list_file: str, output_dir: str, gfa_mode: bool = False,
               'CT_ID': r.get('CT_Tag',''), 'Antibiotic_Classes': r.get('Antibiotic_Class','')}
              for r in all_enriched], logger
         )
+
+        # ── Cross-sample CT clustering ────────────────────────────────────────
+        if len(samples) > 1:
+            logger.info(f"\n{'─'*BANNER_WIDTH}")
+            logger.info("  Cross-sample Novel CT Clustering")
+            logger.info(f"{'─'*BANNER_WIDTH}")
+            try:
+                from src.ct_cluster import cluster_novel_cts
+                cluster_novel_cts(
+                    output_dir  = str(output_path),
+                    sample_ids  = [s[0] for s in samples],
+                    enriched_rows = all_enriched,
+                    min_identity  = 90.0,
+                    min_coverage  = 80.0,
+                    logger        = logger,
+                )
+            except Exception as e:
+                logger.warning(f"  CT clustering failed: {e}")
     else:
         progress.complete_step('export', "no results to export")
 
