@@ -468,11 +468,19 @@ _TAB_COLS = [
 # Output columns for enriched CSV
 ENRICHED_COLS = [
     'CT_Tag', 'Category', 'CycleID', 'SRA_ID', 'SRA_Organism',
-    'CT_Length_bp', 'Score', 'NumIS', 'IS_Group', 'IS_Family', 'IS_Length_bp',
+    'CT_Length_bp', 'Score', 'Score2', 'NumIS', 'IS_Group', 'IS_Family', 'IS_Length_bp',
     'IS_Names', 'NumAMR', 'Antibiotic_Class', 'Resistance_Gene',
     'ARO_ID', 'ARO_Name', 'ARO_Drug_Class',
     'NumXeno', 'Xenobiotic_Functions',
     'NumCompTN', 'Known_CompTN',
+]
+
+# Clean summary columns matching the human-readable view (image format)
+SUMMARY_COLS = [
+    'Category', 'CT_Tag', 'IS_Group', 'IS_Family',
+    'Antibiotic_Class', 'Resistance_Gene',
+    'CT_Length_bp', 'IS_Length_bp', 'Score2',
+    'SRA_Organism', 'SRA_ID', 'Known_CompTN',
 ]
 
 
@@ -509,6 +517,11 @@ def build_enriched_rows(tab_path: str, ct_tag_offset: int = 0) -> list:
                 score = round(float(score_str), 3)
             except ValueError:
                 score = 0.0
+            score2_str = record.get('score2', '0')
+            try:
+                score2 = round(float(score2_str), 1)
+            except ValueError:
+                score2 = 0.0
 
             ct_length   = parse_ct_length(cycle_id)
             num_is      = int(record.get('NumIS', 0) or 0)
@@ -552,6 +565,7 @@ def build_enriched_rows(tab_path: str, ct_tag_offset: int = 0) -> list:
                 'SRA_ID':             sra_id,
                 'CT_Length_bp':       ct_length,
                 'Score':              score,
+                'Score2':             score2,
                 'NumIS':              num_is,
                 'IS_Group':           is_group,
                 'IS_Family':          is_family,
@@ -610,3 +624,33 @@ def write_enriched_csv(tab_path: str, out_csv_path: str, ct_tag_offset: int = 0)
     # Count unique CT tags
     unique_cts = len({r['CT_Tag'] for r in rows})
     return unique_cts
+
+
+def write_summary_csv(rows: list, out_csv_path: str) -> int:
+    """
+    Write a clean human-readable summary CSV from enriched rows.
+
+    Columns match the spreadsheet view (Category, CT_Tag, IS_Group, IS_Family,
+    Antibiotic_Class, Resistance_Gene, CT_Length_bp, IS_Length_bp, Score2,
+    SRA_Organism, SRA_ID, Known_CompTN).
+
+    Parameters
+    ----------
+    rows : list[dict]
+        Enriched rows (from build_enriched_rows or combined across samples).
+    out_csv_path : str
+        Destination path.
+
+    Returns
+    -------
+    int  Number of rows written.
+    """
+    if not rows:
+        return 0
+
+    with open(out_csv_path, 'w', newline='', encoding='utf-8') as fh:
+        writer = csv.DictWriter(fh, fieldnames=SUMMARY_COLS, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return len(rows)

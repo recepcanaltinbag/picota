@@ -561,6 +561,13 @@ def run_pipeline(sra_list_file: str, output_dir: str, gfa_mode: bool = False,
         ResultsFormatter.to_json(all_enriched, str(json_out))
         logger.info(f"\n  CSV  → {csv_out}")
         logger.info(f"  JSON → {json_out}")
+
+        # Clean human-readable summary (image format)
+        from src.output_formatter import write_summary_csv
+        summary_out = output_path / 'picota_summary.csv'
+        write_summary_csv(all_enriched, str(summary_out))
+        logger.info(f"  Summary → {summary_out}")
+
         progress.complete_step('export', f"{len(all_enriched)} rows written")
 
         ResultsFormatter.print_summary(
