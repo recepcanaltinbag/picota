@@ -396,8 +396,24 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
     # ── Step 5/5: Long-read validation ────────────────────────────────────────
     logger.info(f"\n  [5/{STEPS}] Long-read Validation")
     if long_id and tool_available('minimap2') and tool_available('samtools'):
-        long_fastq = output_path / 'raw_long' / long_id / f'{long_id}_1.fastq'
-        if long_fastq.exists():
+        long_raw_dir  = output_path / 'raw_long' / long_id
+        long_sra_dir  = output_path / 'sra_long'  / long_id
+        long_fastq    = long_raw_dir / f'{long_id}_1.fastq'
+
+        # Download long-read FASTQ if not already present
+        if not (long_fastq.exists() and long_fastq.stat().st_size > 0):
+            logger.info(f"  Downloading long-read {long_id} ...")
+            try:
+                from src.sra_download import run_sra_down
+                long_raw_dir.mkdir(parents=True, exist_ok=True)
+                long_sra_dir.mkdir(parents=True, exist_ok=True)
+                fastq_dump = getattr(cfg.paths, 'fastq_dump', 'parallel-fastq-dump') if cfg else 'parallel-fastq-dump'
+                run_sra_down(long_id, str(long_raw_dir), str(long_sra_dir), fastq_dump)
+                logger.info(f"  Downloaded {long_id}")
+            except Exception as e:
+                logger.warning(f"  Long-read download failed: {e}")
+
+        if long_fastq.exists() and long_fastq.stat().st_size > 0:
             t0 = time.time()
             map_dir = str(output_path / 'mapping' / long_id)
             n_mapped = 0
@@ -410,7 +426,7 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
                     logger.error(f"  Mapping error: {e}")
             logger.info(f"  ✓ {n_mapped} FASTA(s) mapped  ({time.time()-t0:.1f}s)")
         else:
-            logger.info(f"  ⤼ Long-read FASTQ not found: {long_fastq}")
+            logger.info(f"  ⤼ Long-read FASTQ not available after download attempt: {long_fastq}")
     else:
         logger.info(f"  ⤼ Long-read validation skipped (no long-read ID or tools missing)")
 
