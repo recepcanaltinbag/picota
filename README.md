@@ -1,7 +1,7 @@
 # PICOTA
 
 <p align="center">
-<img src="picota/logo/picota_logo.png" alt="PICOTA Logo" width="200" style="max-width: 100%; height: auto;">
+<img src="logo/picota_logo.png" alt="PICOTA Logo" width="200" style="max-width: 100%; height: auto;">
 </p>
 
 <div align="center">
@@ -731,7 +731,11 @@ Key parameters in `config.yaml`:
 ## Citation
 
 If you use PICOTA in your research, please cite:
+10.5281/zenodo.21769753
 
+" A de novo computational pipeline for discovery and
+analysis of composite transposons from assembly graphs reveals hidden antibiotic
+resistance gene mobilization networks. "
 > [Manuscript in preparation]
 
 ---
