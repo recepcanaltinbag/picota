@@ -386,24 +386,6 @@ python picota/picota.py analysis --gfa assembly.gfa \
 
 ---
 
-## How to Cite
-
-If you use PICOTA, please cite:
-
-```bibtex
-@article{can2024picota,
-  title={PICOTA: Pipeline for Identification of Composite Transposons from Assembly graphs},
-  author={Canaltinbag, Recep},
-  journal={Bioinformatics},
-  year={2024},
-  doi={pending}
-}
-```
-
-For now, please reference the GitHub repository:
-```
-https://github.com/recepcanaltinbag/picota
-```
 
 ---
 
