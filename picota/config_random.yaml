@@ -58,6 +58,9 @@ options:
   # 'strict' never discards a candidate for merely sharing a repeat node with an
   # accepted one -- see docs/ROADMAP.md phase 2.
   dedup_mode: "legacy"
+  # Estimated nucleotide identity (%) above which two same-sized candidates count
+  # as the same sequence. Used by dedup_mode "strict" only.
+  dedup_min_ani: 99.0
   mapping_threads: 8
   split_min_score: 92
 

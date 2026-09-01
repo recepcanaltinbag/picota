@@ -28,7 +28,11 @@ from src.cycle_finderv2 import (  # noqa: E402
     cycle_match_based_on_contig_id,
     reverse_complement,
 )
-from src.cycle_dedup import dedup_paths, filter_cycles_multiset  # noqa: E402
+from src.cycle_dedup import (  # noqa: E402
+    dedup_paths,
+    estimated_ani,
+    filter_cycles_multiset,
+)
 from src.cycle_kmer_hash import filter_cycles_with_kmer, get_kmer_hashes  # noqa: E402
 from synthetic_gfa import (  # noqa: E402
     make_dna,
@@ -322,3 +326,62 @@ def test_d5_shorter_k_widens_the_usable_range():
 
     assert shared(80) < THRESHOLD_SIM
     assert shared(31) > THRESHOLD_SIM
+
+
+# ─── D5 fixed: identity estimate instead of raw k-mer overlap ────────────────
+
+@pytest.mark.parametrize("k", [21, 31, 80])
+def test_d5_identity_estimate_is_stable_where_raw_overlap_is_not(k):
+    """
+    The same pair at 0.5% divergence shares 81% of its 21-mers but 48% of its
+    80-mers -- a threshold on raw overlap means something different for every k.
+    The identity estimate lands on the true value whatever k is chosen.
+    """
+    from src.cycle_dedup import canonical_kmers, multiset_jaccard
+
+    seq = make_dna(4000, 20)
+    mutated = mutate(seq, 0.005, 7)
+    jaccard = multiset_jaccard(canonical_kmers(seq, k), canonical_kmers(mutated, k))
+    assert estimated_ani(jaccard, k) == pytest.approx(0.995, abs=0.002)
+
+
+@pytest.mark.parametrize("k", [21, 80])
+def test_d5_strict_mode_merges_the_same_ct_across_assembly_noise(k):
+    """Two assemblies of one CT differing by 0.5% are one candidate, not two."""
+    seq = make_dna(4000, 20)
+    mutated = mutate(seq, 0.005, 7)
+    kept = filter_cycles_multiset(
+        [Cycle("a", seq, len(seq), 2, []),
+         Cycle("b", mutated, len(mutated), 2, [])],
+        k, THRESHOLD_SIM, "Cycle", min_ani=0.99)
+    assert len(kept) == 1
+
+
+# ─── D6: path_limit truncation is now counted and reported ──────────────────
+
+def test_d6_truncated_searches_are_counted(tmp_path):
+    """
+    Hitting path_limit means candidate cycles were never enumerated. Legacy
+    assigned a dead local and reported nothing, so the results looked complete.
+    """
+    gfa = shared_repeat_n_cargos(str(tmp_path / "n.gfa"), 4)
+    graph_work = GraphWork()
+    graph_work.find_all_path = True
+    graph_work.path_limit = 1  # forces every search to be cut short
+
+    node_dict, edge_dict = graph_work.parse_gfa(gfa)
+    graph_work.dfs_iterative(graph_work.generate_genome_graph(node_dict, edge_dict))
+
+    assert graph_work.truncated_searches > 0
+
+
+def test_d6_no_truncation_reported_when_limit_is_generous(tmp_path):
+    gfa = shared_repeat_n_cargos(str(tmp_path / "n.gfa"), 4)
+    graph_work = GraphWork()
+    graph_work.find_all_path = True
+    graph_work.path_limit = 25
+
+    node_dict, edge_dict = graph_work.parse_gfa(gfa)
+    graph_work.dfs_iterative(graph_work.generate_genome_graph(node_dict, edge_dict))
+
+    assert graph_work.truncated_searches == 0

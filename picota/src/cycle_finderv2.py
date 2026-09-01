@@ -84,6 +84,10 @@ class GraphWork:
         self.visited = set()
         self.find_all_path = False
         self.path_limit = 15
+        # How many searches stopped at path_limit. Every one of them is a set of
+        # candidate cycles that were never enumerated, so a non-zero count means
+        # the results are incomplete and path_limit should be raised (D6).
+        self.truncated_searches = 0
 
     def dfs(self, G):
         discovered = set()
@@ -214,7 +218,7 @@ class GraphWork:
             self.reverseallPaths.append(path.copy())
 
         elif len(path) >= self.path_limit:
-            LIMIT = True
+            self.truncated_searches += 1
         else:
             for i in graph.adj[src]:
                 if i not in self.visited:
@@ -593,11 +597,15 @@ def write_depth_report(out_cycle_file, cycles):
     return report_path
 
 
-def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_size_of_cycle, max_size_of_cycle, name_prefix_cycle, min_component_number, max_component_number, k_mer_sim, threshold_sim, dedup_mode='legacy'):
+def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_size_of_cycle, max_size_of_cycle, name_prefix_cycle, min_component_number, max_component_number, k_mer_sim, threshold_sim, dedup_mode='legacy', dedup_min_ani=99.0):
     """
     dedup_mode: 'legacy' reproduces the historical behaviour exactly.
     'strict' uses src.cycle_dedup, which never discards a candidate for merely
     sharing a repeat node with an accepted one -- see docs/ROADMAP.md phase 2.
+
+    dedup_min_ani: estimated nucleotide identity, as a percentage, above which
+    two same-sized candidates are considered the same sequence. Used by 'strict'
+    only; 'legacy' ignores it.
     """
     if dedup_mode not in ('legacy', 'strict'):
         raise ValueError(f"dedup_mode must be 'legacy' or 'strict', got {dedup_mode!r}")
@@ -659,6 +667,11 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
 
 
     print('Finding Paths from cycles...')
+    if GW.truncated_searches:
+        print(f'WARNING: {GW.truncated_searches} path search(es) hit path_limit='
+              f'{path_limit} and were cut short. Candidate cycles longer than '
+              f'{path_limit} nodes are missing from these results; raise '
+              f'path_limit to enumerate them.')
     print('Cycle number: ',len(GW.cycles))
     print('All Paths: ', len(GW.allPaths))
     print('Reverse Paths: ', len(GW.reverseallPaths))
@@ -752,7 +765,9 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     print(len(cycle_info_list))
     
     if dedup_mode == 'strict':
-        cycle_clear_list = filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle)
+        cycle_clear_list = filter_cycles_multiset(
+            cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle,
+            min_ani=dedup_min_ani / 100.0)
     else:
         cycle_clear_list = filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle)
 

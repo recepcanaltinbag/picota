@@ -17,17 +17,19 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from src.cycle_dedup import (  # noqa: E402
     canonical_kmers,
+    estimated_ani,
     canonical_path_key,
     dedup_paths,
     filter_cycles_multiset,
     flip_orientation,
+    length_ratio,
     multiset_jaccard,
     paths_are_duplicates,
     reverse_complement,
     reverse_traversal,
 )
 from src.cycle_finderv2 import Cycle  # noqa: E402
-from synthetic_gfa import make_dna  # noqa: E402
+from synthetic_gfa import make_dna, mutate  # noqa: E402
 
 
 class TestOrientation:
@@ -207,3 +209,103 @@ class TestFilterCyclesMultiset:
         cycles = [self._cycle("x", make_dna(4000, 25)),
                   self._cycle("y", make_dna(4000, 26))]
         assert len(filter_cycles_multiset(cycles, 21, 0, "Cycle")) == 2
+
+
+class TestEstimatedAni:
+    """
+    D5: raw k-mer overlap is a cliff whose position depends on k. The Mash
+    transform turns it into a quantity that tracks true identity, which is what
+    makes a threshold meaningful rather than an artefact of the parameter.
+    """
+
+    @pytest.mark.parametrize("divergence", [0.001, 0.005, 0.01, 0.02, 0.05])
+    def test_recovers_true_identity(self, divergence):
+        seq = make_dna(4000, 20)
+        mutated = mutate(seq, divergence, 7)
+        jaccard = multiset_jaccard(canonical_kmers(seq, 21),
+                                   canonical_kmers(mutated, 21))
+        assert estimated_ani(jaccard, 21) == pytest.approx(1 - divergence, abs=0.005)
+
+    @pytest.mark.parametrize("k", [21, 31, 80])
+    def test_estimate_is_stable_across_k(self, k):
+        """
+        The raw Jaccard for this pair is 0.81 at k=21 and 0.48 at k=80. The
+        identity estimate has to stay put where the Jaccard does not.
+        """
+        seq = make_dna(4000, 20)
+        mutated = mutate(seq, 0.005, 7)
+        jaccard = multiset_jaccard(canonical_kmers(seq, k), canonical_kmers(mutated, k))
+        assert estimated_ani(jaccard, k) == pytest.approx(0.995, abs=0.002)
+
+    def test_identical_sequences_estimate_one(self):
+        assert estimated_ani(1.0, 21) == 1.0
+
+    def test_no_overlap_estimates_zero(self):
+        assert estimated_ani(0.0, 21) == 0.0
+
+    def test_negative_jaccard_is_clamped(self):
+        assert estimated_ani(-0.5, 21) == 0.0
+
+
+class TestLengthRatio:
+    def test_equal_lengths(self):
+        assert length_ratio(4000, 4000) == 1.0
+
+    def test_shorter_over_longer_regardless_of_order(self):
+        assert length_ratio(2400, 3900) == length_ratio(3900, 2400)
+        assert length_ratio(2400, 3900) == pytest.approx(0.615, abs=0.001)
+
+    def test_zero_length(self):
+        assert length_ratio(0, 0) == 0.0
+
+
+class TestAniDeduplication:
+    """The two criteria together, which is how strict mode actually runs."""
+
+    def _cycles(self, seq_a, seq_b):
+        return [Cycle("a", seq_a, len(seq_a), 2, []),
+                Cycle("b", seq_b, len(seq_b), 2, [])]
+
+    @pytest.mark.parametrize("k", [21, 80])
+    def test_same_ct_at_half_percent_divergence_is_merged(self, k):
+        """D5 fixed: assembly-level noise no longer looks like a distinct CT."""
+        seq = make_dna(4000, 20)
+        cycles = self._cycles(seq, mutate(seq, 0.005, 7))
+        assert len(filter_cycles_multiset(cycles, k, 80, "Cycle", min_ani=0.99)) == 1
+
+    @pytest.mark.parametrize("k", [21, 80])
+    def test_complete_ct_not_merged_into_its_fragment(self, k):
+        """
+        D3 must stay fixed. At k=80 these estimate 99.65% identity, above the
+        threshold -- only the length criterion keeps them apart.
+        """
+        is_element, cargo = make_dna(1500, 10), make_dna(900, 11)
+        cycles = self._cycles(is_element + cargo, is_element + cargo + is_element)
+        assert len(filter_cycles_multiset(cycles, k, 80, "Cycle", min_ani=0.99)) == 2
+
+    @pytest.mark.parametrize("k", [21, 80])
+    def test_contained_cycle_not_merged(self, k):
+        shared = make_dna(1500, 10) + make_dna(900, 11)
+        cycles = self._cycles(shared, shared + make_dna(2000, 12))
+        assert len(filter_cycles_multiset(cycles, k, 80, "Cycle", min_ani=0.99)) == 2
+
+    def test_genuine_duplicates_still_merged(self):
+        seq = make_dna(4000, 30)
+        assert len(filter_cycles_multiset(self._cycles(seq, seq), 21, 80,
+                                          "Cycle", min_ani=0.99)) == 1
+
+    def test_ani_path_is_order_independent(self):
+        seq = make_dna(4000, 20)
+        mutated = mutate(seq, 0.005, 7)
+        forward = filter_cycles_multiset(self._cycles(seq, mutated), 21, 80,
+                                         "Cycle", min_ani=0.99)
+        backward = filter_cycles_multiset(self._cycles(mutated, seq), 21, 80,
+                                          "Cycle", min_ani=0.99)
+        assert len(forward) == len(backward) == 1
+
+    def test_length_guard_can_be_relaxed(self):
+        """min_length_ratio=0 reduces the rule to identity alone."""
+        is_element, cargo = make_dna(1500, 10), make_dna(900, 11)
+        cycles = self._cycles(is_element + cargo, is_element + cargo + is_element)
+        assert len(filter_cycles_multiset(cycles, 80, 80, "Cycle", min_ani=0.99,
+                                          min_length_ratio=0.0)) == 1

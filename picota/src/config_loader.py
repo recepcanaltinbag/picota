@@ -92,6 +92,9 @@ class OptionsConfig:
     # src.cycle_dedup, which never discards a candidate for merely sharing a
     # repeat node with an accepted one. See docs/ROADMAP.md phase 2.
     dedup_mode: str = "legacy"
+    # Estimated nucleotide identity (%) above which two same-sized candidates
+    # count as the same sequence. Used by dedup_mode 'strict' only.
+    dedup_min_ani: float = 99.0
 
 
 

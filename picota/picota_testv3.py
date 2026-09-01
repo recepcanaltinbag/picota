@@ -160,7 +160,7 @@ def run_cycle_analysis(acc, gfa_file, out_file, cfg: Config):
         cfg.options.min_size_of_cycle, cfg.options.max_size_of_cycle, cfg.options.name_prefix_cycle,
         cfg.options.min_component_number, cfg.options.max_component_number,
         cfg.options.k_mer_sim, cfg.options.threshold_sim,
-        cfg.options.dedup_mode
+        cfg.options.dedup_mode, cfg.options.dedup_min_ani
     )
 
 

@@ -29,6 +29,7 @@ This module replaces both with measures that cannot delete a distinct CT:
 See docs/ROADMAP.md and tests/test_known_defects.py.
 """
 
+import math
 from collections import Counter, defaultdict
 
 from src.cycle_kmer_hash import print_progress_bar
@@ -152,8 +153,35 @@ def multiset_jaccard(counts_a, counts_b):
     return intersection / union if union else 0.0
 
 
+def estimated_ani(jaccard, k):
+    """
+    Convert a k-mer Jaccard index into an estimated nucleotide identity.
+
+    The Mash transform. Raw k-mer overlap is a cliff whose position depends
+    entirely on k -- two sequences at 99.5% identity share 81% of their 21-mers
+    but only 48% of their 80-mers -- so a threshold on it is an artefact of the
+    parameter rather than a statement about the sequences. The transform undoes
+    that: the same pair estimates 99.49% and 99.47% identity at k=21 and k=80,
+    which is a quantity a biologist can actually choose a threshold for.
+
+    Returns a fraction in [0, 1].
+    """
+    if jaccard <= 0:
+        return 0.0
+    if jaccard >= 1:
+        return 1.0
+    return max(0.0, 1.0 + math.log(2 * jaccard / (1 + jaccard)) / k)
+
+
+def length_ratio(length_a, length_b):
+    """Shorter length over longer, or 0 when either is empty."""
+    longest = max(length_a, length_b)
+    return min(length_a, length_b) / longest if longest else 0.0
+
+
 def filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim,
-                           name_prefix_cycle):
+                           name_prefix_cycle, min_ani=None,
+                           min_length_ratio=0.95):
     """
     Drop cycles that are near-identical to one already accepted.
 
@@ -161,6 +189,16 @@ def filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim,
     naming behaviour; `threshold_sim` is still a percentage. What changes is the
     measure: multiset Jaccard over canonical circular k-mers rather than
     directional containment over k-mer sets.
+
+    When `min_ani` is given (as a fraction, e.g. 0.99) the decision switches
+    from raw Jaccard to two criteria that must both hold: the estimated
+    nucleotide identity is at least `min_ani`, AND the two lengths are within
+    `min_length_ratio` of each other. Both are needed. Identity alone would
+    merge a composite transposon with the fragment inside it -- IS-cargo-IS
+    against IS-cargo estimates 99.65% identity at k=80, comfortably above any
+    sensible threshold -- because a copy-number difference is not divergence,
+    and the transform cannot tell them apart. Length separates them: those two
+    differ by 38% in size, while a genuine duplicate does not differ at all.
 
     As in the legacy filter, the inverted index only surfaces candidates that
     share at least one k-mer, so cycles with nothing in common are never
@@ -187,7 +225,14 @@ def filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim,
             for kmer in counts:
                 candidate_indices.update(kmer_index[kmer])
             for candidate in candidate_indices:
-                if multiset_jaccard(counts, accepted_counts[candidate]) >= threshold:
+                other_counts, other_length = accepted_counts[candidate]
+                jaccard = multiset_jaccard(counts, other_counts)
+                if min_ani is None:
+                    if jaccard >= threshold:
+                        is_duplicate = True
+                        break
+                elif (estimated_ani(jaccard, k_mer_sim) >= min_ani
+                      and length_ratio(cycle_el.length, other_length) >= min_length_ratio):
                     is_duplicate = True
                     break
 
@@ -197,7 +242,7 @@ def filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim,
             kept.append(cycle_el)
 
             position = len(accepted_counts)
-            accepted_counts.append(counts)
+            accepted_counts.append((counts, cycle_el.length))
             for kmer in counts:
                 kmer_index[kmer].append(position)
 

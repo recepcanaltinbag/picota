@@ -36,9 +36,25 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   candidates for every N (2/2, 2/3, 2/4, 2/5, 2/8), strict reports N/N. On the
   bundled `testNitro.gfa` strict returns legacy's five cycles plus one
   34,953 bp candidate legacy was deleting.
-- **`tests/test_cycle_dedup.py`** — 32 tests pinning rotation and
+- **`estimated_ani()`** (roadmap phase 3) — Mash transform converting k-mer
+  Jaccard into estimated nucleotide identity, so the deduplication threshold is
+  a property of the sequences rather than of `k`. The same 0.5%-divergent pair
+  estimates 99.49% identity at k=21 and 99.47% at k=80, where the raw Jaccard
+  swings from 0.81 to 0.48. Used with a length-ratio criterion (`min_length_ratio`,
+  default 0.95): both must hold, because identity alone merges a composite
+  transposon with the fragment inside it — IS-cargo-IS against IS-cargo
+  estimates 99.65% identity at k=80, and only the length difference separates
+  them. Threshold configurable as `dedup_min_ani` (default 99.0).
+- **`GraphWork.truncated_searches`** — `path_limit` truncation is counted and
+  `cycle_analysis()` warns when it is non-zero. Previously the truncation
+  assigned a dead local and reported nothing. The first run of the counter
+  found **96 truncated searches on the bundled `test_data/testNitro.gfa`** at
+  the default `path_limit: 25`, meaning results on that graph were incomplete
+  and nothing indicated it.
+- **`tests/test_cycle_dedup.py`** — 55 tests pinning rotation and
   reverse-complement invariance, multiset counting, Jaccard symmetry, and that
-  genuine duplicates are still removed.
+  genuine duplicates are still removed, plus the identity estimate's stability
+  across k and the two-criterion rule.
 - **Node depth parsing** (roadmap phase 1) — `parse_segment_depth()` in
   `cycle_finderv2.py` reads coverage from all four encodings PICOTA can meet:
   the SPAdes `_cov_` field in node names, MEGAHIT `multi=`, the GFA1 `dp:f:`/

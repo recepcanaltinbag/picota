@@ -38,8 +38,8 @@ XPASS failures and forces the marker to be removed.
 | **D2** | [`cycle_finderv2.py:348-387`](../picota/src/cycle_finderv2.py) | `cycle_match_based_on_contig_id` strips strand for its exact-duplicate test but keeps strand for its similarity test, and treats >70% shared node length as duplicate. **Fixed by `dedup_mode: strict`** | Legacy output saturates at 2 candidates regardless of ground truth (2/2, 2/3, 2/4, 2/5, 2/8). Strict recovers N/N |
 | **D3** | [`cycle_kmer_hash.py:12`](../picota/src/cycle_kmer_hash.py) | `get_kmer_hashes` returns a set, not a multiset, so repeat copy number is invisible. **Fixed by `dedup_mode: strict`** | Legacy collapses `IS-cargo` and `IS-cargo-IS` into one candidate, discarding the *complete* CT. Strict keeps both |
 | **D4** | [`cycle_kmer_hash.py:118-119`](../picota/src/cycle_kmer_hash.py) | Similarity denominator is `len(new_cycle)`, a containment measure used to make an identity decision. **Fixed by `dedup_mode: strict`** | Legacy result depends on DFS traversal order: the same two cycles give 1 or 2 outputs. Strict is symmetric |
-| **D5** | `k_mer_sim: 80` in `config.yaml` | Exact 80-mer matching is a cliff, not a gradient | Shared k-mers fall 86% → 64% → 34% across 0.1% → 0.5% → 1% divergence, crossing the 80% threshold with no usable middle ground. IS copies within one genome sit exactly in this range |
-| **D6** | [`cycle_finderv2.py:157-158`](../picota/src/cycle_finderv2.py) | `path_limit` truncation assigns a dead local (`LIMIT = True`) and reports nothing | Number of paths lost to truncation is unknown and unlogged |
+| **D5** | `k_mer_sim: 80` in `config.yaml` | Exact k-mer matching is a cliff whose position depends entirely on k. **Fixed by `dedup_mode: strict`** via the Mash transform (`estimated_ani`) plus a length criterion | Legacy: shared k-mers fall 86% → 64% → 34% across 0.1% → 0.5% → 1% divergence. Strict: the same pair estimates 99.49% and 99.47% identity at k=21 and k=80, so the threshold is a sequence identity rather than an artefact of k |
+| ~~**D6**~~ | [`cycle_finderv2.py`](../picota/src/cycle_finderv2.py) | ~~`path_limit` truncation assigns a dead local and reports nothing~~ **Resolved** | `GraphWork.truncated_searches` counts them and `cycle_analysis` warns. First run of the fix found **96 truncated searches on the bundled `testNitro.gfa`** at the default `path_limit: 25` — results on that graph were incomplete and nothing said so |
 
 D2 is the defect that matters most for the whole-genome benchmark: it is
 precisely the "one IS, several copies, different cargo" case that a real
@@ -72,8 +72,8 @@ not by guesswork.
 | **0.5** | Closed-genome benchmark harness. Stage 1 ✅ `scripts/select_benchmark_strains.py` shortlists closed genomes with matching Illumina runs. Stage 2 (IS annotation → ground-truth CT catalogue) and stage 3 (run + metrics) outstanding. See [VALIDATION.md](VALIDATION.md). | A baseline recall/precision number exists | No |
 | **1** ✅ | Parse node depth in `parse_gfa`; expose `depth_ratio` (max node depth / min node depth) via `Cycle.depth_ratio` and a `<cycles>.depths.tsv` sidecar. **Report-only** — nothing in detection, scoring or filtering reads it. | D1 test passes; cycle output byte-identical | No — sidecar file only |
 | **2** ✅ | `src/cycle_dedup.py`: paths are duplicates only when they are the same cycle (rotation- and reverse-complement-invariant key); sequences compared by multiset Jaccard over canonical circular k-mers. Behind `dedup_mode: legacy \| strict`, default `legacy`. | D2, D3, D4 pass in strict mode | Only when `dedup_mode: strict` is set |
-| **3** | Replace raw k-mer identity with IS-annotation-driven deduplication (two candidates sharing an IS family but carrying different cargo are two CTs, never duplicates). | D5 test passes; benchmark recall improves | Yes |
-| **4** | Deterministic superbubble enumeration and IS-centric search: mark IS-like nodes first (high depth, high degree, IS BLAST hit), then collect paths through them. | D6 resolved; `path_limit` removed | Yes — larger refactor |
+| **3** ✅ | `estimated_ani()` converts k-mer Jaccard to nucleotide identity (Mash transform), paired with a length-ratio criterion; threshold `dedup_min_ani` (default 99.0%). Both criteria are needed — identity alone merges a CT with the fragment inside it. | D5 tests pass at k=21, 31 and 80 | Only when `dedup_mode: strict` |
+| **4** | Deterministic superbubble enumeration and IS-centric search: mark IS-like nodes first (high depth, high degree, IS BLAST hit), then collect paths through them. D6 is now *reported* rather than resolved — the 96 truncated searches on `testNitro.gfa` are exactly what this phase removes the need for. | `path_limit` removed | Yes — larger refactor |
 
 Phases 2-4 are only meaningful once phase 0.5 exists; without a benchmark there
 is no way to tell an improvement from a regression.
@@ -87,9 +87,10 @@ is no way to tell an improvement from a regression.
    ground-truth CT catalogue described in [VALIDATION.md](VALIDATION.md) §3.2.
    Stage 1 is done; stage 2 needs a download budget and an IS annotator in the
    environment.
-2. **Phase 3** — replace raw k-mer identity with IS-annotation-driven
-   deduplication, which is what D5 needs: the k-mer measure is a cliff, and no
-   choice of k turns it into a gradient.
+2. **Raise `path_limit`, or start phase 4.** The D6 counter reports 96 truncated
+   searches on the bundled `testNitro.gfa` at the default `path_limit: 25`, so
+   candidate cycles are being missed on a graph already used for testing. Phase 4
+   removes the limit entirely by enumerating superbubbles deterministically.
 3. **Flip `dedup_mode` to `strict` by default** once the phase 0.5 benchmark
    confirms on real data what the synthetic graphs already show.
 
