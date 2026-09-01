@@ -58,8 +58,23 @@ and *K. pneumoniae* lineages carrying IS26-bounded resistance regions,
 *Salmonella* carrying IS26/Tn6029 arrays, and *A. baumannii* AbGRI islands
 built on ISAba1 and IS26.
 
-Strain selection is the first task of this phase and must be scripted, so the
-selection criteria are reproducible rather than anecdotal.
+Strain selection is scripted so the criteria are reproducible rather than
+anecdotal. `scripts/select_benchmark_strains.py` screens properties 1 and 2
+against NCBI (closed RefSeq assemblies, then public Illumina paired-end WGS runs
+from the same BioSample) and writes a shortlist TSV with the estimated read
+depth each run would give:
+
+```
+python scripts/select_benchmark_strains.py \
+    --email you@example.org \
+    --species "Escherichia coli" "Klebsiella pneumoniae" \
+    --limit 200 --min-coverage 40 \
+    --out benchmark_candidates.tsv
+```
+
+Property 3 -- several copies of one IS family with at least two carrying
+different cargo -- is not screened there, because it needs the genome downloaded
+and annotated. That is stage 2, described below.
 
 ### 3.2 Ground truth construction
 

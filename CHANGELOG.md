@@ -32,6 +32,13 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 - **`<cycles>.depths.tsv` sidecar** — per-cycle depth report written next to the
   cycle FASTA by `cycle_analysis()`. **Report-only**: no detection, scoring or
   filtering decision reads it, and cycle output is unchanged.
+- **`scripts/select_benchmark_strains.py`** (roadmap phase 0.5, stage 1) —
+  shortlists benchmark strains reproducibly: closed RefSeq genomes that also
+  have public Illumina paired-end WGS runs from the same BioSample, with the
+  read depth each run would give over that genome. Network access is isolated
+  in `EntrezClient` so the parsing and ranking logic is testable offline.
+- **`tests/test_select_benchmark_strains.py`** — 29 offline tests using record
+  shapes taken from live NCBI esummary responses.
 - **`tests/test_depth.py`** — 21 tests covering every depth encoding, the
   `depth_ratio` edge cases, the sidecar report, and a guard that depth tags do
   not change which cycles are reported.

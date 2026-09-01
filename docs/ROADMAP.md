@@ -64,7 +64,7 @@ not by guesswork.
 | Phase | Work | Exit criterion | Invalidates prior analyses? |
 |-------|------|----------------|------------------------------|
 | **0** ✅ | Characterization tests over synthetic assembly graphs (`tests/synthetic_gfa.py`, `tests/test_known_defects.py`). No production code touched. | Every defect in §2 reproduced by a test | No |
-| **0.5** | Closed-genome benchmark harness: ground-truth CT catalogue, PICOTA run, metrics. See [VALIDATION.md](VALIDATION.md). | A baseline recall/precision number exists | No |
+| **0.5** | Closed-genome benchmark harness. Stage 1 ✅ `scripts/select_benchmark_strains.py` shortlists closed genomes with matching Illumina runs. Stage 2 (IS annotation → ground-truth CT catalogue) and stage 3 (run + metrics) outstanding. See [VALIDATION.md](VALIDATION.md). | A baseline recall/precision number exists | No |
 | **1** ✅ | Parse node depth in `parse_gfa`; expose `depth_ratio` (max node depth / min node depth) via `Cycle.depth_ratio` and a `<cycles>.depths.tsv` sidecar. **Report-only** — nothing in detection, scoring or filtering reads it. | D1 test passes; cycle output byte-identical | No — sidecar file only |
 | **2** | Replace sequence-similarity deduplication with node-multiset identity; keep containment as a recorded parent/child relation instead of a deletion. | D2, D3, D4 tests pass; benchmark recall improves | Yes, once the flag is enabled |
 | **3** | Replace raw k-mer identity with IS-annotation-driven deduplication (two candidates sharing an IS family but carrying different cargo are two CTs, never duplicates). | D5 test passes; benchmark recall improves | Yes |
@@ -77,9 +77,11 @@ is no way to tell an improvement from a regression.
 
 ## 5. Immediate next steps
 
-1. **Phase 0.5** — select benchmark strains (criteria in
-   [VALIDATION.md](VALIDATION.md)), build the ground-truth CT catalogue, record
-   baseline metrics. Blocked on strain selection and download budget.
+1. **Phase 0.5 stage 2** — run `scripts/select_benchmark_strains.py`, then
+   annotate IS elements on the shortlisted genomes (ISEScan) and build the
+   ground-truth CT catalogue described in [VALIDATION.md](VALIDATION.md) §3.2.
+   Stage 1 is done; stage 2 needs a download budget and an IS annotator in the
+   environment.
 2. **Phase 2** — deduplication rewrite, measured against the phase 0.5 baseline.
    Characterization tests D2, D3 and D4 define the target.
 
