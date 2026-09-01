@@ -98,12 +98,41 @@ def load_backbone(path):
     return header.split()[0], seq
 
 
-def place_inserts(backbone, inserts, rng, min_spacing):
+def choose_positions(backbone_length, count, min_spacing, rng, placement):
     """
-    Splice inserts into the backbone at evenly spaced positions.
+    Pick `count` insertion points at least `min_spacing` apart.
+
+    'random' draws uniformly over all valid configurations: sample offsets in
+    the length left over once the mandatory gaps are reserved, sort them, then
+    add the gaps back. Even spacing is a systematic artefact -- it puts every
+    composite transposon the same distance apart, which is not how a genome
+    looks and could flatter or punish an assembler in ways nothing else would
+    reveal -- so it is available but not the default.
+    """
+    if not count:
+        return []
+
+    reserved = (count + 1) * min_spacing
+    available = backbone_length - reserved
+    if available < 0:
+        raise SystemExit(
+            f"Backbone of {backbone_length:,} bp cannot hold {count} inserts at "
+            f"--spacing {min_spacing:,}; use a longer backbone or fewer elements")
+
+    if placement == "even":
+        span = backbone_length // (count + 1)
+        return [span * (i + 1) for i in range(count)]
+
+    offsets = sorted(rng.randint(0, available) for _ in range(count))
+    return [min_spacing * (i + 1) + offset for i, offset in enumerate(offsets)]
+
+
+def place_inserts(backbone, inserts, rng, min_spacing, placement="random"):
+    """
+    Splice inserts into the backbone.
 
     Returns (genome, starts) where starts[i] is the 0-based offset of inserts[i]
-    in the finished genome. Positions are computed against the ORIGINAL backbone
+    in the finished genome. Positions are chosen against the ORIGINAL backbone
     and the offsets accumulated as we splice, because every insert shifts
     everything downstream -- getting that wrong is the one way to produce ground
     truth that looks plausible and is silently wrong.
@@ -112,13 +141,7 @@ def place_inserts(backbone, inserts, rng, min_spacing):
     if not count:
         return backbone, []
 
-    span = len(backbone) // (count + 1)
-    if span < min_spacing:
-        raise SystemExit(
-            f"Backbone of {len(backbone):,} bp cannot hold {count} inserts at "
-            f"--spacing {min_spacing:,}; use a longer backbone or fewer elements")
-
-    positions = [span * (i + 1) for i in range(count)]
+    positions = choose_positions(len(backbone), count, min_spacing, rng, placement)
 
     pieces = []
     starts = []
@@ -285,7 +308,8 @@ def simulate(args):
         backbone = random_backbone(max(args.backbone_length, needed),
                                    args.gc_content, rng)
 
-    genome, starts = place_inserts(backbone, inserts, rng, args.spacing)
+    genome, starts = place_inserts(backbone, inserts, rng, args.spacing,
+                                   args.placement)
 
     records = []
     for record, start in zip(pending, starts):
@@ -372,8 +396,14 @@ def build_parser():
                         help="Longest IS element to draw. Default: %(default)s")
     parser.add_argument("--cargo-genes", type=int, default=2,
                         help="AMR genes per cargo. Default: %(default)s")
+    parser.add_argument("--placement", choices=("random", "even"), default="random",
+                        help="Where to implant. 'random' scatters the elements, "
+                             "subject to --spacing; 'even' puts them at equal "
+                             "intervals, which is a systematic artefact. "
+                             "Default: %(default)s")
     parser.add_argument("--spacing", type=int, default=20000,
-                        help="Backbone between implanted elements. Default: %(default)s")
+                        help="Minimum backbone between implanted elements. "
+                             "Default: %(default)s")
     parser.add_argument("--gc-content", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=1)
     return parser

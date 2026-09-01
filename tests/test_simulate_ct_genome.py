@@ -17,6 +17,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from simulate_ct_genome import (  # noqa: E402
+    choose_positions,
     load_backbone,
     place_inserts,
     GROUND_TRUTH_COLUMNS,
@@ -369,3 +370,69 @@ class TestRealBackbone:
         # so check that every backbone base still appears in order around them.
         assert genome.count(long_seq[:1000]) == 1
         assert long_seq[:1000] in genome
+
+
+class TestChoosePositions:
+    """
+    Random placement has to stay valid: inserts must not collide, and must not
+    run off either end. An off-by-one here would corrupt ground truth silently.
+    """
+
+    def test_minimum_spacing_is_respected(self):
+        rng = random.Random(40)
+        for _ in range(50):
+            positions = choose_positions(1000000, 8, 20000, rng, "random")
+            gaps = [b - a for a, b in zip(positions, positions[1:])]
+            assert all(gap >= 20000 for gap in gaps)
+
+    def test_positions_stay_inside_the_backbone(self):
+        rng = random.Random(41)
+        for _ in range(50):
+            positions = choose_positions(1000000, 8, 20000, rng, "random")
+            assert positions[0] >= 20000
+            assert positions[-1] <= 1000000 - 20000
+
+    def test_positions_are_sorted(self):
+        positions = choose_positions(1000000, 10, 5000, random.Random(42), "random")
+        assert positions == sorted(positions)
+
+    def test_random_placement_actually_varies(self):
+        """Otherwise it is even spacing wearing a different name."""
+        first = choose_positions(1000000, 6, 20000, random.Random(1), "random")
+        second = choose_positions(1000000, 6, 20000, random.Random(2), "random")
+        assert first != second
+
+    def test_even_placement_is_evenly_spaced(self):
+        positions = choose_positions(1000000, 4, 1000, random.Random(1), "even")
+        gaps = [b - a for a, b in zip(positions, positions[1:])]
+        assert len(set(gaps)) == 1
+
+    def test_zero_inserts(self):
+        assert choose_positions(1000, 0, 100, random.Random(1), "random") == []
+
+    def test_backbone_too_small_is_rejected(self):
+        with pytest.raises(SystemExit):
+            choose_positions(10000, 5, 20000, random.Random(1), "random")
+
+    def test_exactly_fitting_backbone_is_accepted(self):
+        positions = choose_positions(6 * 1000, 5, 1000, random.Random(1), "random")
+        assert len(positions) == 5
+
+
+class TestPlacementInSimulation:
+    def test_random_placement_is_the_default(self, is_fasta, cargo_fasta, tmp_path):
+        args = make_args(is_fasta, cargo_fasta, tmp_path)
+        assert args.placement == "random"
+
+    def test_coordinates_stay_correct_under_random_placement(self, is_fasta,
+                                                             cargo_fasta, tmp_path):
+        for seed in (1, 2, 3):
+            genome, records, _ = simulate(
+                make_args(is_fasta, cargo_fasta, tmp_path, seed=seed))
+            for record in records:
+                assert genome[record["CT_Start"] - 1:record["CT_End"]] == record["Sequence"]
+
+    def test_different_seeds_place_cts_differently(self, is_fasta, cargo_fasta, tmp_path):
+        _, first, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path, seed=1))
+        _, second, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path, seed=2))
+        assert [r["CT_Start"] for r in first] != [r["CT_Start"] for r in second]

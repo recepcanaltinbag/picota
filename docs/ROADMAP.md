@@ -15,7 +15,10 @@ Status: 2026-09-01. Companion document: [VALIDATION.md](VALIDATION.md).
 - **v1.1 (unreleased)** — `output_formatter.py` and the CT-tagged
   `picota_enriched.csv`, cross-sample novel-CT clustering (`ct_cluster.py`),
   step-progress logging, E2E tests over the bundled `test_data/testNitro.gfa`.
-- **Test suite** — 125 unit and smoke tests passing.
+- **Test suite** — unit, smoke, and an end-to-end test
+  (`tests/test_e2e_simulated_ct.py`) that implants composite transposons,
+  sequences them with wgsim, assembles with SPAdes and checks PICOTA recovers
+  them. About 13 seconds; skipped when the tools are absent.
 
 ### Not implemented
 
@@ -39,6 +42,7 @@ XPASS failures and forces the marker to be removed.
 | **D3** | [`cycle_kmer_hash.py:12`](../picota/src/cycle_kmer_hash.py) | `get_kmer_hashes` returns a set, not a multiset, so repeat copy number is invisible. **Fixed by `dedup_mode: strict`** | Legacy collapses `IS-cargo` and `IS-cargo-IS` into one candidate, discarding the *complete* CT. Strict keeps both |
 | **D4** | [`cycle_kmer_hash.py:118-119`](../picota/src/cycle_kmer_hash.py) | Similarity denominator is `len(new_cycle)`, a containment measure used to make an identity decision. **Fixed by `dedup_mode: strict`** | Legacy result depends on DFS traversal order: the same two cycles give 1 or 2 outputs. Strict is symmetric |
 | **D5** | `k_mer_sim: 80` in `config.yaml` | Exact k-mer matching is a cliff whose position depends entirely on k. **Mitigated, not fixed.** `estimated_ani()` gives a k-stable identity estimate, but no k-mer statistic can carry the merge decision — see §3.1 | Legacy: shared k-mers fall 86% → 64% → 34% across 0.1% → 0.5% → 1% divergence. Strict adds a Jaccard floor and a length criterion and errs toward keeping candidates |
+| **D7** | `min_size_of_cycle: 2000` in `config.yaml` | The graph cycle for a composite transposon is IS + cargo, not IS + cargo + IS, so the default threshold silently drops compact CTs. IS26 at 820 bp plus one resistance gene yields a cycle under 2 kb | Found by `tests/test_e2e_simulated_ct.py`: an implanted CT whose cycle is 1877 bp is missed at the default and recovered at `min_size_of_cycle: 1000`. Compact IS26-bounded single-gene units are among the most common CTs in clinical isolates, so the default is not neutral |
 | ~~**D6**~~ | [`cycle_finderv2.py`](../picota/src/cycle_finderv2.py) | ~~`path_limit` truncation assigns a dead local and reports nothing~~ **Resolved** | `GraphWork.truncated_searches` counts them and `cycle_analysis` warns that the enumeration was not exhaustive. On the bundled `testNitro.gfa` the default `path_limit: 25` truncates 96 searches; raising it to 50 truncates none and returns the **same 35 paths** (longest 14 nodes), so nothing was actually lost there. The counter flags *unverified completeness*, not proven loss |
 
 D2 is the defect that matters most for the whole-genome benchmark: it is
@@ -131,8 +135,11 @@ is no way to tell an improvement from a regression.
    On a real genome the same warning would need the same check, every time.
    Phase 4 removes the limit entirely by enumerating superbubbles
    deterministically, which removes the question rather than the symptom.
-3. **Flip `dedup_mode` to `strict` by default** once the phase 0.5 benchmark
-   confirms on real data what the synthetic graphs already show.
+3. **Decide what to do about D7.** Lowering `min_size_of_cycle` recovers compact
+   composite transposons but admits more short spurious cycles; the benchmark
+   can measure that trade directly rather than leaving the default to habit.
+4. **Flip `dedup_mode` to `strict` by default** once the benchmark sweep
+   confirms on more genomes what the current cases already show.
 
 Known limitation of phase 1: when depth comes from `KC:i:`/`LN:i:` the value is a
 k-mer count per base, which underestimates true depth by `(length - k + 1)/length`.

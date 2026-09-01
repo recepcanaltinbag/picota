@@ -44,6 +44,22 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   real chromosome (e.g. *E. coli* K-12 MG1655) instead of random filler, at the
   cost of the host's own IS elements appearing as apparent false positives.
   Emits `ground_truth.tsv`, `ground_truth_cts.fasta` and `ground_truth.json`.
+- **`tests/test_e2e_simulated_ct.py`** — end-to-end test of the claim the tool
+  makes: implant composite transposons, sequence with wgsim, assemble with
+  SPAdes, and check PICOTA recovers them, including that two CTs built on the
+  same IS element come back as separate candidates. ~13 s; skipped when wgsim,
+  spades.py or blastn are missing.
+- **D7, found by that test**: `min_size_of_cycle: 2000` silently drops compact
+  composite transposons. The graph cycle is IS + cargo, not IS + cargo + IS, so
+  an IS26-sized element with a single resistance gene produces a cycle under
+  2 kb. A simulated CT with a 1877 bp cycle is missed at the default and
+  recovered at 1000.
+- **`scripts/run_ct_benchmark.py`** — sweeps the whole benchmark over several
+  host chromosomes, CT counts and seeds, writing one row per case to
+  `summary.tsv`. Resumable: a case already in the summary is skipped.
+- **`--placement random`** (now the default in `simulate_ct_genome.py`) —
+  implants are scattered subject to `--spacing` rather than evenly spaced.
+  Even spacing put every CT the same distance apart, a systematic artefact.
 - **`scripts/score_picota_benchmark.py`** — scores reported cycles against that
   ground truth: CT recall, precision, and copy-distinctness recall (how many CTs
   sharing an IS came back as *separate* cycles).
