@@ -130,7 +130,7 @@ _IS_REGEX_RULES = sorted([
     (re.compile(r'^IS30\b',   re.I), "IS30",         "IS30"),
     (re.compile(r'^IS66\b',   re.I), "IS66",         "IS66"),
     (re.compile(r'^IS91\b',   re.I), "IS91",         "IS91"),
-    (re.compile(r'^ISCR\b',   re.I), "IS91",         "ISCR"),
+    (re.compile(r'^ISCR',     re.I), "IS91",         "ISCR"),   # no \b: ISCR4..ISCR30
     (re.compile(r'^IS110\b',  re.I), "IS110",        "IS110"),
     (re.compile(r'^IS256\b',  re.I), "IS256",        "IS256"),
     (re.compile(r'^IS481\b',  re.I), "IS481",        "IS481"),
@@ -140,7 +140,7 @@ _IS_REGEX_RULES = sorted([
     (re.compile(r'^IS1111\b', re.I), "IS1111",       "IS1111"),
     (re.compile(r'^IS1380\b', re.I), "IS1380",       "IS1380"),
     (re.compile(r'^IS1595\b', re.I), "IS1595",       "IS1595"),
-    (re.compile(r'^ISEcp\b',  re.I), "IS1380",       "ISEcp"),
+    (re.compile(r'^ISEcp',    re.I), "IS1380",       "ISEcp"),   # no \b: ISEcp2, ISEcp3
     (re.compile(r'^ISApl\b',  re.I), "IS256",        "ISApl"),
     (re.compile(r'^ISAs1\b',  re.I), "ISAs1",        "ISAs1"),
     (re.compile(r'^IS6\b',    re.I), "IS6",          "IS6"),
