@@ -81,6 +81,61 @@ def is_clean_dna(seq):
     return bool(seq) and set(seq) <= set(DNA)
 
 
+def load_backbone(path):
+    """
+    Read a real genome to implant into, taking its longest record.
+
+    A real chromosome carries its own IS elements -- K-12 MG1655 alone has
+    dozens -- so the implanted CTs are exact ground truth but the background is
+    not empty. Native IS pairs can form cycles of their own, which show up as
+    apparent false positives. That is a property of the test, not of PICOTA, and
+    any report using a real backbone has to say so.
+    """
+    records = list(read_fasta(path))
+    if not records:
+        raise SystemExit(f"No sequences in {path}")
+    header, seq = max(records, key=lambda record: len(record[1]))
+    return header.split()[0], seq
+
+
+def place_inserts(backbone, inserts, rng, min_spacing):
+    """
+    Splice inserts into the backbone at evenly spaced positions.
+
+    Returns (genome, starts) where starts[i] is the 0-based offset of inserts[i]
+    in the finished genome. Positions are computed against the ORIGINAL backbone
+    and the offsets accumulated as we splice, because every insert shifts
+    everything downstream -- getting that wrong is the one way to produce ground
+    truth that looks plausible and is silently wrong.
+    """
+    count = len(inserts)
+    if not count:
+        return backbone, []
+
+    span = len(backbone) // (count + 1)
+    if span < min_spacing:
+        raise SystemExit(
+            f"Backbone of {len(backbone):,} bp cannot hold {count} inserts at "
+            f"--spacing {min_spacing:,}; use a longer backbone or fewer elements")
+
+    positions = [span * (i + 1) for i in range(count)]
+
+    pieces = []
+    starts = []
+    output_length = 0
+    previous = 0
+    for position, sequence in zip(positions, inserts):
+        chunk = backbone[previous:position]
+        pieces.append(chunk)
+        output_length += len(chunk)
+        starts.append(output_length)
+        pieces.append(sequence)
+        output_length += len(sequence)
+        previous = position
+    pieces.append(backbone[previous:])
+    return "".join(pieces), starts
+
+
 def random_backbone(length, gc_content, rng):
     """
     Filler sequence with the requested GC content.
@@ -194,25 +249,15 @@ def simulate(args):
     if shared:
         is_copy_counts[shared[0][0]] = is_copy_counts.get(shared[0][0], 0) + args.is_copies_outside
 
-    pieces = []
-    records = []
-    position = 0
-
-    def append(seq):
-        nonlocal position
-        pieces.append(seq)
-        start = position
-        position += len(seq)
-        return start
-
+    inserts = []
+    pending = []
     for index, ((name_family, is_seq), cargo) in enumerate(assignments, start=1):
-        append(random_backbone(args.spacing, args.gc_content, rng))
         ct_seq, cargo_seq = build_composite_transposon(
             is_seq, [seq for _, seq in cargo], args.is_divergence,
             args.is_orientation, rng)
-        start = append(ct_seq)
         is_name, is_family = name_family
-        records.append({
+        inserts.append(ct_seq)
+        pending.append({
             "CT_ID": f"CT{index:03d}",
             "IS_Name": is_name,
             "IS_Family": is_family,
@@ -221,8 +266,6 @@ def simulate(args):
             "IS_Orientation": args.is_orientation,
             "Cargo_Genes": ";".join(name for name, _ in cargo),
             "Cargo_Length": len(cargo_seq),
-            "CT_Start": start + 1,
-            "CT_End": start + len(ct_seq),
             "CT_Length": len(ct_seq),
             "IS_Genome_Copies": is_copy_counts[is_name],
             "Sequence": ct_seq,
@@ -232,21 +275,33 @@ def simulate(args):
     # the depth of a genuinely multi-copy element rather than of a pair.
     if shared and args.is_copies_outside:
         for _ in range(args.is_copies_outside):
-            append(random_backbone(args.spacing, args.gc_content, rng))
-            append(mutate(shared[1], args.is_divergence, rng))
+            inserts.append(mutate(shared[1], args.is_divergence, rng))
 
-    append(random_backbone(max(args.backbone_length - position, args.spacing),
-                           args.gc_content, rng))
+    if args.backbone_fasta:
+        backbone_name, backbone = load_backbone(args.backbone_fasta)
+    else:
+        backbone_name = "simulated_chromosome"
+        needed = (len(pending) + args.is_copies_outside + 1) * args.spacing
+        backbone = random_backbone(max(args.backbone_length, needed),
+                                   args.gc_content, rng)
 
-    return "".join(pieces), records
+    genome, starts = place_inserts(backbone, inserts, rng, args.spacing)
+
+    records = []
+    for record, start in zip(pending, starts):
+        record["CT_Start"] = start + 1
+        record["CT_End"] = start + record["CT_Length"]
+        records.append(record)
+
+    return genome, records, backbone_name
 
 
-def write_outputs(out_dir, genome, records, params):
+def write_outputs(out_dir, genome, records, params, backbone_name="simulated_chromosome"):
     os.makedirs(out_dir, exist_ok=True)
 
     genome_path = os.path.join(out_dir, "genome.fasta")
     with open(genome_path, "w") as handle:
-        handle.write(">simulated_chromosome\n")
+        handle.write(f">{backbone_name}_with_{len(records)}_implanted_CTs\n")
         for i in range(0, len(genome), 70):
             handle.write(genome[i:i + 70] + "\n")
 
@@ -267,6 +322,7 @@ def write_outputs(out_dir, genome, records, params):
     json_path = os.path.join(out_dir, "ground_truth.json")
     with open(json_path, "w") as handle:
         json.dump({"parameters": params,
+                   "backbone": backbone_name,
                    "genome_length": len(genome),
                    "composite_transposons": records}, handle, indent=2)
 
@@ -283,8 +339,15 @@ def build_parser():
     parser.add_argument("--cargo-fasta",
                         default="picota/DBs/Antibiotics/nucleotide_fasta_protein_homolog_model.fasta",
                         help="CARD nucleotide FASTA. Default: %(default)s")
+    parser.add_argument("--backbone-fasta",
+                        help="Real genome to implant into, instead of random "
+                             "filler. Its longest record is used. Note that a "
+                             "real chromosome carries its own IS elements, which "
+                             "can form cycles of their own and appear as false "
+                             "positives -- say so when reporting.")
     parser.add_argument("--backbone-length", type=int, default=4500000,
-                        help="Approximate genome length. Default: %(default)s")
+                        help="Length of the random backbone, when "
+                             "--backbone-fasta is not given. Default: %(default)s")
     parser.add_argument("--n-cts", type=int, default=8,
                         help="Composite transposons to implant. Default: %(default)s")
     parser.add_argument("--shared-is", type=int, default=4,
@@ -318,11 +381,15 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    genome, records = simulate(args)
-    paths = write_outputs(args.out_dir, genome, records, vars(args))
+    genome, records, backbone_name = simulate(args)
+    paths = write_outputs(args.out_dir, genome, records, vars(args), backbone_name)
 
-    print(f"Genome: {len(genome):,} bp with {len(records)} composite transposons",
-          file=sys.stderr)
+    print(f"Genome: {len(genome):,} bp ({backbone_name}) with {len(records)} "
+          f"composite transposons", file=sys.stderr)
+    if args.backbone_fasta:
+        print("  backbone is a real genome: its native IS elements can form "
+              "cycles of their own, so apparent false positives are expected",
+              file=sys.stderr)
     shared = [r for r in records if r["IS_Name"] == records[0]["IS_Name"]] if records else []
     if args.shared_is:
         print(f"  {args.shared_is} of them share {records[0]['IS_Name']} "

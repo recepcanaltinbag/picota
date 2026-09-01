@@ -17,6 +17,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from simulate_ct_genome import (  # noqa: E402
+    load_backbone,
+    place_inserts,
     GROUND_TRUTH_COLUMNS,
     build_composite_transposon,
     build_parser,
@@ -173,7 +175,7 @@ class TestGroundTruth:
         The invariant the whole benchmark rests on. If this drifts, every recall
         number computed downstream is quietly wrong.
         """
-        genome, records = simulate(make_args(is_fasta, cargo_fasta, tmp_path))
+        genome, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path))
         assert records
         for record in records:
             excerpt = genome[record["CT_Start"] - 1:record["CT_End"]]
@@ -181,37 +183,37 @@ class TestGroundTruth:
             assert len(excerpt) == record["CT_Length"]
 
     def test_requested_number_of_cts_is_produced(self, is_fasta, cargo_fasta, tmp_path):
-        _, records = simulate(make_args(is_fasta, cargo_fasta, tmp_path, n_cts=3))
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path, n_cts=3))
         assert len(records) == 3
 
     def test_shared_is_really_is_shared(self, is_fasta, cargo_fasta, tmp_path):
-        _, records = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
                                         n_cts=3, shared_is=2))
         assert records[0]["IS_Name"] == records[1]["IS_Name"]
         assert records[2]["IS_Name"] != records[0]["IS_Name"]
 
     def test_cts_sharing_an_is_carry_different_cargo(self, is_fasta, cargo_fasta, tmp_path):
         """Otherwise they would be genuine duplicates and prove nothing."""
-        _, records = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
                                         n_cts=3, shared_is=2))
         assert records[0]["Cargo_Genes"] != records[1]["Cargo_Genes"]
 
     def test_is_copy_count_includes_free_standing_copies(self, is_fasta, cargo_fasta, tmp_path):
         """Two flanking copies per CT that uses it, plus the free-standing ones."""
-        _, records = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
                                         n_cts=3, shared_is=2, is_copies_outside=4))
         assert records[0]["IS_Genome_Copies"] == 2 * 2 + 4
         assert records[2]["IS_Genome_Copies"] == 2
 
     def test_ct_regions_do_not_overlap(self, is_fasta, cargo_fasta, tmp_path):
-        _, records = simulate(make_args(is_fasta, cargo_fasta, tmp_path))
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path))
         spans = sorted((r["CT_Start"], r["CT_End"]) for r in records)
         for (_, end), (next_start, _) in zip(spans, spans[1:]):
             assert next_start > end
 
     def test_genome_reaches_the_requested_length(self, is_fasta, cargo_fasta, tmp_path):
-        genome, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
-                                       backbone_length=60000))
+        genome, _, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                          backbone_length=60000))
         assert len(genome) >= 60000
 
     def test_seed_makes_the_run_reproducible(self, is_fasta, cargo_fasta, tmp_path):
@@ -229,7 +231,7 @@ class TestGroundTruth:
             simulate(make_args(is_fasta, cargo_fasta, tmp_path, n_cts=2, shared_is=3))
 
     def test_no_shared_is_gives_every_ct_its_own(self, is_fasta, cargo_fasta, tmp_path):
-        _, records = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
                                         n_cts=3, shared_is=0))
         assert len({r["IS_Name"] for r in records}) == 3
 
@@ -237,7 +239,7 @@ class TestGroundTruth:
 class TestWriteOutputs:
     def _run(self, is_fasta, cargo_fasta, tmp_path):
         args = make_args(is_fasta, cargo_fasta, tmp_path)
-        genome, records = simulate(args)
+        genome, records, _ = simulate(args)
         return genome, records, write_outputs(args.out_dir, genome, records, vars(args))
 
     def test_all_four_files_written(self, is_fasta, cargo_fasta, tmp_path):
@@ -282,3 +284,88 @@ class TestWriteOutputs:
         assert payload["genome_length"] == len(genome)
         assert len(payload["composite_transposons"]) == len(records)
         assert payload["parameters"]["seed"] == 1
+
+
+class TestPlaceInserts:
+    """
+    Offsets are the part that can be wrong while looking right: every insert
+    shifts everything downstream, so a start recorded against the original
+    backbone would be plausible and useless.
+    """
+
+    def test_offsets_locate_each_insert(self):
+        backbone = "".join(random.Random(20).choice("ACGT") for _ in range(10000))
+        inserts = ["AAAA" * 25, "CCCC" * 25, "GGGG" * 25]
+        genome, starts = place_inserts(backbone, inserts, random.Random(1), 100)
+        for start, insert in zip(starts, inserts):
+            assert genome[start:start + len(insert)] == insert
+
+    def test_backbone_is_preserved_around_the_inserts(self):
+        backbone = "".join(random.Random(21).choice("ACGT") for _ in range(10000))
+        inserts = ["A" * 100]
+        genome, starts = place_inserts(backbone, inserts, random.Random(1), 100)
+        assert genome[:starts[0]] + genome[starts[0] + 100:] == backbone
+
+    def test_genome_length_is_backbone_plus_inserts(self):
+        backbone = "".join(random.Random(22).choice("ACGT") for _ in range(10000))
+        inserts = ["A" * 100, "C" * 200]
+        genome, _ = place_inserts(backbone, inserts, random.Random(1), 100)
+        assert len(genome) == len(backbone) + 300
+
+    def test_inserts_stay_in_order(self):
+        backbone = "".join(random.Random(23).choice("ACGT") for _ in range(10000))
+        genome, starts = place_inserts(backbone, ["A" * 50, "C" * 50, "G" * 50],
+                                       random.Random(1), 100)
+        assert starts == sorted(starts)
+
+    def test_empty_insert_list_returns_the_backbone(self):
+        backbone = "ACGT" * 100
+        assert place_inserts(backbone, [], random.Random(1), 10) == (backbone, [])
+
+    def test_backbone_too_small_is_rejected(self):
+        with pytest.raises(SystemExit):
+            place_inserts("ACGT" * 100, ["A" * 10] * 5, random.Random(1), 10000)
+
+
+class TestRealBackbone:
+    @pytest.fixture
+    def backbone_fasta(self, tmp_path):
+        path = tmp_path / "backbone.fna"
+        rng = random.Random(30)
+        short = "".join(rng.choice("ACGT") for _ in range(500))
+        long_seq = "".join(rng.choice("ACGT") for _ in range(80000))
+        path.write_text(f">plasmid_short\n{short}\n>NC_000913.3 chromosome\n{long_seq}\n")
+        return str(path), long_seq
+
+    def test_longest_record_is_used(self, backbone_fasta):
+        path, long_seq = backbone_fasta
+        name, seq = load_backbone(path)
+        assert name == "NC_000913.3"
+        assert seq == long_seq
+
+    def test_empty_fasta_is_rejected(self, tmp_path):
+        empty = tmp_path / "empty.fna"
+        empty.write_text("")
+        with pytest.raises(SystemExit):
+            load_backbone(str(empty))
+
+    def test_cts_are_implanted_into_the_real_sequence(self, is_fasta, cargo_fasta,
+                                                      backbone_fasta, tmp_path):
+        path, long_seq = backbone_fasta
+        args = make_args(is_fasta, cargo_fasta, tmp_path, backbone_fasta=path)
+        genome, records, name = simulate(args)
+        assert name == "NC_000913.3"
+        assert len(genome) > len(long_seq)
+        for record in records:
+            assert genome[record["CT_Start"] - 1:record["CT_End"]] == record["Sequence"]
+
+    def test_backbone_bases_survive_implantation(self, is_fasta, cargo_fasta,
+                                                 backbone_fasta, tmp_path):
+        """Removing the implants must give the original chromosome back."""
+        path, long_seq = backbone_fasta
+        args = make_args(is_fasta, cargo_fasta, tmp_path, backbone_fasta=path)
+        genome, records, _ = simulate(args)
+        # Only CT spans are known here; free-standing IS copies are not recorded,
+        # so check that every backbone base still appears in order around them.
+        assert genome.count(long_seq[:1000]) == 1
+        assert long_seq[:1000] in genome

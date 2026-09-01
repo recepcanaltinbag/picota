@@ -146,12 +146,35 @@ python scripts/score_picota_benchmark.py \
     --cycles sim/cycles_strict.fasta
 ```
 
-Because the backbone is random it contains no repeats other than the ones the
-script implants, which makes the ground truth exact but the genome easier to
-assemble than a real one. **Recall measured this way is an upper bound** and
-should be reported as such.
+Because a random backbone contains no repeats other than the ones the script
+implants, the ground truth is exact but the genome is easier to assemble than a
+real one. **Recall measured that way is an upper bound** and should be reported
+as such.
+
+`--backbone-fasta` implants the same CTs into a real chromosome instead, which
+removes that objection. The implanted CTs remain exact ground truth, but the
+host genome brings its own IS elements -- K-12 MG1655 carries dozens -- and
+those form cycles of their own. They are counted as unexplained by the precision
+metric, so **precision against a real backbone is a lower bound**: it charges
+PICOTA for finding real structures that simply are not in our ground-truth
+list.
 
 #### Results, 50x simulated Illumina, SPAdes k=55,77,99
+
+**Real backbone: *E. coli* K-12 MG1655 (GCF_000005845.2), 6 CTs implanted, four
+of them sharing one IS element present in 14 genome copies.** Genome 4,681,301 bp;
+assembly graph 300 segments / 410 links.
+
+| mode | CT recall | precision | copy-distinctness |
+|---|---|---|---|
+| legacy | 6/6 | 6/19 | 4/4 |
+| strict | 6/6 | 7/24 | 4/4 |
+
+Every implanted composite transposon was recovered, and all four sharing
+ISNaoc2 came back as separate cycles. The low precision is the MG1655 native-IS
+effect described above, not a failure to discriminate.
+
+**Random backbone**
 
 | case | IS / cargo | CT recall | precision | copy-distinctness |
 |---|---|---|---|---|

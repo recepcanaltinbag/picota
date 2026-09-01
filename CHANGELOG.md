@@ -40,8 +40,10 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   chromosome whose composite transposons are known exactly, using real IS
   elements from ISfinder and real cargo genes from CARD. `--shared-is` controls
   how many CTs are built on the SAME IS element with different cargo, which is
-  the case PICOTA had never been tested on. Emits `ground_truth.tsv`,
-  `ground_truth_cts.fasta` and `ground_truth.json`.
+  the case PICOTA had never been tested on. `--backbone-fasta` implants into a
+  real chromosome (e.g. *E. coli* K-12 MG1655) instead of random filler, at the
+  cost of the host's own IS elements appearing as apparent false positives.
+  Emits `ground_truth.tsv`, `ground_truth_cts.fasta` and `ground_truth.json`.
 - **`scripts/score_picota_benchmark.py`** — scores reported cycles against that
   ground truth: CT recall, precision, and copy-distinctness recall (how many CTs
   sharing an IS came back as *separate* cycles).
