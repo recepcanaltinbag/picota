@@ -48,7 +48,8 @@ IS_MAX_LENGTH = 2500
 
 GROUND_TRUTH_COLUMNS = [
     "CT_ID", "IS_Name", "IS_Family", "IS_Length", "IS_Divergence_Pct",
-    "IS_Orientation", "Cargo_Genes", "Cargo_Type", "Cargo_Length", "CT_Start",
+    "IS_Orientation", "Cargo_Genes", "Cargo_Type", "Cargo_IS", "Cargo_Repeats",
+    "Cargo_Length", "CT_Start",
     "CT_End", "CT_Length", "IS_Genome_Copies",
 ]
 
@@ -250,7 +251,8 @@ def load_cargo_genes(path, rng, count):
     return rng.sample(pool, count)
 
 
-def build_composite_transposon(is_seq, cargo_seqs, divergence_pct, orientation, rng):
+def build_composite_transposon(is_seq, cargo_seqs, divergence_pct, orientation,
+                               rng, cargo_repeats=(), cargo_is=None):
     """
     IS - cargo - IS, the defining structure.
 
@@ -264,7 +266,30 @@ def build_composite_transposon(is_seq, cargo_seqs, divergence_pct, orientation, 
         right = reverse_complement(right)
 
     spacer = lambda: "".join(rng.choice(DNA) for _ in range(rng.randint(50, 200)))
-    cargo = spacer().join(cargo_seqs) if len(cargo_seqs) > 1 else cargo_seqs[0]
+
+    # Repeats embedded inside the cargo are what fragment a composite transposon
+    # in the assembly graph. Each one also occurs elsewhere in the genome, so the
+    # assembler cannot resolve it and breaks the cargo into separate nodes --
+    # raising the cycle's component count, which the score penalises through
+    # sqrt(|comp - 2|). Real cargo carries exactly this kind of thing: integron
+    # cassettes, small mobile elements, duplicated segments.
+    pieces = []
+    for index, gene in enumerate(cargo_seqs):
+        if index:
+            pieces.append(spacer())
+        pieces.append(gene)
+        if index < len(cargo_repeats):
+            pieces.append(spacer())
+            pieces.append(cargo_repeats[index])
+    # An IS landing inside the cargo, which happens constantly in real elements.
+    # Where it goes in the graph depends entirely on which element it is: a
+    # different IS becomes its own node and merely lengthens the cycle, while a
+    # copy of the flanking IS collapses onto the very node that defines the
+    # bubble, so one graph node now sits at three places in the structure.
+    if cargo_is is not None and len(pieces) > 1:
+        middle = len(pieces) // 2
+        pieces[middle:middle] = [spacer(), cargo_is, spacer()]
+    cargo = "".join(pieces)
     return left + spacer() + cargo + spacer() + right, cargo
 
 
@@ -306,12 +331,31 @@ def simulate(args):
     if shared:
         is_copy_counts[shared[0][0]] = is_copy_counts.get(shared[0][0], 0) + args.is_copies_outside
 
+    # A single extra element used to interrupt every cargo in "different" mode,
+    # so it too is multi-copy across the genome.
+    interrupting_is = None
+    if args.cargo_is_mode == "different":
+        interrupting_is = load_is_elements(args.is_fasta, rng, 1,
+                                           args.is_min_length,
+                                           args.is_max_length)[0]
+
+    # One pool of repeat elements shared by every composite transposon, so each
+    # is genuinely multi-copy across the genome rather than unique to one cargo.
+    repeat_pool = [make_dna(args.cargo_repeat_length, rng.randint(0, 10 ** 6))
+                   for _ in range(args.cargo_repeats)]
+
     inserts = []
     pending = []
     for index, ((name_family, is_seq), cargo) in enumerate(assignments, start=1):
+        cargo_is = None
+        if args.cargo_is_mode == "same":
+            cargo_is = mutate(is_seq, args.is_divergence, rng)
+        elif args.cargo_is_mode == "different":
+            cargo_is = mutate(interrupting_is[1], args.is_divergence, rng)
+
         ct_seq, cargo_seq = build_composite_transposon(
             is_seq, [seq for _, seq in cargo], args.is_divergence,
-            args.is_orientation, rng)
+            args.is_orientation, rng, repeat_pool, cargo_is)
         is_name, is_family = name_family
         inserts.append(ct_seq)
         pending.append({
@@ -323,6 +367,9 @@ def simulate(args):
             "IS_Orientation": args.is_orientation,
             "Cargo_Genes": ";".join(name for name, _ in cargo),
             "Cargo_Type": "novel" if cargo[0][0].startswith("novel_orf_") else "AMR",
+            "Cargo_Repeats": args.cargo_repeats,
+            "Cargo_IS": (is_name if args.cargo_is_mode == "same"
+                         else interrupting_is[0][0] if interrupting_is else "none"),
             "Cargo_Length": len(cargo_seq),
             "CT_Length": len(ct_seq),
             "IS_Genome_Copies": is_copy_counts[is_name],
@@ -334,6 +381,12 @@ def simulate(args):
     if shared and args.is_copies_outside:
         for _ in range(args.is_copies_outside):
             inserts.append(mutate(shared[1], args.is_divergence, rng))
+
+    # Extra copies of each cargo repeat, so the assembler really cannot place
+    # them and the cargo fragments as intended.
+    for repeat in repeat_pool:
+        for _ in range(args.cargo_repeat_copies):
+            inserts.append(repeat)
 
     if args.backbone_fasta:
         backbone_name, backbone = load_backbone(args.backbone_fasta)
@@ -429,6 +482,26 @@ def build_parser():
                              "where deduplication decides recall. Default: %(default)s")
     parser.add_argument("--is-max-length", type=int, default=IS_MAX_LENGTH,
                         help="Longest IS element to draw. Default: %(default)s")
+    parser.add_argument("--cargo-is-mode", choices=("none", "different", "same"),
+                        default="none",
+                        help="Insert an IS element into each cargo. 'different' "
+                             "uses another element, which becomes its own graph "
+                             "node. 'same' uses a copy of the flanking IS, which "
+                             "collapses onto the node that defines the bubble and "
+                             "is the harder case by far. Default: %(default)s")
+    parser.add_argument("--cargo-repeats", type=int, default=0,
+                        help="Repeat elements embedded inside each cargo. Each "
+                             "one fragments the composite transposon in the "
+                             "assembly graph, raising the cycle's component "
+                             "count, which the score penalises. Use this to test "
+                             "candidates that do not assemble into a clean "
+                             "two-node bubble. Default: %(default)s")
+    parser.add_argument("--cargo-repeat-length", type=int, default=400,
+                        help="Length of each embedded repeat. Default: %(default)s")
+    parser.add_argument("--cargo-repeat-copies", type=int, default=3,
+                        help="Free-standing copies of each embedded repeat "
+                             "elsewhere in the genome, which is what makes it "
+                             "unresolvable. Default: %(default)s")
     parser.add_argument("--novel-cts", type=int, default=0,
                         help="How many of the composite transposons carry cargo "
                              "with NO database homology -- random open reading "

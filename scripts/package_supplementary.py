@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""
+package_supplementary.py
+------------------------
+Collect the simulated genomes and their ground truth into one directory for
+publication as supplementary data.
+
+Everything a reader needs to reproduce or re-score a benchmark case, and nothing
+that can be regenerated cheaply. Per case:
+
+  <case>_genome.fasta        the simulated chromosome, implants included
+  <case>_ground_truth.tsv    one row per composite transposon
+  <case>_ground_truth.fasta  the element sequences, for identity comparison
+  <case>_parameters.json     the exact arguments the case was built from
+
+plus a manifest.tsv indexing every case, and README.md stating what the files
+are and how to regenerate them. Reads and assemblies are deliberately excluded:
+they run to gigabytes and follow from the genome plus the recorded seed.
+
+Usage:
+  python scripts/package_supplementary.py --runs bench/ scenarios/ --out supplementary/
+"""
+
+import argparse
+import glob
+import json
+import os
+import shutil
+import sys
+
+MANIFEST_COLUMNS = [
+    "Case", "Source", "GenomeLength", "NumCTs", "SharedIS", "NovelCargo",
+    "CargoIS", "Backbone", "Seed",
+]
+
+
+def case_dirs(roots):
+    for root in roots:
+        for path in sorted(glob.glob(os.path.join(root, "*"))):
+            if os.path.isfile(os.path.join(path, "ground_truth.json")):
+                yield root, path
+
+
+def summarise(payload):
+    params = payload.get("parameters", {})
+    cts = payload.get("composite_transposons", [])
+    return {
+        "GenomeLength": payload.get("genome_length", ""),
+        "NumCTs": len(cts),
+        "SharedIS": params.get("shared_is", ""),
+        "NovelCargo": sum(1 for c in cts if c.get("Cargo_Type") == "novel"),
+        "CargoIS": params.get("cargo_is_mode", "none"),
+        "Backbone": payload.get("backbone", ""),
+        "Seed": params.get("seed", ""),
+    }
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Package benchmark cases for supplement.")
+    parser.add_argument("--runs", nargs="+", required=True)
+    parser.add_argument("--out", required=True)
+    parser.add_argument("--compress", action="store_true",
+                        help="Also write a .tar.gz of the packaged directory.")
+    args = parser.parse_args(argv)
+
+    os.makedirs(args.out, exist_ok=True)
+    rows = []
+
+    for root, case in case_dirs(args.runs):
+        name = os.path.basename(case)
+        source = os.path.basename(os.path.normpath(root))
+        label = "%s_%s" % (source, name)
+
+        payload = json.load(open(os.path.join(case, "ground_truth.json")))
+        for src, suffix in (("genome.fasta", "genome.fasta"),
+                            ("ground_truth.tsv", "ground_truth.tsv"),
+                            ("ground_truth_cts.fasta", "ground_truth.fasta")):
+            source_path = os.path.join(case, src)
+            if os.path.exists(source_path):
+                shutil.copy2(source_path, os.path.join(args.out, "%s_%s" % (label, suffix)))
+        with open(os.path.join(args.out, "%s_parameters.json" % label), "w") as handle:
+            json.dump(payload.get("parameters", {}), handle, indent=2)
+
+        row = {"Case": label, "Source": source}
+        row.update(summarise(payload))
+        rows.append(row)
+
+    with open(os.path.join(args.out, "manifest.tsv"), "w") as handle:
+        handle.write("\t".join(MANIFEST_COLUMNS) + "\n")
+        for row in rows:
+            handle.write("\t".join(str(row.get(c, "")) for c in MANIFEST_COLUMNS) + "\n")
+
+    with open(os.path.join(args.out, "README.md"), "w") as handle:
+        handle.write(
+            "# Simulated benchmark data\n\n"
+            "Genomes containing a known set of composite transposons, used to measure\n"
+            "PICOTA's recall and precision against exact ground truth. IS elements are\n"
+            "real sequences from ISfinder and cargo genes are real sequences from CARD;\n"
+            "what is simulated is the arrangement, not the biology.\n\n"
+            "## Files, per case\n\n"
+            "| suffix | contents |\n|---|---|\n"
+            "| `_genome.fasta` | the simulated chromosome, implants included |\n"
+            "| `_ground_truth.tsv` | one row per composite transposon: IS element and family, cargo genes and type, coordinates, length, genome-wide IS copy number |\n"
+            "| `_ground_truth.fasta` | the composite transposon sequences |\n"
+            "| `_parameters.json` | the exact arguments the case was generated from |\n\n"
+            "`manifest.tsv` indexes every case.\n\n"
+            "## Regenerating\n\n"
+            "Reads and assemblies are not included; they run to gigabytes and follow\n"
+            "deterministically from the genome and the recorded seed:\n\n"
+            "```\n"
+            "python scripts/simulate_ct_genome.py --out-dir CASE @parameters\n"
+            "art_illumina -ss HSXt -i CASE/genome.fasta -p -l 150 -f 50 -m 350 -s 50 -rs SEED -o CASE/art_ -na\n"
+            "spades.py -1 CASE/art_1.fq -2 CASE/art_2.fq -o CASE/spades -k 55,77,99 --only-assembler\n"
+            "```\n\n"
+            "Coordinates in `_ground_truth.tsv` are 1-based and inclusive: for every row,\n"
+            "`genome[CT_Start-1:CT_End]` is exactly the sequence in `_ground_truth.fasta`.\n")
+
+    print("packaged %d case(s) into %s" % (len(rows), args.out), file=sys.stderr)
+
+    if args.compress:
+        archive = shutil.make_archive(args.out.rstrip("/"), "gztar", args.out)
+        print("archive: %s" % archive, file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
