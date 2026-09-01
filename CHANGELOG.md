@@ -22,6 +22,23 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   turns them into XPASS failures. Measured today: when N distinct composite
   transposons share one IS node, the reported output saturates at two candidates
   regardless of N (2/2, 2/3, 2/4, 2/5).
+- **`src/cycle_dedup.py`** (roadmap phase 2) — deduplication that cannot delete
+  a distinct composite transposon. Paths are duplicates only when they are the
+  same cycle: `canonical_path_key()` is invariant under rotation and
+  reverse-complement traversal, so bubbles through a shared IS node all survive.
+  Sequences are compared with `multiset_jaccard()` over canonical circular
+  k-mers -- counting k-mers keeps copy number visible, the symmetric denominator
+  removes the traversal-order dependence, and circular extraction makes two
+  rotations of one cycle compare equal.
+- **`dedup_mode` option** (`legacy` | `strict`, default `legacy`) in
+  `config.yaml`, plumbed through `cycle_analysis()`. Measured on synthetic
+  graphs where N composite transposons share one IS node: legacy reports 2
+  candidates for every N (2/2, 2/3, 2/4, 2/5, 2/8), strict reports N/N. On the
+  bundled `testNitro.gfa` strict returns legacy's five cycles plus one
+  34,953 bp candidate legacy was deleting.
+- **`tests/test_cycle_dedup.py`** — 32 tests pinning rotation and
+  reverse-complement invariance, multiset counting, Jaccard symmetry, and that
+  genuine duplicates are still removed.
 - **Node depth parsing** (roadmap phase 1) — `parse_segment_depth()` in
   `cycle_finderv2.py` reads coverage from all four encodings PICOTA can meet:
   the SPAdes `_cov_` field in node names, MEGAHIT `multi=`, the GFA1 `dp:f:`/

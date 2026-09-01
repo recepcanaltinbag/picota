@@ -4,6 +4,7 @@ import re
 from collections import deque
 from src.cycle_kmer_hash import filter_cycles_with_kmer
 from src.cycle_kmer_hash import print_progress_bar
+from src.cycle_dedup import dedup_paths, filter_cycles_multiset
 
 class Graph(object):
     def __init__(self, edges):
@@ -592,7 +593,14 @@ def write_depth_report(out_cycle_file, cycles):
     return report_path
 
 
-def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_size_of_cycle, max_size_of_cycle, name_prefix_cycle, min_component_number, max_component_number, k_mer_sim, threshold_sim):
+def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_size_of_cycle, max_size_of_cycle, name_prefix_cycle, min_component_number, max_component_number, k_mer_sim, threshold_sim, dedup_mode='legacy'):
+    """
+    dedup_mode: 'legacy' reproduces the historical behaviour exactly.
+    'strict' uses src.cycle_dedup, which never discards a candidate for merely
+    sharing a repeat node with an accepted one -- see docs/ROADMAP.md phase 2.
+    """
+    if dedup_mode not in ('legacy', 'strict'):
+        raise ValueError(f"dedup_mode must be 'legacy' or 'strict', got {dedup_mode!r}")
 
     
     #path_to_data = "test_data/assembly/gfa_files/test_data_P.nitroreducens_1Iinsides.gfa"
@@ -675,12 +683,15 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
 
     print('Contig ID based -')
     print('Before Elimination:', len(selected_paths))
-    p_count = 0
-    for path in selected_paths:
-        p_count += 1
-        print_progress_bar(p_count, len(selected_paths), prefix='Processing:', suffix='Complete')
-        if cycle_match_based_on_contig_id(path, node_lengths, new_paths):
-            new_paths.append(path)
+    if dedup_mode == 'strict':
+        new_paths = dedup_paths(selected_paths, progress=True)
+    else:
+        p_count = 0
+        for path in selected_paths:
+            p_count += 1
+            print_progress_bar(p_count, len(selected_paths), prefix='Processing:', suffix='Complete')
+            if cycle_match_based_on_contig_id(path, node_lengths, new_paths):
+                new_paths.append(path)
     
 
     for path in new_paths:
@@ -740,7 +751,10 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     the_other_iterator = 1
     print(len(cycle_info_list))
     
-    cycle_clear_list = filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle)
+    if dedup_mode == 'strict':
+        cycle_clear_list = filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle)
+    else:
+        cycle_clear_list = filter_cycles_with_kmer(cycle_info_list, k_mer_sim, threshold_sim, name_prefix_cycle)
 
     """
     for cycle_el in cycle_info_list:

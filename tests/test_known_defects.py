@@ -28,6 +28,7 @@ from src.cycle_finderv2 import (  # noqa: E402
     cycle_match_based_on_contig_id,
     reverse_complement,
 )
+from src.cycle_dedup import dedup_paths, filter_cycles_multiset  # noqa: E402
 from src.cycle_kmer_hash import filter_cycles_with_kmer, get_kmer_hashes  # noqa: E402
 from synthetic_gfa import (  # noqa: E402
     make_dna,
@@ -41,7 +42,7 @@ THRESHOLD_SIM = 80
 
 
 def run_cycle_pipeline(gfa_path, k_mer_sim=K_MER_SIM, threshold_sim=THRESHOLD_SIM,
-                       path_limit=25):
+                       path_limit=25, dedup_mode="legacy"):
     """Run detection + both deduplication stages, mirroring cycle_analysis()."""
     graph_work = GraphWork()
     graph_work.find_all_path = True
@@ -50,11 +51,14 @@ def run_cycle_pipeline(gfa_path, k_mer_sim=K_MER_SIM, threshold_sim=THRESHOLD_SI
     node_dict, edge_dict = graph_work.parse_gfa(gfa_path)
     graph_work.dfs_iterative(graph_work.generate_genome_graph(node_dict, edge_dict))
 
-    node_lengths = {k: len(v["Sequence"]) for k, v in node_dict.items()}
-    unique_paths = []
-    for path in graph_work.allPaths:
-        if cycle_match_based_on_contig_id(path, node_lengths, unique_paths):
-            unique_paths.append(path)
+    if dedup_mode == "strict":
+        unique_paths = dedup_paths(graph_work.allPaths)
+    else:
+        node_lengths = {k: len(v["Sequence"]) for k, v in node_dict.items()}
+        unique_paths = []
+        for path in graph_work.allPaths:
+            if cycle_match_based_on_contig_id(path, node_lengths, unique_paths):
+                unique_paths.append(path)
 
     cycles = []
     for path in unique_paths:
@@ -64,7 +68,8 @@ def run_cycle_pipeline(gfa_path, k_mer_sim=K_MER_SIM, threshold_sim=THRESHOLD_SI
         cycle.name = "tmp"
         cycles.append(cycle)
 
-    return filter_cycles_with_kmer(cycles, k_mer_sim, threshold_sim, "Cycle")
+    dedup = filter_cycles_multiset if dedup_mode == "strict" else filter_cycles_with_kmer
+    return dedup(cycles, k_mer_sim, threshold_sim, "Cycle")
 
 
 # ─── D1: node depth is discarded by parse_gfa ────────────────────────────────
@@ -93,9 +98,9 @@ def test_d1_depth_tags_are_present_in_fixture(tmp_path):
 
 # ─── D2: path dedup deletes bubbles that share a repeat node ─────────────────
 
-def recovered_cargo_count(gfa_path, node_dict, n_cargos):
+def recovered_cargo_count(gfa_path, node_dict, n_cargos, dedup_mode="legacy"):
     """How many of the ground-truth cargos appear in the reported cycles."""
-    cycles = run_cycle_pipeline(gfa_path)
+    cycles = run_cycle_pipeline(gfa_path, dedup_mode=dedup_mode)
     found = set()
     for cycle in cycles:
         both_strands = cycle.sequence + "|" + reverse_complement(cycle.sequence)
@@ -122,6 +127,70 @@ def test_d2_every_cargo_sharing_one_repeat_is_reported(tmp_path, n_cargos):
     node_dict, _ = GraphWork().parse_gfa(gfa)
     recovered, _ = recovered_cargo_count(gfa, node_dict, n_cargos)
     assert recovered == n_cargos
+
+
+@pytest.mark.parametrize("n_cargos", [2, 3, 4, 5, 8])
+def test_d2_strict_mode_reports_every_cargo(tmp_path, n_cargos):
+    """
+    Phase 2 fix. Strict deduplication treats two paths as duplicates only when
+    they are the same cycle -- same nodes, same cyclic order, up to rotation and
+    reverse-complement -- so bubbles through a shared repeat all survive.
+    Measured: N/N for every N here, against legacy's flat 2.
+    """
+    gfa = shared_repeat_n_cargos(str(tmp_path / "n.gfa"), n_cargos)
+    node_dict, _ = GraphWork().parse_gfa(gfa)
+    recovered, reported = recovered_cargo_count(gfa, node_dict, n_cargos,
+                                                dedup_mode="strict")
+    assert recovered == n_cargos
+    assert reported == n_cargos
+
+
+def test_d3_strict_mode_keeps_the_complete_composite_transposon():
+    """Multiset k-mer counts make IS-cargo-IS distinguishable from IS-cargo."""
+    is_element = make_dna(1500, 10)
+    cargo = make_dna(900, 11)
+    partial = is_element + cargo
+    complete = is_element + cargo + is_element
+
+    kept = filter_cycles_multiset(
+        [Cycle("a", partial, len(partial), 2, []),
+         Cycle("b", complete, len(complete), 3, [])],
+        K_MER_SIM, THRESHOLD_SIM, "Cycle")
+
+    assert len(kept) == 2
+    assert any(c.length == len(complete) for c in kept)
+
+
+def test_d4_strict_mode_is_order_independent():
+    """Multiset Jaccard is symmetric, so traversal order cannot decide."""
+    shared = make_dna(1500, 10) + make_dna(900, 11)
+    small = Cycle("small", shared, len(shared), 2, [])
+    large_seq = shared + make_dna(2000, 12)
+    large = Cycle("large", large_seq, len(large_seq), 2, [])
+
+    def dedup(cycles):
+        fresh = [Cycle(c.name, c.sequence, c.length, 2, []) for c in cycles]
+        return len(filter_cycles_multiset(fresh, K_MER_SIM, THRESHOLD_SIM, "Cycle"))
+
+    assert dedup([large, small]) == dedup([small, large]) == 2
+
+
+def test_strict_mode_still_removes_genuine_duplicates():
+    """The fix must not turn deduplication off -- identical cycles still merge."""
+    seq = make_dna(4000, 30)
+    kept = filter_cycles_multiset(
+        [Cycle("a", seq, len(seq), 2, []), Cycle("b", seq, len(seq), 2, [])],
+        K_MER_SIM, THRESHOLD_SIM, "Cycle")
+    assert len(kept) == 1
+
+
+def test_strict_mode_removes_reverse_complement_duplicates():
+    seq = make_dna(4000, 31)
+    kept = filter_cycles_multiset(
+        [Cycle("a", seq, len(seq), 2, []),
+         Cycle("b", reverse_complement(seq), len(seq), 2, [])],
+        K_MER_SIM, THRESHOLD_SIM, "Cycle")
+    assert len(kept) == 1
 
 
 def test_d2_two_cargos_are_recovered_by_strand_accident(tmp_path):

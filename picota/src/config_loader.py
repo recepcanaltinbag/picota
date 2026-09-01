@@ -88,6 +88,11 @@ class OptionsConfig:
     path_of_blastx: str
     path_of_blastp: str
     split_min_score: int
+    # 'legacy' reproduces the historical deduplication exactly; 'strict' uses
+    # src.cycle_dedup, which never discards a candidate for merely sharing a
+    # repeat node with an accepted one. See docs/ROADMAP.md phase 2.
+    dedup_mode: str = "legacy"
+
 
 
 # -------------------------
