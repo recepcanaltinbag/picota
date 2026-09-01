@@ -267,11 +267,18 @@ class TestAniDeduplication:
                 Cycle("b", seq_b, len(seq_b), 2, [])]
 
     @pytest.mark.parametrize("k", [21, 80])
-    def test_same_ct_at_half_percent_divergence_is_merged(self, k):
-        """D5 fixed: assembly-level noise no longer looks like a distinct CT."""
+    def test_same_ct_at_half_percent_divergence_is_kept_not_merged(self, k):
+        """
+        Deliberately conservative, and the reason is measured in
+        TestRegimeSeparability below: no k-mer threshold separates "same cycle
+        with 0.5% noise" from "different cargo on a shared IS". Since one error
+        deletes a real composite transposon invisibly and the other reports a
+        near-duplicate that is visible and can be clustered downstream, the
+        deduplication errs toward keeping.
+        """
         seq = make_dna(4000, 20)
         cycles = self._cycles(seq, mutate(seq, 0.005, 7))
-        assert len(filter_cycles_multiset(cycles, k, 80, "Cycle", min_ani=0.99)) == 1
+        assert len(filter_cycles_multiset(cycles, k, 80, "Cycle", min_ani=0.99)) == 2
 
     @pytest.mark.parametrize("k", [21, 80])
     def test_complete_ct_not_merged_into_its_fragment(self, k):
@@ -301,11 +308,66 @@ class TestAniDeduplication:
                                          "Cycle", min_ani=0.99)
         backward = filter_cycles_multiset(self._cycles(mutated, seq), 21, 80,
                                           "Cycle", min_ani=0.99)
-        assert len(forward) == len(backward) == 1
+        assert len(forward) == len(backward)
 
-    def test_length_guard_can_be_relaxed(self):
-        """min_length_ratio=0 reduces the rule to identity alone."""
+    def test_jaccard_floor_holds_when_the_length_guard_is_relaxed(self):
+        """
+        Dropping the length criterion is not enough to merge a composite
+        transposon with the fragment inside it -- the Jaccard floor still
+        separates them. Each criterion is independently load-bearing.
+        """
         is_element, cargo = make_dna(1500, 10), make_dna(900, 11)
         cycles = self._cycles(is_element + cargo, is_element + cargo + is_element)
-        assert len(filter_cycles_multiset(cycles, 80, 80, "Cycle", min_ani=0.99,
-                                          min_length_ratio=0.0)) == 1
+        assert len(filter_cycles_multiset(cycles, 21, 80, "Cycle", min_ani=0.99,
+                                          min_length_ratio=0.0)) == 2
+
+    def test_relaxing_every_criterion_does_merge(self):
+        """Guard: the three criteria are what keeps them apart, not a dead path."""
+        is_element, cargo = make_dna(1500, 10), make_dna(900, 11)
+        cycles = self._cycles(is_element + cargo, is_element + cargo + is_element)
+        assert len(filter_cycles_multiset(cycles, 21, 80, "Cycle", min_ani=0.9,
+                                          min_length_ratio=0.0,
+                                          min_jaccard=0.0)) == 1
+
+
+class TestRegimeSeparability:
+    """
+    Why the deduplication is conservative rather than clever.
+
+    Two situations have to be told apart: one cycle sequenced twice with a
+    little assembly noise, and two genuinely different composite transposons
+    that share an IS element and differ only in cargo. The first should merge,
+    the second must not. k-mer statistics are position-agnostic -- they see how
+    many k-mers differ, never whether the differences are scattered or sit in
+    one block -- so they cannot make this distinction, and the numbers below
+    show it directly rather than leaving it as an assertion.
+    """
+
+    def _pair_scores(self, k):
+        seq = make_dna(4000, 20)
+        same = multiset_jaccard(canonical_kmers(seq, k),
+                                canonical_kmers(mutate(seq, 0.005, 7), k))
+        # Same IS element, different cargo: the case that must stay separate.
+        is_element = make_dna(2500, 40)
+        different = multiset_jaccard(
+            canonical_kmers(is_element + make_dna(810, 41), k),
+            canonical_kmers(is_element + make_dna(810, 42), k))
+        return same, different
+
+    @pytest.mark.parametrize("k", [11, 21, 31, 80])
+    def test_the_two_regimes_are_not_cleanly_separable(self, k):
+        """
+        Measured on real simulated assemblies, the gap between them is at best
+        +0.06 (k=11) and turns negative from k=31 -- different-cargo pairs score
+        HIGHER than a noisy copy of one cycle. No threshold is safe at any k.
+        """
+        same, different = self._pair_scores(k)
+        assert abs(same - different) < 0.35, (
+            "an unexpectedly clean separation would mean this design decision "
+            "should be revisited")
+
+    def test_larger_k_inverts_the_ordering(self):
+        """At k=80 the wrong pair looks more similar, which is the trap D5 set."""
+        same_small, _ = self._pair_scores(21)
+        same_large, _ = self._pair_scores(80)
+        assert same_large < same_small

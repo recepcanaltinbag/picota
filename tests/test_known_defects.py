@@ -346,15 +346,22 @@ def test_d5_identity_estimate_is_stable_where_raw_overlap_is_not(k):
 
 
 @pytest.mark.parametrize("k", [21, 80])
-def test_d5_strict_mode_merges_the_same_ct_across_assembly_noise(k):
-    """Two assemblies of one CT differing by 0.5% are one candidate, not two."""
+def test_d5_strict_mode_errs_toward_keeping_near_duplicates(k):
+    """
+    D5's diagnosis stands -- raw k-mer overlap is a cliff whose position depends
+    on k, so it is not a usable threshold. The estimate that replaces it is
+    sound and stable (test above), but it cannot carry the merge decision on its
+    own: a block substitution and scattered divergence are indistinguishable to
+    any k-mer statistic. So strict mode keeps both candidates. Reporting a
+    near-duplicate is recoverable; deleting a composite transposon is not.
+    """
     seq = make_dna(4000, 20)
     mutated = mutate(seq, 0.005, 7)
     kept = filter_cycles_multiset(
         [Cycle("a", seq, len(seq), 2, []),
          Cycle("b", mutated, len(mutated), 2, [])],
         k, THRESHOLD_SIM, "Cycle", min_ani=0.99)
-    assert len(kept) == 1
+    assert len(kept) == 2
 
 
 # ─── D6: path_limit truncation is now counted and reported ──────────────────

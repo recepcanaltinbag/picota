@@ -34,6 +34,13 @@ from collections import Counter, defaultdict
 
 from src.cycle_kmer_hash import print_progress_bar
 
+# k for the strict deduplication measure, independent of the legacy k_mer_sim.
+# Small k is what separates scattered divergence from block substitution: a SNP
+# destroys k k-mers, so at k=21 a 0.5%-divergent copy of one cycle still shares
+# 93% of its k-mers while a cycle carrying different cargo shares 79%. At k=80
+# those become 81% and 79% -- indistinguishable.
+DEDUP_KMER_SIZE = 21
+
 _COMPLEMENT = {"A": "T", "T": "A", "G": "C", "C": "G",
                "a": "t", "t": "a", "g": "c", "c": "g",
                "N": "N", "n": "n"}
@@ -181,7 +188,7 @@ def length_ratio(length_a, length_b):
 
 def filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim,
                            name_prefix_cycle, min_ani=None,
-                           min_length_ratio=0.95):
+                           min_length_ratio=0.95, min_jaccard=0.85):
     """
     Drop cycles that are near-identical to one already accepted.
 
@@ -190,15 +197,28 @@ def filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim,
     measure: multiset Jaccard over canonical circular k-mers rather than
     directional containment over k-mer sets.
 
-    When `min_ani` is given (as a fraction, e.g. 0.99) the decision switches
-    from raw Jaccard to two criteria that must both hold: the estimated
-    nucleotide identity is at least `min_ani`, AND the two lengths are within
-    `min_length_ratio` of each other. Both are needed. Identity alone would
-    merge a composite transposon with the fragment inside it -- IS-cargo-IS
-    against IS-cargo estimates 99.65% identity at k=80, comfortably above any
-    sensible threshold -- because a copy-number difference is not divergence,
-    and the transform cannot tell them apart. Length separates them: those two
-    differ by 38% in size, while a genuine duplicate does not differ at all.
+    When `min_ani` is given (as a fraction, e.g. 0.99) three criteria must all
+    hold: estimated identity at least `min_ani`, lengths within
+    `min_length_ratio`, and raw multiset Jaccard at least `min_jaccard`.
+
+    All three are load-bearing, and the Jaccard floor is the one that does the
+    real work. estimated_ani() assumes k-mer loss comes from substitutions
+    scattered through the sequence, which is false for the case this pipeline
+    exists to detect: two composite transposons sharing an IS differ by a
+    *block* -- their cargo -- not by point mutations. Measured on simulated
+    assemblies, such pairs share only 52-79% of their k-mers yet estimate
+    99.0-99.7% identity, because the model reads a 20% block substitution as
+    about 1% of uniform divergence. Identity alone therefore merges exactly the
+    candidates that must stay separate. Raw Jaccard measures shared sequence
+    directly and does not have that blind spot.
+
+    The length criterion covers a third case the other two miss: a composite
+    transposon against the fragment inside it, which shares nearly all of the
+    shorter sequence but differs in size.
+
+    `k_mer_sim` should be small here -- see DEDUP_KMER_SIZE. At k=80 the two
+    regimes overlap (0.79 against 0.81) and no Jaccard threshold separates them;
+    at k=21 they are 0.79 against 0.93.
 
     As in the legacy filter, the inverted index only surfaces candidates that
     share at least one k-mer, so cycles with nothing in common are never
@@ -231,7 +251,8 @@ def filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim,
                     if jaccard >= threshold:
                         is_duplicate = True
                         break
-                elif (estimated_ani(jaccard, k_mer_sim) >= min_ani
+                elif (jaccard >= min_jaccard
+                      and estimated_ani(jaccard, k_mer_sim) >= min_ani
                       and length_ratio(cycle_el.length, other_length) >= min_length_ratio):
                     is_duplicate = True
                     break

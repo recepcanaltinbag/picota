@@ -36,6 +36,18 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   candidates for every N (2/2, 2/3, 2/4, 2/5, 2/8), strict reports N/N. On the
   bundled `testNitro.gfa` strict returns legacy's five cycles plus one
   34,953 bp candidate legacy was deleting.
+- **`scripts/simulate_ct_genome.py`** (roadmap phase 0.5) — builds a synthetic
+  chromosome whose composite transposons are known exactly, using real IS
+  elements from ISfinder and real cargo genes from CARD. `--shared-is` controls
+  how many CTs are built on the SAME IS element with different cargo, which is
+  the case PICOTA had never been tested on. Emits `ground_truth.tsv`,
+  `ground_truth_cts.fasta` and `ground_truth.json`.
+- **`scripts/score_picota_benchmark.py`** — scores reported cycles against that
+  ground truth: CT recall, precision, and copy-distinctness recall (how many CTs
+  sharing an IS came back as *separate* cycles).
+- **`tests/test_simulate_ct_genome.py`** — 35 tests, the strictest being that
+  `genome[CT_Start-1:CT_End]` really is the CT sequence; every recall number
+  depends on it.
 - **`estimated_ani()`** (roadmap phase 3) — Mash transform converting k-mer
   Jaccard into estimated nucleotide identity, so the deduplication threshold is
   a property of the sequences rather than of `k`. The same 0.5%-divergent pair
@@ -43,8 +55,15 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   swings from 0.81 to 0.48. Used with a length-ratio criterion (`min_length_ratio`,
   default 0.95): both must hold, because identity alone merges a composite
   transposon with the fragment inside it — IS-cargo-IS against IS-cargo
-  estimates 99.65% identity at k=80, and only the length difference separates
-  them. Threshold configurable as `dedup_min_ani` (default 99.0).
+  estimates 99.65% identity at k=80. Thresholds configurable as `dedup_min_ani`
+  (default 99.0) and `dedup_min_jaccard` (default 0.85), with a dedup-specific
+  `DEDUP_KMER_SIZE = 21`.
+- **Deduplication is deliberately conservative**, and docs/ROADMAP.md §3 records
+  why: no k-mer statistic separates "one cycle with assembly noise" from "two
+  CTs sharing an IS with different cargo". Measured across k, the gap is at best
+  +0.06 and inverts from k=31 — pairs that must stay separate score higher than
+  pairs that should merge. Strict mode therefore keeps both when in doubt;
+  reporting a near-duplicate is recoverable, deleting a CT is not.
 - **`GraphWork.truncated_searches`** — `path_limit` truncation is counted and
   `cycle_analysis()` warns that the enumeration was not exhaustive. Previously
   the truncation assigned a dead local and reported nothing, so a truncated

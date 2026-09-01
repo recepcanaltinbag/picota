@@ -123,7 +123,63 @@ characterise depth dependence.
 | **Cargo recall** | Fraction of ground-truth cargo genes present in at least one reported candidate |
 | **Boundary accuracy** | Offset between reported and true transposon/cargo boundaries |
 
-### 3.5 Predicted baseline
+### 3.5 Simulated benchmark (implemented)
+
+Downloading closed genomes gives realism but never certainty: the true CT
+catalogue of a real isolate is itself an annotation with its own errors.
+`scripts/simulate_ct_genome.py` inverts that trade. It builds a chromosome whose
+composite transposons are known by construction, using **real sequences** — IS
+elements from the bundled ISfinder set, cargo from CARD — so what is synthetic
+is the arrangement, not the biology. `scripts/score_picota_benchmark.py` scores
+PICOTA's output against that ground truth.
+
+```
+python scripts/simulate_ct_genome.py --out-dir sim/ \
+    --backbone-length 400000 --n-cts 5 --shared-is 4 \
+    --is-copies-outside 5 --is-divergence 0.5 --cargo-genes 1 --seed 3
+wgsim -N <reads> -1 150 -2 150 sim/genome.fasta r1.fq r2.fq
+spades.py -1 r1.fq -2 r2.fq -o sim/sp -k 55,77,99 --only-assembler
+# run cycle_analysis on sim/sp/assembly_graph_with_scaffolds.gfa, then:
+python scripts/score_picota_benchmark.py \
+    --ground-truth sim/ground_truth.tsv \
+    --ground-truth-fasta sim/ground_truth_cts.fasta \
+    --cycles sim/cycles_strict.fasta
+```
+
+Because the backbone is random it contains no repeats other than the ones the
+script implants, which makes the ground truth exact but the genome easier to
+assemble than a real one. **Recall measured this way is an upper bound** and
+should be reported as such.
+
+#### Results, 50x simulated Illumina, SPAdes k=55,77,99
+
+| case | IS / cargo | CT recall | precision | copy-distinctness |
+|---|---|---|---|---|
+| IS 1221 bp, cargo 2154 bp | legacy | 6/6 | 6/12 | 3/3 |
+| | strict | 6/6 | 7/13 | 3/3 |
+| IS 1655 bp, cargo 810 bp | legacy | 5/5 | 7/14 | 4/4 |
+| | strict | 5/5 | 21/28 | 4/4 |
+| IS 2496 bp, cargo 810 bp | legacy | 5/5 | 8/15 | 4/4 |
+| | strict | 5/5 | 11/18 | 4/4 |
+
+Two findings, both worth stating against expectation:
+
+**PICOTA already handles the reviewer's scenario.** Composite transposons
+sharing one IS element (present in 11–13 genome copies) with different cargo
+were recovered separately in every case, in legacy mode as well as strict.
+
+**The D2 recall failure did not reproduce here.** On idealised two-node graphs
+legacy saturates at two candidates whatever the ground truth; on real assembly
+graphs it did not, because the assembler fragments each cycle into 5–24 nodes
+and the shared IS is therefore rarely more than 70% of the total node length —
+the condition the legacy threshold needs to misfire. The defect is real, and
+the conditions for it are narrower than the synthetic graphs implied.
+
+What strict mode actually buys on real data is **precision**: a higher fraction
+of reported cycles correspond to genuine composite transposons, with recall
+unchanged.
+
+### 3.6 Predicted baseline
 
 Copy-distinctness recall is expected to be poor before phases 2 and 3 land. On
 synthetic graphs the current deduplication caps output at two candidates
