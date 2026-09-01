@@ -1,4 +1,6 @@
 import collections
+import os
+import re
 from collections import deque
 from src.cycle_kmer_hash import filter_cycles_with_kmer
 from src.cycle_kmer_hash import print_progress_bar
@@ -14,6 +16,62 @@ class Graph(object):
         for edge in edges:
             adj[edge[0]].append(edge[1])
         return adj
+
+# Node depth (read coverage) as reported by assemblers. Different assemblers put
+# it in different places, so every known encoding is tried in turn:
+#   SPAdes (FASTG -> GFA)  NODE_1_length_523_cov_9.5794_ID_1   (in the name)
+#   MEGAHIT                k99_12 ... multi=12.3456            (in the name/tags)
+#   GFA1 spec              dp:f:35.2 / DP:f:35.2               (tag)
+#   gfatools / MEGAHIT     KC:i:41416 with LN:i:65             (k-mer count / length)
+_SPADES_COV_RE = re.compile(r'_cov_([0-9]*\.?[0-9]+)')
+_MULTI_RE      = re.compile(r'multi=([0-9]*\.?[0-9]+)')
+_DP_TAG_RE     = re.compile(r'\b[dD][pP]:f:([0-9]*\.?[0-9]+)')
+_KC_TAG_RE     = re.compile(r'\bKC:i:([0-9]+)')
+_LN_TAG_RE     = re.compile(r'\bLN:i:([0-9]+)')
+
+
+def parse_segment_depth(seg_name, tag_field, seq_len):
+    """
+    Extract per-node read depth from a GFA S-line.
+
+    seg_name  : the segment name (SPAdes and MEGAHIT encode depth here)
+    tag_field : everything after the sequence column, or '' when absent
+    seq_len   : length of the segment sequence, used to turn KC into a depth
+
+    Returns a float, or None when the assembler reported nothing usable.
+    Depth is the only signal that tells a multi-copy IS node apart from a
+    single-copy region, so callers must treat None as "unknown", never as zero.
+    """
+    match = _SPADES_COV_RE.search(seg_name)
+    if match:
+        return float(match.group(1))
+
+    # MEGAHIT writes multi= either into the segment name or into the tag columns
+    for source in (seg_name, tag_field):
+        match = _MULTI_RE.search(source) if source else None
+        if match:
+            return float(match.group(1))
+
+    if tag_field:
+        match = _DP_TAG_RE.search(tag_field)
+        if match:
+            return float(match.group(1))
+
+        kc_match = _KC_TAG_RE.search(tag_field)
+        if kc_match:
+            # KC is a k-mer count, so KC/length underestimates true depth by a
+            # factor of (length - k + 1)/length. The assembly k is not recorded
+            # in the GFA, so this is left uncorrected: the bias is negligible for
+            # nodes much longer than k and only matters for very short ones.
+            # Ratios between nodes of one graph stay usable, which is all
+            # depth_ratio needs.
+            ln_match = _LN_TAG_RE.search(tag_field)
+            length = int(ln_match.group(1)) if ln_match else seq_len
+            if length > 0:
+                return int(kc_match.group(1)) / length
+
+    return None
+
 
 class GraphWork:
     def __init__(self):
@@ -240,8 +298,12 @@ class GraphWork:
                     temp = line.split("\t", 3)
                     node_id = temp[1]
                     seq = temp[2].rstrip()  # trailing newline / whitespace kaldır
-                    node_dict[node_id + "+"] = {"Name": node_id + "+", "Sequence": seq}
-                    node_dict[node_id + "-"] = {"Name": node_id + "-", "Sequence": self.reverse_complement(seq)}
+                    tag_field = temp[3] if len(temp) > 3 else ''
+                    depth = parse_segment_depth(node_id, tag_field, len(seq))
+                    node_dict[node_id + "+"] = {"Name": node_id + "+", "Sequence": seq,
+                                                "Depth": depth}
+                    node_dict[node_id + "-"] = {"Name": node_id + "-", "Sequence": self.reverse_complement(seq),
+                                                "Depth": depth}
 
                 elif line.startswith("L"):
                     temp = line.split("\t", 6)
@@ -285,13 +347,35 @@ class GraphWork:
 
 
 class Cycle:
-    def __init__(self, name, sequence, length, component_number, path):
+    def __init__(self, name, sequence, length, component_number, path,
+                 node_depths=None):
         self.name = name
         self.sequence = sequence
         self.length = length
         self.component_number = component_number
         self.path = path
         self.reverseOriented = False
+        # Per-node read depth, aligned with `path`. None entries mean the
+        # assembler reported no usable coverage for that node.
+        self.node_depths = node_depths if node_depths is not None else []
+
+    @property
+    def depth_ratio(self):
+        """
+        Depth of the most-covered node divided by the least-covered one.
+
+        For a composite transposon bubble the repeated IS node collapses every
+        genomic copy into one node, so its depth is roughly the sum of those
+        copies while the cargo stays at single-copy depth. The ratio therefore
+        approximates the IS copy number: ~1 means no repeat structure, >=2 means
+        the shared node is present in multiple copies.
+
+        Returns None when fewer than two nodes have a known depth.
+        """
+        known = [d for d in self.node_depths if d is not None and d > 0]
+        if len(known) < 2:
+            return None
+        return max(known) / min(known)
 
 
 def reverse_complement(seq):
@@ -420,7 +504,9 @@ def cycle_info_optimized(path, nodes, edges, cycle_info_list):
             return 'Pass'
     
     # Return a new Cycle object if no match is found
-    return Cycle('name', the_final_seq, len(the_final_seq), component_number, path)
+    node_depths = [nodes[node].get("Depth") for node in path]
+    return Cycle('name', the_final_seq, len(the_final_seq), component_number, path,
+                 node_depths)
 
 
 def cycle_info(path, nodes, edges, cycle_info_list):
@@ -474,6 +560,36 @@ def cycle_info(path, nodes, edges, cycle_info_list):
 
 
 
+
+
+
+def write_depth_report(out_cycle_file, cycles):
+    """
+    Write a sidecar TSV of per-cycle node coverage next to the cycle FASTA.
+
+    Report-only: nothing here feeds back into detection, scoring or filtering.
+    It exists so the coverage signal can be characterised on real data before
+    any decision is allowed to depend on it (see docs/ROADMAP.md, phase 1).
+    """
+    report_path = os.path.splitext(out_cycle_file)[0] + '.depths.tsv'
+    header = ['CycleID', 'Length', 'ComponentNumber', 'DepthRatio',
+              'MaxNodeDepth', 'MinNodeDepth', 'NodeDepths']
+    with open(report_path, 'w') as handle:
+        handle.write('\t'.join(header) + '\n')
+        for cycle in cycles:
+            cycle_id = f"{cycle.name}-len{cycle.length}-comp{cycle.component_number}-"
+            known = [d for d in cycle.node_depths if d is not None and d > 0]
+            ratio = cycle.depth_ratio
+            handle.write('\t'.join([
+                cycle_id,
+                str(cycle.length),
+                str(cycle.component_number),
+                f"{ratio:.3f}" if ratio is not None else 'NA',
+                f"{max(known):.3f}" if known else 'NA',
+                f"{min(known):.3f}" if known else 'NA',
+                ';'.join('NA' if d is None else f"{d:.3f}" for d in cycle.node_depths),
+            ]) + '\n')
+    return report_path
 
 
 def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_size_of_cycle, max_size_of_cycle, name_prefix_cycle, min_component_number, max_component_number, k_mer_sim, threshold_sim):
@@ -655,6 +771,8 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     f = open(out_cycle_file, "w")
     f.write(final_str_info)
     f.close()
+
+    write_depth_report(out_cycle_file, cycle_clear_list)
 
 
 

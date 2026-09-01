@@ -22,9 +22,6 @@ Status: 2026-09-01. Companion document: [VALIDATION.md](VALIDATION.md).
 - **No ground-truth benchmark.** PICOTA has never been measured against a closed
   reference genome. There is no recall or precision figure for any organism.
   See [VALIDATION.md](VALIDATION.md).
-- **Read depth is discarded.** Assemblers report per-node coverage and PICOTA
-  throws it away, so the one signal that distinguishes a multi-copy IS from a
-  single-copy region is unused.
 - **Deduplication deletes real composite transposons.** Quantified below.
 
 ---
@@ -37,7 +34,7 @@ XPASS failures and forces the marker to be removed.
 
 | ID | Location | Defect | Measured impact |
 |----|----------|--------|-----------------|
-| **D1** | [`cycle_finderv2.py:238-244`](../picota/src/cycle_finderv2.py) | `parse_gfa` keeps only `Name` and `Sequence`; `dp:f:`, `KC:i:`, `LN:i:` and the SPAdes `cov_` field in node names are all dropped | Copy number of an IS node is unknowable downstream |
+| ~~**D1**~~ | [`cycle_finderv2.py`](../picota/src/cycle_finderv2.py) | ~~`parse_gfa` keeps only `Name` and `Sequence`, dropping every depth encoding~~ **Resolved in phase 1** | Node depth now parsed from SPAdes `cov_`, MEGAHIT `multi=`, `dp:f:`/`DP:f:` and `KC:i:`/`LN:i:` |
 | **D2** | [`cycle_finderv2.py:348-387`](../picota/src/cycle_finderv2.py) | `cycle_match_based_on_contig_id` strips strand for its exact-duplicate test but keeps strand for its similarity test, and treats >70% shared node length as duplicate | **Output saturates at 2 candidates** regardless of ground truth: recall 2/2, 2/3, 2/4, 2/5 for N distinct CTs sharing one IS |
 | **D3** | [`cycle_kmer_hash.py:12`](../picota/src/cycle_kmer_hash.py) | `get_kmer_hashes` returns a set, not a multiset, so repeat copy number is invisible | `IS-cargo` and `IS-cargo-IS` collapse to one candidate — and it is the *complete* CT that gets discarded |
 | **D4** | [`cycle_kmer_hash.py:118-119`](../picota/src/cycle_kmer_hash.py) | Similarity denominator is `len(new_cycle)`, a containment measure used to make an identity decision | Result depends on DFS traversal order: same two cycles give 1 or 2 outputs depending on input order |
@@ -66,9 +63,9 @@ not by guesswork.
 
 | Phase | Work | Exit criterion | Invalidates prior analyses? |
 |-------|------|----------------|------------------------------|
-| **0** | Characterization tests over synthetic assembly graphs (`tests/synthetic_gfa.py`, `tests/test_known_defects.py`). No production code touched. | Every defect in §2 reproduced by a test | No |
+| **0** ✅ | Characterization tests over synthetic assembly graphs (`tests/synthetic_gfa.py`, `tests/test_known_defects.py`). No production code touched. | Every defect in §2 reproduced by a test | No |
 | **0.5** | Closed-genome benchmark harness: ground-truth CT catalogue, PICOTA run, metrics. See [VALIDATION.md](VALIDATION.md). | A baseline recall/precision number exists | No |
-| **1** | Parse node depth in `parse_gfa`; expose `depth_ratio` (IS node / cargo node) as a **report-only** column. | D1 test passes; benchmark numbers unchanged | No — new column only |
+| **1** ✅ | Parse node depth in `parse_gfa`; expose `depth_ratio` (max node depth / min node depth) via `Cycle.depth_ratio` and a `<cycles>.depths.tsv` sidecar. **Report-only** — nothing in detection, scoring or filtering reads it. | D1 test passes; cycle output byte-identical | No — sidecar file only |
 | **2** | Replace sequence-similarity deduplication with node-multiset identity; keep containment as a recorded parent/child relation instead of a deletion. | D2, D3, D4 tests pass; benchmark recall improves | Yes, once the flag is enabled |
 | **3** | Replace raw k-mer identity with IS-annotation-driven deduplication (two candidates sharing an IS family but carrying different cargo are two CTs, never duplicates). | D5 test passes; benchmark recall improves | Yes |
 | **4** | Deterministic superbubble enumeration and IS-centric search: mark IS-like nodes first (high depth, high degree, IS BLAST hit), then collect paths through them. | D6 resolved; `path_limit` removed | Yes — larger refactor |
@@ -80,7 +77,20 @@ is no way to tell an improvement from a regression.
 
 ## 5. Immediate next steps
 
-1. Phase 0.5 — select benchmark strains (criteria in [VALIDATION.md](VALIDATION.md)),
-   build the ground-truth CT catalogue, record baseline metrics.
-2. Phase 1 — depth parsing, report-only.
-3. Phase 2 — deduplication rewrite, measured against the phase 0.5 baseline.
+1. **Phase 0.5** — select benchmark strains (criteria in
+   [VALIDATION.md](VALIDATION.md)), build the ground-truth CT catalogue, record
+   baseline metrics. Blocked on strain selection and download budget.
+2. **Phase 2** — deduplication rewrite, measured against the phase 0.5 baseline.
+   Characterization tests D2, D3 and D4 define the target.
+
+Known limitation of phase 1: when depth comes from `KC:i:`/`LN:i:` the value is a
+k-mer count per base, which underestimates true depth by `(length - k + 1)/length`.
+The assembly k is not recorded in the GFA, so this is left uncorrected; it biases
+nodes shorter than a few times k and is harmless for the rest. On the bundled
+`testNitro.gfa` the resulting `DepthRatio` spans 1.32 to 7.01 across five cycles.
+
+Phase 1 shipped a `depths.tsv` sidecar but nothing consumes it yet. Before
+`depth_ratio` is allowed to influence scoring, its distribution has to be
+characterised on real runs: single-copy bubbles should sit near 1 and genuine
+composite transposons at or above 2, and that separation needs to be observed,
+not assumed.

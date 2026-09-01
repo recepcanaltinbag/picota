@@ -69,19 +69,19 @@ def run_cycle_pipeline(gfa_path, k_mer_sim=K_MER_SIM, threshold_sim=THRESHOLD_SI
 
 # ─── D1: node depth is discarded by parse_gfa ────────────────────────────────
 
-@pytest.mark.xfail(strict=True, reason="D1: parse_gfa keeps only Name+Sequence")
 def test_d1_parse_gfa_retains_node_depth(tmp_path):
     """
     Coverage is the only signal that says how many genomic copies an IS node
     represents, and assemblers hand it to us for free (SPAdes encodes it in the
     node name, MEGAHIT/gfatools as KC:i:, the GFA spec as dp:f:). parse_gfa
-    currently drops every tag.
+    used to drop every tag; resolved in roadmap phase 1.
     """
     gfa = shared_repeat_two_cargos(str(tmp_path / "shared.gfa"),
                                    repeat_depth=60.0, cargo_depth=30.0)
     node_dict, _ = GraphWork().parse_gfa(gfa)
     assert "Depth" in node_dict["repeat+"]
     assert node_dict["repeat+"]["Depth"] == pytest.approx(60.0, rel=0.05)
+    assert node_dict["cargoA+"]["Depth"] == pytest.approx(30.0, rel=0.05)
 
 
 def test_d1_depth_tags_are_present_in_fixture(tmp_path):

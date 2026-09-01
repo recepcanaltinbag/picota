@@ -7,6 +7,35 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 ## [Unreleased] — v1.1.0 (in progress)
 
 ### Added
+- **`docs/ROADMAP.md`** — development roadmap: table of six confirmed defects
+  (D1-D6) in cycle detection and deduplication, the "no phase changes existing
+  output silently" principle, and a phased plan with per-phase exit criteria.
+- **`docs/VALIDATION.md`** — honest record of what has and has not been
+  validated, and the design for a closed-reference-genome benchmark. Notes that
+  PICOTA has never been measured against a closed genome and that no recall or
+  precision figure exists for any organism.
+- **`tests/synthetic_gfa.py`** — deterministic synthetic assembly graphs
+  reproducing the composite-transposon topology (one repeated IS node with N
+  distinct cargo branches), with LN/KC/dp depth tags.
+- **`tests/test_known_defects.py`** — characterization tests for D1-D6.
+  Assertions of the correct behaviour are marked `xfail(strict=True)`, so a fix
+  turns them into XPASS failures. Measured today: when N distinct composite
+  transposons share one IS node, the reported output saturates at two candidates
+  regardless of N (2/2, 2/3, 2/4, 2/5).
+- **Node depth parsing** (roadmap phase 1) — `parse_segment_depth()` in
+  `cycle_finderv2.py` reads coverage from all four encodings PICOTA can meet:
+  the SPAdes `_cov_` field in node names, MEGAHIT `multi=`, the GFA1 `dp:f:`/
+  `DP:f:` tag, and `KC:i:` divided by `LN:i:`. `parse_gfa()` now records it as
+  `Depth` on both strands of each node; unknown depth is `None`, never `0`.
+- **`Cycle.depth_ratio`** — most-covered node depth over least-covered, which
+  approximates the copy number of the repeated IS node collapsed into the bubble.
+- **`<cycles>.depths.tsv` sidecar** — per-cycle depth report written next to the
+  cycle FASTA by `cycle_analysis()`. **Report-only**: no detection, scoring or
+  filtering decision reads it, and cycle output is unchanged.
+- **`tests/test_depth.py`** — 21 tests covering every depth encoding, the
+  `depth_ratio` edge cases, the sidecar report, and a guard that depth tags do
+  not change which cycles are reported.
+
 - **`output_formatter.py`** — new module that generates `picota_enriched.csv` alongside
   `picota_final_tab`. Each detected composite transposon receives a unique CT tag
   (CT001, CT002, …). Rows are expanded one-per-antibiotic-class. Includes IS-family
