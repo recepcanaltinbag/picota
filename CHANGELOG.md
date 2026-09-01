@@ -46,11 +46,13 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   estimates 99.65% identity at k=80, and only the length difference separates
   them. Threshold configurable as `dedup_min_ani` (default 99.0).
 - **`GraphWork.truncated_searches`** — `path_limit` truncation is counted and
-  `cycle_analysis()` warns when it is non-zero. Previously the truncation
-  assigned a dead local and reported nothing. The first run of the counter
-  found **96 truncated searches on the bundled `test_data/testNitro.gfa`** at
-  the default `path_limit: 25`, meaning results on that graph were incomplete
-  and nothing indicated it.
+  `cycle_analysis()` warns that the enumeration was not exhaustive. Previously
+  the truncation assigned a dead local and reported nothing, so a truncated
+  search was indistinguishable from a complete one. On the bundled
+  `test_data/testNitro.gfa` the default `path_limit: 25` truncates 96 searches;
+  raising it to 50 truncates none and returns the same 35 paths, so nothing was
+  lost there — but establishing that required a second run, which is the point
+  of the warning.
 - **`tests/test_cycle_dedup.py`** — 55 tests pinning rotation and
   reverse-complement invariance, multiset counting, Jaccard symmetry, and that
   genuine duplicates are still removed, plus the identity estimate's stability

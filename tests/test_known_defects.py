@@ -361,8 +361,9 @@ def test_d5_strict_mode_merges_the_same_ct_across_assembly_noise(k):
 
 def test_d6_truncated_searches_are_counted(tmp_path):
     """
-    Hitting path_limit means candidate cycles were never enumerated. Legacy
-    assigned a dead local and reported nothing, so the results looked complete.
+    Hitting path_limit means the enumeration was not exhaustive. Legacy assigned
+    a dead local and reported nothing, so a truncated search was
+    indistinguishable from a complete one.
     """
     gfa = shared_repeat_n_cargos(str(tmp_path / "n.gfa"), 4)
     graph_work = GraphWork()
@@ -385,3 +386,28 @@ def test_d6_no_truncation_reported_when_limit_is_generous(tmp_path):
     graph_work.dfs_iterative(graph_work.generate_genome_graph(node_dict, edge_dict))
 
     assert graph_work.truncated_searches == 0
+
+
+def test_d6_truncation_does_not_by_itself_imply_lost_candidates():
+    """
+    The counter flags unverified completeness, not proven loss: a truncated
+    branch can dead-end anyway. On the bundled graph, path_limit 25 truncates
+    96 searches while 50 truncates none, and both return the same 35 paths.
+    """
+    gfa = os.path.join(os.path.dirname(__file__), "..", "picota",
+                       "test_data", "testNitro.gfa")
+    if not os.path.exists(gfa):
+        pytest.skip("testNitro.gfa not available")
+
+    results = {}
+    for limit in (25, 50):
+        graph_work = GraphWork()
+        graph_work.find_all_path = True
+        graph_work.path_limit = limit
+        node_dict, edge_dict = graph_work.parse_gfa(gfa)
+        graph_work.dfs_iterative(graph_work.generate_genome_graph(node_dict, edge_dict))
+        results[limit] = (graph_work.truncated_searches, len(graph_work.allPaths))
+
+    assert results[25][0] > 0
+    assert results[50][0] == 0
+    assert results[25][1] == results[50][1]

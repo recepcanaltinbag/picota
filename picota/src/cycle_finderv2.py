@@ -84,9 +84,11 @@ class GraphWork:
         self.visited = set()
         self.find_all_path = False
         self.path_limit = 15
-        # How many searches stopped at path_limit. Every one of them is a set of
-        # candidate cycles that were never enumerated, so a non-zero count means
-        # the results are incomplete and path_limit should be raised (D6).
+        # How many searches stopped at path_limit. A non-zero count means the
+        # enumeration was not exhaustive, so completeness cannot be claimed --
+        # it does NOT prove candidates were lost, since a truncated branch may
+        # have dead-ended anyway. Re-running with a higher limit is what settles
+        # it (D6).
         self.truncated_searches = 0
 
     def dfs(self, G):
@@ -669,9 +671,10 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     print('Finding Paths from cycles...')
     if GW.truncated_searches:
         print(f'WARNING: {GW.truncated_searches} path search(es) hit path_limit='
-              f'{path_limit} and were cut short. Candidate cycles longer than '
-              f'{path_limit} nodes are missing from these results; raise '
-              f'path_limit to enumerate them.')
+              f'{path_limit} and were cut short, so this enumeration is not '
+              f'exhaustive. Candidates may or may not have been lost -- a '
+              f'truncated branch can dead-end anyway. Re-run with a higher '
+              f'path_limit and compare to find out.')
     print('Cycle number: ',len(GW.cycles))
     print('All Paths: ', len(GW.allPaths))
     print('Reverse Paths: ', len(GW.reverseallPaths))
