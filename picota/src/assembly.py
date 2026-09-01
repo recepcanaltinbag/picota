@@ -147,9 +147,11 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
             print(f"{out_assembly} deleted, overwrite will be truw.")
 
         if os.path.exists(gfa_folder + '/' + gfa_name):
-            print('GFA File exist, skipping,', gfa_folder + '/' + gfa_name)
-        else:
-            assembly_driver_megahit(assembly_path_of_megahit, the_final_file_list, out_assembly, main_out_folder, gfa_folder, gfa_name, assembly_threads, assembly_quiet, assembly_keep_temp_files, gfa_tools_path, path_of_bandage)
+            print(f'GFA File exists, removing and recomputing: {gfa_folder}/{gfa_name}')
+            os.remove(gfa_folder + '/' + gfa_name)
+
+        best_gfa = assembly_driver_megahit(assembly_path_of_megahit, the_final_file_list, out_assembly, main_out_folder, gfa_folder, gfa_name, assembly_threads, assembly_quiet, assembly_keep_temp_files, gfa_tools_path, path_of_bandage)
+        return best_gfa
     else:
         gfa_files = []
         for k_mer_l in assembly_k_mer_list.split(','):
@@ -159,9 +161,10 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
                 os.mkdir(out_assembly)
             gfa_files.append(gfa_folder + '/' + gfa_name)
             if os.path.exists(gfa_folder + '/' + gfa_name):
-                print('GFA File exist, skipping,', gfa_folder + '/' + gfa_name)
-            else:
-                assembly_driver_spades(assembly_path_of_spades, the_final_file_list, out_assembly, gfa_folder, \
+                print(f'GFA File exists, removing and recomputing: {gfa_folder}/{gfa_name}')
+                os.remove(gfa_folder + '/' + gfa_name)
+
+            assembly_driver_spades(assembly_path_of_spades, the_final_file_list, out_assembly, gfa_folder, \
                 gfa_name, assembly_threads, k_mer_l, assembly_quiet, assembly_keep_temp_files)
 
         best_gfa = process_gfa_files(gfa_files, path_of_bandage)
@@ -171,8 +174,10 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
             shutil.copy(best_gfa, destination_path)
 
             print(f"Best GFA copied to: {destination_path}")
+            return destination_path
         else:
             print("No best GFA file found to copy.")
+            return None
 
 
 
@@ -233,8 +238,10 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder
         shutil.copy(best_gfa, destination_path)
 
         logger.info(f"Best GFA copied to: {destination_path}")
+        result_gfa = destination_path
     else:
         logger.info("No best GFA file found to copy.")
+        result_gfa = None
 
 
     if assembly_keep_temp_files == False:
@@ -244,6 +251,8 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder
                 os.remove(file_pt)
         logger.info('Temp Files deleted., if you want to keep them use --keep_temp_files')
 
+    return result_gfa
+
 
 
 
@@ -251,16 +260,51 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder
 def process_gfa_files(gfa_files, path_of_bandage):
     scores = []
 
+    # Cache path (aynı dizinde gfa_scores.json / metadata sakla)
+    cache_path = None
+    if gfa_files:
+        cache_path = os.path.join(os.path.dirname(os.path.abspath(gfa_files[0])), 'gfa_scores.json')
+
+    # Eğer cache aynı gfa setine aitse tekrar hesaplama yapma
+    if cache_path and os.path.exists(cache_path):
+        try:
+            with open(cache_path, 'r') as f:
+                cached = json.load(f)
+            cached_paths = [os.path.abspath(p) for p in cached.keys()]
+            input_paths = [os.path.abspath(p) for p in gfa_files]
+            if set(cached_paths) == set(input_paths):
+                for path in gfa_files:
+                    data = cached.get(os.path.abspath(path)) or cached.get(path)
+                    if data is None:
+                        raise KeyError
+                    scores.append((path, data['contigs'], data['dead_ends'], data['score']))
+                if logger is not None:
+                    logger.info('Reusing cached GFA scores from %s', cache_path)
+                else:
+                    print('Reusing cached GFA scores from', cache_path)
+        except Exception:
+            scores = []  # bozulmuş cache durumunda yeniden hesaplama yapacağız
+
     for gfa_file in gfa_files:
         if os.path.getsize(gfa_file) == 0:
-            logger.info(f"Skipping empty GFA: {gfa_file}")
+            if logger is not None:
+                logger.info(f"Skipping empty GFA: {gfa_file}")
+            else:
+                print(f"Skipping empty GFA: {gfa_file}")
+            continue
+
+        # Eğer zaten cache kullanıldıysa ve gfa dosyaları bulunduysa skor eklemeyebiliriz.
+        if scores and any(os.path.abspath(t[0]) == os.path.abspath(gfa_file) for t in scores):
             continue
 
         gfa_path, contigs, dead_ends, score = compute_score_from_gfa(gfa_file, path_of_bandage)
         scores.append((gfa_path, contigs, dead_ends, score))
 
     if not scores:
-        logger.info("No valid GFA files found.")
+        if logger is not None:
+            logger.info("No valid GFA files found.")
+        else:
+            print("No valid GFA files found.")
         return None
 
     # Normalize skorlar
@@ -275,13 +319,40 @@ def process_gfa_files(gfa_files, path_of_bandage):
     ]
 
     # Tüm normalize skorları yazdır
-    logger.info("\nGFA Scores (Normalized):")
+    if logger is not None:
+        logger.info("\nGFA Scores (Normalized):")
+    print("\nGFA Scores (Normalized):")
     for path, contigs, dead_ends, norm_score in normalized_scores:
-        logger.info(f"{os.path.basename(path)} | contigs: {contigs}, dead ends: {dead_ends}, normalized score: {norm_score:.4f}")
+        msg = f"{os.path.basename(path)} | contigs: {contigs}, dead ends: {dead_ends}, normalized score: {norm_score:.4f}"
+        if logger is not None:
+            logger.info(msg)
+        print(msg)
+
+    # Cache yaz
+    if cache_path:
+        cached_out = {}
+        for path, contigs, dead_ends, score in scores:
+            cached_out[os.path.abspath(path)] = {
+                'contigs': contigs,
+                'dead_ends': dead_ends,
+                'score': score
+            }
+        try:
+            with open(cache_path, 'w') as f:
+                json.dump(cached_out, f, indent=2)
+            if logger is not None:
+                logger.info(f"Saved GFA score cache to {cache_path}")
+            else:
+                print(f"Saved GFA score cache to {cache_path}")
+        except Exception:
+            pass
 
     # En yüksek normalize skora sahip GFA dosyasını bul
     best_gfa = max(normalized_scores, key=lambda x: x[3])
-    logger.info(f"\nBest GFA: {os.path.basename(best_gfa[0])} with score {best_gfa[3]:.4f}")
+    best_msg = f"\nBest GFA: {os.path.basename(best_gfa[0])} with score {best_gfa[3]:.4f}"
+    if logger is not None:
+        logger.info(best_msg)
+    print(best_msg)
     return best_gfa[0]
 
 
@@ -290,7 +361,10 @@ def process_gfa_files(gfa_files, path_of_bandage):
 
 def compute_score_from_gfa(gfa_file, path_of_bandage):
     # Bandage ile dead ends sayısını al
-    logger.info(f'gfa_process: {gfa_file}')
+    if logger is not None:
+        logger.info(f'gfa_process: {gfa_file}')
+    else:
+        print(f'gfa_process: {gfa_file}')
     cmd = f'{shlex.quote(path_of_bandage)} info {shlex.quote(gfa_file)} | grep "Dead ends" | grep -oP "\\d+"'
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, executable='/bin/bash')
     try:

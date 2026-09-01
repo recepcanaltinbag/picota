@@ -192,6 +192,8 @@ def step_long_read_mapping(fasta_record: str, long_fastq: str,
     subprocess.run(['samtools', 'index', sorted_bam], check=True)
     if os.path.exists(sam_path):
         os.remove(sam_path)
+    if os.path.exists(bam_path):
+        os.remove(bam_path)
     logger.info(f"  Mapped: {sorted_bam}")
     return sorted_bam
 
@@ -327,6 +329,7 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
         os.makedirs(asm_dir, exist_ok=True)
 
         fastq_dump = getattr(getattr(cfg, 'paths', None), 'fastq_dump', 'parallel-fastq-dump') if cfg else 'parallel-fastq-dump'
+        delete_fastq = getattr(getattr(cfg, 'options', None), 'delete_fastq_files', False) if cfg else False
 
         # If GFA already exists, skip download + assembly entirely (FASTQs may have been deleted)
         existing_gfa = list(Path(asm_dir).glob('*.gfa'))
@@ -348,8 +351,6 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
                 return []
             gfa_file = gfa_list[0]
 
-            # Delete raw FASTQs after successful assembly if config says so
-            delete_fastq = getattr(getattr(cfg, 'options', None), 'delete_fastq_files', False) if cfg else False
             if delete_fastq:
                 for f in raw_files:
                     try:
@@ -416,8 +417,24 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
         long_sra_dir  = output_path / 'sra_long'  / long_id
         long_fastq    = long_raw_dir / f'{long_id}_1.fastq'
 
-        # Download long-read FASTQ if not already present
-        if not (long_fastq.exists() and long_fastq.stat().st_size > 0):
+        # Skip download if all annotated FASTAs already have sorted BAMs
+        map_dir_path = output_path / 'mapping' / long_id
+        def _all_mapped(fasta_list):
+            if not fasta_list:
+                return False
+            return all(
+                (map_dir_path / f"{long_id}_{os.path.basename(fa)}_mapping_sorted.bam").exists()
+                for fa in fasta_list
+            )
+        mapping_done = _all_mapped(annotated)
+
+        if not annotated:
+            logger.info(f"  ⤼ No annotated FASTAs — skipping long-read validation")
+        elif mapping_done:
+            logger.info(f"  ⤼ Mapping already done — skipping download")
+
+        # Download long-read FASTQ if not already present and mapping not done
+        if annotated and not mapping_done and not (long_fastq.exists() and long_fastq.stat().st_size > 0):
             logger.info(f"  Downloading long-read {long_id} ...")
             try:
                 from src.sra_download import run_sra_down
@@ -431,7 +448,7 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
             except Exception as e:
                 logger.warning(f"  Long-read download failed: {e}")
 
-        if long_fastq.exists() and long_fastq.stat().st_size > 0:
+        if annotated and (mapping_done or (long_fastq.exists() and long_fastq.stat().st_size > 0)):
             t0 = time.time()
             map_dir = str(output_path / 'mapping' / long_id)
             n_mapped = 0
@@ -452,6 +469,12 @@ def _process_sample(short_id, long_id, output_path, gfa_mode,
                 except Exception as e:
                     logger.error(f"  Mapping/BAM error: {e}")
             logger.info(f"  ✓ {n_mapped} FASTA(s) mapped + analysed  ({time.time()-t0:.1f}s)")
+            if delete_fastq:
+                try:
+                    shutil.rmtree(str(long_raw_dir))
+                    logger.info(f"  ✓ Long-read raw dir deleted ({long_id})")
+                except Exception:
+                    pass
         else:
             logger.info(f"  ⤼ Long-read FASTQ not available after download attempt: {long_fastq}")
     else:
