@@ -40,7 +40,10 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   Deliberately not restricted to NCBI reference genomes: that filter reduces
   E. coli from 5350 closed assemblies to 2, and the survivor is K-12 MG1655,
   a lab strain with essentially no resistance composite transposons.
-  `--reference-only` restores the restriction.
+  `--reference-only` restores the restriction. `--resolve-strains` fills the
+  strain name from BioSample (the only record that carries it); the `Instrument`
+  column reports the sequencer model, which implies read length and therefore
+  how well the assembly resolves repeats.
 - **`tests/test_select_benchmark_strains.py`** — 29 offline tests using record
   shapes taken from live NCBI esummary responses.
 - **`tests/test_depth.py`** — 21 tests covering every depth encoding, the

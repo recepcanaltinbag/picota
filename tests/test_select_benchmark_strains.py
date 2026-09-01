@@ -17,13 +17,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from select_benchmark_strains import (  # noqa: E402
     OUTPUT_COLUMNS,
     build_assembly_query,
+    build_biosample_query,
     build_assembly_query_reference_only,
     build_sra_query,
     collect_candidates,
     estimate_coverage,
     parse_assembly_summary,
+    parse_biosample_summary,
     parse_sra_summary,
     pick_best_run,
+    resolve_strain,
     write_candidates,
 )
 
@@ -47,15 +50,25 @@ def assembly_record(**overrides):
 
 
 def sra_record(acc="ERR17004303", total_bases="184339160", total_spots="634551",
-               layout="PAIRED", platform="ILLUMINA"):
+               layout="PAIRED", platform="ILLUMINA", instrument="Illumina NovaSeq X"):
     layout_tag = f"<{layout}/>" if layout else ""
     return {
-        "ExpXml": f"<Summary><Platform instrument_model='HiSeq'>{platform}</Platform>"
-                  f"</Summary><Library_descriptor><LIBRARY_LAYOUT>{layout_tag}"
-                  f"</LIBRARY_LAYOUT></Library_descriptor>",
+        "ExpXml": f'<Summary><Platform instrument_model="{instrument}">{platform}'
+                  f'</Platform></Summary><Library_descriptor><LIBRARY_LAYOUT>'
+                  f'{layout_tag}</LIBRARY_LAYOUT></Library_descriptor>',
         "Runs": f'<Run acc="{acc}" total_spots="{total_spots}" '
                 f'total_bases="{total_bases}" is_public="true"/>',
     }
+
+
+# Real BioSample SampleData shape: attributes live in an escaped XML blob.
+def biosample_record(strain="JNEC-KY203", extra=""):
+    attrs = ""
+    if strain:
+        attrs += f'&lt;Attribute attribute_name="strain"&gt;{strain}&lt;/Attribute&gt;'
+    attrs += extra
+    return {"SampleData": f"&lt;BioSample&gt;&lt;Attributes&gt;{attrs}"
+                          f"&lt;/Attributes&gt;&lt;/BioSample&gt;"}
 
 
 class TestQueries:
@@ -181,19 +194,29 @@ class TestCoverageAndSelection:
 class FakeClient:
     """Stands in for EntrezClient; records the queries it was asked to run."""
 
-    def __init__(self, assembly_ids, assembly_records, sra_ids, sra_records):
+    def __init__(self, assembly_ids, assembly_records, sra_ids, sra_records,
+                 biosample_records=None):
         self.assembly_ids = assembly_ids
         self.assembly_records = assembly_records
         self.sra_ids = sra_ids
         self.sra_records = sra_records
+        self.biosample_records = biosample_records or []
         self.queries = []
 
     def esearch(self, db, term, retmax):
         self.queries.append((db, term))
-        return self.assembly_ids if db == "assembly" else self.sra_ids
+        if db == "assembly":
+            return self.assembly_ids
+        if db == "biosample":
+            return ["9"] if self.biosample_records else []
+        return self.sra_ids
 
     def esummary(self, db, ids):
-        return self.assembly_records if db == "assembly" else self.sra_records
+        if db == "assembly":
+            return self.assembly_records
+        if db == "biosample":
+            return self.biosample_records
+        return self.sra_records
 
 
 class TestCollectCandidates:
@@ -252,3 +275,90 @@ class TestWriteCandidates:
     def test_empty_input_writes_header_only(self, tmp_path):
         out = write_candidates(str(tmp_path / "c.tsv"), [])
         assert open(out).read().strip() == "\t".join(OUTPUT_COLUMNS)
+
+
+class TestInstrument:
+    def test_instrument_model_captured_separately_from_platform(self):
+        """Read length drives repeat resolution, so the model matters, not just ILLUMINA."""
+        run = parse_sra_summary(sra_record())[0]
+        assert run.platform == "ILLUMINA"
+        assert run.instrument == "Illumina NovaSeq X"
+
+    def test_platform_falls_back_to_instrument_when_absent(self):
+        record = sra_record()
+        record["ExpXml"] = record["ExpXml"].replace(">ILLUMINA<", "><")
+        assert parse_sra_summary(record)[0].platform == "Illumina NovaSeq X"
+
+    def test_missing_instrument_is_empty_not_an_error(self):
+        record = sra_record()
+        record["ExpXml"] = record["ExpXml"].replace(
+            ' instrument_model="Illumina NovaSeq X"', "")
+        assert parse_sra_summary(record)[0].instrument == ""
+
+
+class TestBiosampleStrain:
+    def test_strain_extracted_from_sample_data_blob(self):
+        assert parse_biosample_summary(biosample_record()) == "JNEC-KY203"
+
+    def test_isolate_used_when_strain_absent(self):
+        record = biosample_record(
+            strain="",
+            extra='&lt;Attribute attribute_name="isolate"&gt;ST131-A&lt;/Attribute&gt;')
+        assert parse_biosample_summary(record) == "ST131-A"
+
+    def test_strain_preferred_over_isolate(self):
+        record = biosample_record(
+            extra='&lt;Attribute attribute_name="isolate"&gt;other&lt;/Attribute&gt;')
+        assert parse_biosample_summary(record) == "JNEC-KY203"
+
+    def test_no_strain_attribute_returns_empty(self):
+        assert parse_biosample_summary(biosample_record(strain="")) == ""
+
+    def test_empty_record_returns_empty(self):
+        assert parse_biosample_summary({}) == ""
+
+    def test_biosample_query_targets_the_accession(self):
+        assert build_biosample_query("SAMD01706138") == "SAMD01706138[Accession]"
+
+    def test_resolve_strain_round_trip(self):
+        client = FakeClient(["1"], [assembly_record()], ["2"], [sra_record()],
+                            biosample_records=[biosample_record()])
+        assert resolve_strain(client, "SAMD01706138") == "JNEC-KY203"
+
+    def test_resolve_strain_without_match_is_empty(self):
+        client = FakeClient(["1"], [assembly_record()], ["2"], [sra_record()])
+        assert resolve_strain(client, "SAMD01706138") == ""
+
+
+class TestResolveStrainsFlag:
+    def _client(self):
+        record = assembly_record(Biosource={"InfraspeciesList": [], "Isolate": ""})
+        return FakeClient(["1"], [record], ["2"], [sra_record()],
+                          biosample_records=[biosample_record()])
+
+    def test_strain_left_empty_by_default(self):
+        """The default path must not pay for two extra requests per candidate."""
+        client = self._client()
+        found = collect_candidates(client, ["Escherichia coli"], 10, 30.0)
+        assert found[0].assembly.strain == ""
+        assert "biosample" not in [db for db, _ in client.queries]
+
+    def test_strain_filled_when_requested(self):
+        client = self._client()
+        found = collect_candidates(client, ["Escherichia coli"], 10, 30.0,
+                                   resolve_strains=True)
+        assert found[0].assembly.strain == "JNEC-KY203"
+
+    def test_existing_strain_is_not_re_fetched(self):
+        client = FakeClient(["1"], [assembly_record()], ["2"], [sra_record()],
+                            biosample_records=[biosample_record()])
+        found = collect_candidates(client, ["Escherichia coli"], 10, 30.0,
+                                   resolve_strains=True)
+        assert found[0].assembly.strain == "ST131-A"
+        assert "biosample" not in [db for db, _ in client.queries]
+
+    def test_instrument_reaches_the_output(self, tmp_path):
+        found = collect_candidates(self._client(), ["Escherichia coli"], 10, 30.0)
+        out = write_candidates(str(tmp_path / "c.tsv"), found)
+        rows = [line.rstrip("\n").split("\t") for line in open(out)]
+        assert rows[1][rows[0].index("Instrument")] == "Illumina NovaSeq X"

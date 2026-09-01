@@ -32,7 +32,12 @@ Usage:
 
 Output TSV columns:
   Species, Strain, AssemblyAccession, AssemblyLevel, GenomeLength, BioSample,
-  RunAccession, Platform, LibraryLayout, TotalBases, EstimatedCoverage
+  RunAccession, Platform, Instrument, LibraryLayout, TotalBases,
+  EstimatedCoverage
+
+Strain is empty unless --resolve-strains is given: neither the assembly nor the
+SRA summary carries it, so it costs two extra throttled BioSample requests per
+candidate. The assembly and BioSample accessions identify the isolate without it.
 
 The network layer is isolated in EntrezClient so the parsing and ranking logic
 can be tested offline (see tests/test_select_benchmark_strains.py).
@@ -51,7 +56,7 @@ AssemblyCandidate = namedtuple(
 
 SraRun = namedtuple(
     "SraRun",
-    "accession platform layout total_bases total_spots")
+    "accession platform instrument layout total_bases total_spots")
 
 BenchmarkCandidate = namedtuple(
     "BenchmarkCandidate",
@@ -59,8 +64,8 @@ BenchmarkCandidate = namedtuple(
 
 OUTPUT_COLUMNS = [
     "Species", "Strain", "AssemblyAccession", "AssemblyLevel", "GenomeLength",
-    "BioSample", "RunAccession", "Platform", "LibraryLayout", "TotalBases",
-    "EstimatedCoverage",
+    "BioSample", "RunAccession", "Platform", "Instrument", "LibraryLayout",
+    "TotalBases", "EstimatedCoverage",
 ]
 
 # Species whose resistance regions are commonly built on multi-copy IS elements,
@@ -95,6 +100,11 @@ def build_assembly_query(species):
 def build_assembly_query_reference_only(species):
     """As build_assembly_query, restricted to NCBI reference genomes."""
     return build_assembly_query(species) + ' AND "reference genome"[filter]' 
+
+
+def build_biosample_query(biosample):
+    """Search term that resolves a BioSample accession to its Entrez UID."""
+    return f"{biosample}[Accession]"
 
 
 def build_sra_query(biosample):
@@ -164,9 +174,14 @@ def parse_sra_summary(record):
 
     platform_match = re.search(r"<Platform[^>]*>([^<]+)</Platform>", exp_xml)
     platform = platform_match.group(1).strip() if platform_match else ""
+
+    # The instrument model is a better guide to read length than the platform
+    # name, and read length drives how well a short-read assembly resolves the
+    # repeats this benchmark is about.
+    instrument_match = re.search(r'instrument_model="([^"]+)"', exp_xml)
+    instrument = instrument_match.group(1).strip() if instrument_match else ""
     if not platform:
-        instrument = re.search(r'instrument_model="([^"]+)"', exp_xml)
-        platform = instrument.group(1).strip() if instrument else ""
+        platform = instrument
 
     layout = "PAIRED" if "<PAIRED" in exp_xml else ("SINGLE" if "<SINGLE" in exp_xml else "")
 
@@ -179,11 +194,36 @@ def parse_sra_summary(record):
         runs.append(SraRun(
             accession=accession,
             platform=platform,
+            instrument=instrument,
             layout=layout,
             total_bases=_to_int(attrs.get("total_bases")),
             total_spots=_to_int(attrs.get("total_spots")),
         ))
     return runs
+
+
+_ATTRIBUTE_RE = re.compile(
+    r'<Attribute[^>]*attribute_name="([^"]+)"[^>]*>([^<]*)</Attribute>')
+
+
+def parse_biosample_summary(record):
+    """
+    Pull the strain designation out of one BioSample esummary record.
+
+    Neither the assembly nor the SRA summary carries it -- assembly Biosource
+    comes back empty for most modern submissions and SRA reports only the
+    species -- so the strain name has to come from BioSample or not at all.
+    Returns '' when the submitter recorded none.
+    """
+    import html
+
+    blob = html.unescape(record.get("SampleData", "") or "")
+    attributes = {name.lower(): value.strip()
+                  for name, value in _ATTRIBUTE_RE.findall(blob)}
+    for key in ("strain", "isolate", "sub_strain"):
+        if attributes.get(key):
+            return attributes[key]
+    return ""
 
 
 def estimate_coverage(total_bases, genome_length):
@@ -251,8 +291,19 @@ class EntrezClient:
         return result
 
 
+def resolve_strain(client, biosample):
+    """Look up a BioSample accession and return its strain name, or ''."""
+    ids = client.esearch("biosample", build_biosample_query(biosample), 1)
+    for record in client.esummary("biosample", ids):
+        strain = parse_biosample_summary(record)
+        if strain:
+            return strain
+    return ""
+
+
 def collect_candidates(client, species_list, limit, min_coverage,
-                       reference_only=False, progress=None):
+                       reference_only=False, resolve_strains=False,
+                       progress=None):
     """
     Find one benchmark candidate per closed genome that has usable reads.
 
@@ -286,6 +337,11 @@ def collect_candidates(client, species_list, limit, min_coverage,
                 if run is None:
                     continue
 
+                if resolve_strains and not assembly.strain:
+                    # Two extra throttled requests per candidate, so opt-in.
+                    assembly = assembly._replace(
+                        strain=resolve_strain(client, assembly.biosample))
+
                 candidates.append(BenchmarkCandidate(assembly, run, coverage))
                 if progress:
                     progress(f"  {assembly.accession} {assembly.strain or '-'} "
@@ -310,6 +366,7 @@ def write_candidates(path, candidates):
                 assembly.biosample,
                 run.accession,
                 run.platform or "NA",
+                run.instrument or "NA",
                 run.layout or "NA",
                 str(run.total_bases),
                 f"{candidate.estimated_coverage:.1f}",
@@ -331,6 +388,10 @@ def main(argv=None):
                         help="Max assemblies to inspect per species.")
     parser.add_argument("--min-coverage", type=float, default=40.0,
                         help="Reject runs below this estimated depth.")
+    parser.add_argument("--resolve-strains", action="store_true",
+                        help="Fetch strain names from BioSample. Costs two extra "
+                             "throttled requests per candidate; assembly and "
+                             "BioSample accessions already identify the isolate.")
     parser.add_argument("--reference-only", action="store_true",
                         help="Restrict to NCBI reference genomes. Rarely useful here: "
                              "reference genomes are lab strains with few resistance CTs.")
@@ -342,6 +403,7 @@ def main(argv=None):
     candidates = collect_candidates(
         client, args.species, args.limit, args.min_coverage,
         reference_only=args.reference_only,
+        resolve_strains=args.resolve_strains,
         progress=lambda message: print(message, file=sys.stderr, flush=True))
 
     if not candidates:

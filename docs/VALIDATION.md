@@ -76,9 +76,21 @@ wanted.
 python scripts/select_benchmark_strains.py \
     --email you@example.org \
     --species "Escherichia coli" "Klebsiella pneumoniae" \
-    --limit 200 --min-coverage 40 \
+    --limit 200 --min-coverage 40 --resolve-strains \
     --out benchmark_candidates.tsv
 ```
+
+A run over 240 closed assemblies of these two species yielded 83 candidates
+(33 *E. coli*, 50 *K. pneumoniae*) at 41x to 1894x estimated depth, median 97x.
+
+`--resolve-strains` is optional because the strain designation lives only in the
+BioSample record -- assembly `Biosource` comes back empty for most modern
+submissions and SRA reports species only -- so filling it costs two extra
+throttled requests per candidate. The assembly and BioSample accessions identify
+the isolate without it; the strain name is for human-readable reporting. The
+`Instrument` column is free and worth reading: model implies read length, and
+read length drives how well a short-read assembly resolves the very repeats this
+benchmark measures.
 
 Property 3 -- several copies of one IS family with at least two carrying
 different cargo -- is not screened there, because it needs the genome downloaded
