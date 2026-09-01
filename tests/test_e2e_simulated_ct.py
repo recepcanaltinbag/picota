@@ -32,11 +32,23 @@ IS_FASTA = os.path.join(PICOTA, "DBs", "ISes", "IS.fna")
 CARGO_FASTA = os.path.join(PICOTA, "DBs", "Antibiotics",
                            "nucleotide_fasta_protein_homolog_model.fasta")
 
-REQUIRED_TOOLS = ["wgsim", "spades.py", "blastn", "makeblastdb"]
+# ART is the publication-grade simulator (empirical per-cycle quality profiles);
+# wgsim is accepted here only so the test can still run where ART is absent.
+READ_SIMULATORS = ["art_illumina", "wgsim"]
+REQUIRED_TOOLS = ["spades.py", "blastn", "makeblastdb"]
+
+
+def available_simulator():
+    for tool in READ_SIMULATORS:
+        if shutil.which(tool):
+            return tool
+    return None
 
 pytestmark = [
     pytest.mark.skipif(any(shutil.which(tool) is None for tool in REQUIRED_TOOLS),
                        reason=f"needs {', '.join(REQUIRED_TOOLS)} on PATH"),
+    pytest.mark.skipif(available_simulator() is None,
+                       reason=f"needs one of {', '.join(READ_SIMULATORS)} on PATH"),
     pytest.mark.skipif(not os.path.exists(IS_FASTA) or not os.path.exists(CARGO_FASTA),
                        reason="needs the bundled IS and CARD databases"),
 ]
@@ -67,11 +79,21 @@ def simulated_assembly(tmp_path_factory):
                  if not line.startswith(">"))
     pairs = COVERAGE * length // (2 * 150)
 
-    subprocess.run(
-        ["wgsim", "-N", str(pairs), "-1", "150", "-2", "150", "-e", "0.001",
-         "-r", "0", "-R", "0", "-X", "0", "-S", "1", str(genome),
-         str(work / "r1.fq"), str(work / "r2.fq")],
-        check=True, capture_output=True)
+    simulator = available_simulator()
+    if simulator == "art_illumina":
+        subprocess.run(
+            ["art_illumina", "-ss", "HSXt", "-i", str(genome), "-p", "-l", "150",
+             "-f", str(COVERAGE), "-m", "350", "-s", "50", "-rs", "1",
+             "-o", str(work / "art_"), "-na"],
+            check=True, capture_output=True)
+        os.replace(str(work / "art_1.fq"), str(work / "r1.fq"))
+        os.replace(str(work / "art_2.fq"), str(work / "r2.fq"))
+    else:
+        subprocess.run(
+            ["wgsim", "-N", str(pairs), "-1", "150", "-2", "150", "-e", "0.001",
+             "-r", "0", "-R", "0", "-X", "0", "-S", "1", str(genome),
+             str(work / "r1.fq"), str(work / "r2.fq")],
+            check=True, capture_output=True)
 
     subprocess.run(
         ["spades.py", "-1", str(work / "r1.fq"), "-2", str(work / "r2.fq"),

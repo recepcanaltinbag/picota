@@ -55,8 +55,15 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   2 kb. A simulated CT with a 1877 bp cycle is missed at the default and
   recovered at 1000.
 - **`scripts/run_ct_benchmark.py`** — sweeps the whole benchmark over several
-  host chromosomes, CT counts and seeds, writing one row per case to
-  `summary.tsv`. Resumable: a case already in the summary is skipped.
+  host chromosomes, CT counts, `min_size_of_cycle` values and seeds, writing one
+  row per case to `summary.tsv`. Resumable: a case already in the summary is
+  skipped.
+- **Reads are simulated with ART by default** (Huang et al. 2012), profile
+  `HSXt` (HiSeqX TruSeq 150 bp PE). ART carries empirical per-cycle quality
+  profiles; wgsim, the previous default, applies one uniform error rate and
+  invents quality strings — measured mean Q per cycle is a flat 30 across all
+  150 cycles, against ART's 36 → 41 → 37. `--simulator wgsim` is kept for fast
+  development loops but must not be used for published numbers.
 - **`--placement random`** (now the default in `simulate_ct_genome.py`) —
   implants are scattered subject to `--spacing` rather than evenly spaced.
   Even spacing put every CT the same distance apart, a systematic artefact.

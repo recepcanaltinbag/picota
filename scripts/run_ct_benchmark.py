@@ -23,14 +23,19 @@ Usage:
       --n-cts 3 6 12 --seeds 1 2 \\
       --coverage 50 --out-dir bench/
 
-Requires wgsim, spades.py, blastn and makeblastdb on PATH; override with the
---wgsim / --spades / --blastn / --makeblastdb flags (e.g. to point at a conda
-environment).
+Reads are simulated with ART by default (empirical, platform-specific Illumina
+quality profiles -- the choice a methods section can defend). --simulator wgsim
+is faster but applies one uniform error rate with invented quality strings; use
+it for development loops, not for published numbers.
+
+Requires art_illumina (or wgsim), spades.py, blastn and makeblastdb on PATH;
+override with --art / --wgsim / --spades / --blastn / --makeblastdb.
 """
 
 import argparse
 import csv
 import os
+import shutil
 import subprocess
 import sys
 
@@ -38,7 +43,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PICOTA_DIR = os.path.join(SCRIPT_DIR, "..", "picota")
 
 SUMMARY_COLUMNS = [
-    "Case", "Backbone", "NCTs", "SharedIS", "Seed", "Mode", "GenomeLength",
+    "Case", "Backbone", "NCTs", "SharedIS", "Seed", "Mode", "MinCycle",
+    "GenomeLength",
     "Segments", "Links", "ReportedCycles", "TruncatedSearches",
     "CTRecall", "CTTotal", "Precision", "PrecisionTotal",
     "CopyDistinct", "CopyDistinctTotal",
@@ -81,20 +87,50 @@ def simulate_case(args, case_dir, backbone, n_cts, shared_is, seed):
          "--is-divergence", str(args.is_divergence),
          "--cargo-genes", str(args.cargo_genes),
          "--spacing", str(args.spacing), "--seed", str(seed),
+         "--is-min-length", str(args.is_min_length),
+         "--is-max-length", str(args.is_max_length),
          "--is-fasta", args.is_fasta, "--cargo-fasta", args.cargo_fasta], log)
 
 
-def sequence_and_assemble(args, case_dir):
-    genome = os.path.join(case_dir, "genome.fasta")
+def simulate_reads(args, case_dir, genome, seed):
+    """
+    Generate paired-end Illumina reads.
+
+    ART is the default because it is what a methods section can defend: it
+    carries empirical, platform-specific quality profiles, so error rate rises
+    along the read the way it really does. wgsim applies one uniform error rate
+    with invented quality strings, which is fine for a fast development loop and
+    not fine for a published benchmark.
+    """
+    reads = [os.path.join(case_dir, "r1.fq"), os.path.join(case_dir, "r2.fq")]
+    log = os.path.join(case_dir, "reads.log")
+
+    if args.simulator == "art":
+        prefix = os.path.join(case_dir, "art_")
+        run([args.art, "-ss", args.art_profile, "-i", genome, "-p",
+             "-l", str(args.read_length), "-f", str(args.coverage),
+             "-m", str(args.fragment_mean), "-s", str(args.fragment_sd),
+             "-rs", str(seed), "-o", prefix, "-na"], log)
+        for produced, wanted in zip([prefix + "1.fq", prefix + "2.fq"], reads):
+            if not os.path.exists(produced):
+                raise RuntimeError(f"ART produced no {produced}")
+            os.replace(produced, wanted)
+        return reads
+
     length = genome_length(genome)
     # wgsim counts read PAIRS, and each pair contributes 2 x read length.
     pairs = int(args.coverage * length / (2 * args.read_length))
-    reads = [os.path.join(case_dir, "r1.fq"), os.path.join(case_dir, "r2.fq")]
-    log = os.path.join(case_dir, "reads.log")
     run([args.wgsim, "-N", str(pairs),
          "-1", str(args.read_length), "-2", str(args.read_length),
          "-e", str(args.error_rate), "-r", "0", "-R", "0", "-X", "0",
-         "-S", "1", genome] + reads, log)
+         "-S", str(seed), genome] + reads, log)
+    return reads
+
+
+def sequence_and_assemble(args, case_dir, seed):
+    genome = os.path.join(case_dir, "genome.fasta")
+    length = genome_length(genome)
+    reads = simulate_reads(args, case_dir, genome, seed)
 
     assembly_dir = os.path.join(case_dir, "spades")
     run([args.spades, "-1", reads[0], "-2", reads[1], "-o", assembly_dir,
@@ -107,13 +143,13 @@ def sequence_and_assemble(args, case_dir):
     return gfa, length
 
 
-def detect_cycles(args, gfa, out_fasta, mode):
+def detect_cycles(args, gfa, out_fasta, mode, min_cycle):
     """Run cycle_analysis in-process and report how many searches were cut."""
     sys.path.insert(0, os.path.abspath(PICOTA_DIR))
     from src.cycle_finderv2 import GraphWork, cycle_analysis  # noqa: E402
 
     cycle_analysis(gfa, out_fasta, True, args.path_limit,
-                   args.min_cycle, args.max_cycle, "Cycle", 1,
+                   min_cycle, args.max_cycle, "Cycle", 1,
                    args.max_components, args.k_mer_sim, args.threshold_sim,
                    dedup_mode=mode)
 
@@ -140,11 +176,38 @@ def score_case(args, case_dir, cycles_fasta):
     return score(ground_truth, rows, cycle_ids, args.min_identity, args.min_coverage)
 
 
+def free_intermediates(case_dir):
+    """
+    Delete the regenerable bulk once a case is scored.
+
+    A single 5 Mb genome at 50x is roughly 250 MB of reads plus a SPAdes working
+    directory, so a sweep of a few dozen cases fills a disk. Everything removed
+    here is reproducible from genome.fasta and the recorded seed; the ground
+    truth, the reported cycles and the summary row all stay.
+    """
+    for name in ("r1.fq", "r2.fq"):
+        path = os.path.join(case_dir, name)
+        if os.path.exists(path):
+            os.remove(path)
+
+    assembly = os.path.join(case_dir, "spades")
+    if not os.path.isdir(assembly):
+        return
+    keep = {"assembly_graph_with_scaffolds.gfa", "assembly_graph.fastg",
+            "contigs.fasta", "spades.log"}
+    for entry in os.listdir(assembly):
+        path = os.path.join(assembly, entry)
+        if entry in keep:
+            continue
+        shutil.rmtree(path, ignore_errors=True) if os.path.isdir(path) else os.remove(path)
+
+
 def existing_cases(summary_path):
     if not os.path.exists(summary_path):
         return set()
     with open(summary_path) as handle:
-        return {(row["Case"], row["Mode"]) for row in csv.DictReader(handle, delimiter="\t")}
+        return {(row["Case"], row["Mode"], int(row["MinCycle"]))
+                for row in csv.DictReader(handle, delimiter="\t")}
 
 
 def append_row(summary_path, row):
@@ -168,7 +231,28 @@ def main(argv=None):
                              "element. Default: %(default)s")
     parser.add_argument("--modes", nargs="+", default=["legacy", "strict"])
     parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--keep-intermediates", action="store_true",
+                        help="Keep simulated reads and the full SPAdes working "
+                             "directory. Off by default: they are the bulk of "
+                             "the disk cost and are regenerable from "
+                             "genome.fasta and the recorded seed.")
 
+    parser.add_argument("--simulator", choices=("art", "wgsim"), default="art",
+                        help="Read simulator. ART carries empirical "
+                             "platform-specific quality profiles and is the "
+                             "publication-grade choice; wgsim is faster but "
+                             "applies one uniform error rate with invented "
+                             "quality strings. Default: %(default)s")
+    parser.add_argument("--art", default="art_illumina",
+                        help="Path to art_illumina.")
+    parser.add_argument("--art-profile", default="HSXt",
+                        help="ART built-in sequencing system: HS25 (HiSeq 2500), "
+                             "HSXt (HiSeqX TruSeq, 150bp), HSXn (HiSeqX PCR "
+                             "free), MSv3 (MiSeq v3). Default: %(default)s")
+    parser.add_argument("--fragment-mean", type=int, default=350,
+                        help="Mean DNA fragment length for ART. Default: %(default)s")
+    parser.add_argument("--fragment-sd", type=int, default=50,
+                        help="Fragment length SD for ART. Default: %(default)s")
     parser.add_argument("--coverage", type=float, default=50.0)
     parser.add_argument("--read-length", type=int, default=150)
     parser.add_argument("--error-rate", type=float, default=0.001)
@@ -180,13 +264,20 @@ def main(argv=None):
     parser.add_argument("--is-divergence", type=float, default=0.5)
     parser.add_argument("--cargo-genes", type=int, default=2)
     parser.add_argument("--spacing", type=int, default=20000)
+    parser.add_argument("--is-min-length", type=int, default=700)
+    parser.add_argument("--is-max-length", type=int, default=2500)
     parser.add_argument("--is-fasta", default=os.path.join(PICOTA_DIR, "DBs", "ISes", "IS.fna"))
     parser.add_argument("--cargo-fasta",
                         default=os.path.join(PICOTA_DIR, "DBs", "Antibiotics",
                                              "nucleotide_fasta_protein_homolog_model.fasta"))
 
     parser.add_argument("--path-limit", type=int, default=25)
-    parser.add_argument("--min-cycle", type=int, default=2000)
+    parser.add_argument("--min-cycles", nargs="+", type=int, default=[2000],
+                        help="min_size_of_cycle value(s) to test. Sweeping this "
+                             "measures defect D7 directly: the graph cycle of a "
+                             "composite transposon is IS + cargo, so a compact "
+                             "CT falls under the shipped default of 2000 and is "
+                             "dropped before scoring. Default: %(default)s")
     parser.add_argument("--max-cycle", type=int, default=40000)
     parser.add_argument("--max-components", type=int, default=25)
     parser.add_argument("--k-mer-sim", type=int, default=80)
@@ -211,7 +302,8 @@ def main(argv=None):
             shared = min(shared, n_cts)
             for seed in args.seeds:
                 case = f"{label}_n{n_cts}_s{seed}"
-                if all((case, mode) in done for mode in args.modes):
+                if all((case, mode, mc) in done
+                       for mode in args.modes for mc in args.min_cycles):
                     print(f"[skip] {case}", file=sys.stderr)
                     continue
 
@@ -228,21 +320,26 @@ def main(argv=None):
                     if os.path.exists(gfa):
                         length = genome_length(os.path.join(case_dir, "genome.fasta"))
                     else:
-                        gfa, length = sequence_and_assemble(args, case_dir)
+                        gfa, length = sequence_and_assemble(args, case_dir, seed)
                     segments, links = count_gfa(gfa)
                 except Exception as error:  # noqa: BLE001 - one bad case must not stop the sweep
                     print(f"[fail] {case}: {error}", file=sys.stderr)
+                    if not args.keep_intermediates:
+                        free_intermediates(case_dir)
                     continue
 
                 for mode in args.modes:
-                    if (case, mode) in done:
+                  for min_cycle in args.min_cycles:
+                    if (case, mode, min_cycle) in done:
                         continue
-                    cycles = os.path.join(case_dir, f"cycles_{mode}.fasta")
+                    cycles = os.path.join(case_dir, f"cycles_{mode}_{min_cycle}.fasta")
                     try:
-                        reported, truncated = detect_cycles(args, gfa, cycles, mode)
+                        reported, truncated = detect_cycles(args, gfa, cycles,
+                                                            mode, min_cycle)
                         result = score_case(args, case_dir, cycles)
                     except Exception as error:  # noqa: BLE001
-                        print(f"[fail] {case}/{mode}: {error}", file=sys.stderr)
+                        print(f"[fail] {case}/{mode}/{min_cycle}: {error}",
+                              file=sys.stderr)
                         continue
 
                     recall, recall_total = result["ct_recall"]
@@ -251,15 +348,19 @@ def main(argv=None):
                     append_row(summary_path, {
                         "Case": case, "Backbone": label, "NCTs": n_cts,
                         "SharedIS": shared, "Seed": seed, "Mode": mode,
-                        "GenomeLength": length, "Segments": segments, "Links": links,
+                        "MinCycle": min_cycle, "GenomeLength": length, "Segments": segments, "Links": links,
                         "ReportedCycles": reported, "TruncatedSearches": truncated,
                         "CTRecall": recall, "CTTotal": recall_total,
                         "Precision": precision, "PrecisionTotal": precision_total,
                         "CopyDistinct": distinct, "CopyDistinctTotal": distinct_total,
                     })
-                    print(f"       {mode}: recall {recall}/{recall_total}, "
+                    print(f"       {mode} min_cycle={min_cycle}: "
+                          f"recall {recall}/{recall_total}, "
                           f"precision {precision}/{precision_total}, "
                           f"copy-distinct {distinct}/{distinct_total}", file=sys.stderr)
+
+                if not args.keep_intermediates:
+                    free_intermediates(case_dir)
 
     print(f"\nSummary: {summary_path}", file=sys.stderr)
     return 0
