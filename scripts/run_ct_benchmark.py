@@ -27,14 +27,14 @@ Usage:
       --n-cts 3 6 12 --seeds 1 2 \\
       --coverage 50 --out-dir bench/
 
-Reads are simulated with ART by default (empirical, platform-specific Illumina
-quality profiles -- the choice a methods section can defend). --simulator wgsim
-is faster but applies one uniform error rate with invented quality strings; use
-it for development loops, not for published numbers.
+Reads are simulated with ART, which carries empirical per-cycle Illumina quality
+profiles. There is deliberately no uniform-error alternative: it would be faster
+and would make every number this harness emits indefensible in a methods
+section.
 
-Requires art_illumina (or wgsim), spades.py, blastn and makeblastdb on PATH;
-MEGAHIT additionally needs megahit, megahit_toolkit and fastg2gfa. Override any
-of them with --art / --wgsim / --spades / --megahit / --blastn / --makeblastdb.
+Requires art_illumina, spades.py, blastn and makeblastdb on PATH; MEGAHIT
+additionally needs megahit, megahit_toolkit and fastg2gfa. Override any of them
+with --art / --spades / --megahit / --blastn / --makeblastdb.
 """
 
 import argparse
@@ -101,36 +101,27 @@ def simulate_case(args, case_dir, backbone, n_cts, shared_is, seed):
 
 def simulate_reads(args, case_dir, genome, seed):
     """
-    Generate paired-end Illumina reads.
+    Generate paired-end Illumina reads with ART.
 
-    ART is the default because it is what a methods section can defend: it
-    carries empirical, platform-specific quality profiles, so error rate rises
-    along the read the way it really does. wgsim applies one uniform error rate
-    with invented quality strings, which is fine for a fast development loop and
-    not fine for a published benchmark.
+    ART carries empirical, platform-specific quality profiles, so the per-cycle
+    error rate rises along the read the way a real instrument's does. Uniform
+    error simulators are much faster and write a flat quality string across every
+    cycle, which is not a thing any sequencer produces; they are not an option
+    here because every number this harness emits is meant to be publishable.
     """
     reads = [os.path.join(case_dir, "r1.fq"), os.path.join(case_dir, "r2.fq")]
     log = os.path.join(case_dir, "reads.log")
+    prefix = os.path.join(case_dir, "art_")
 
-    if args.simulator == "art":
-        prefix = os.path.join(case_dir, "art_")
-        run([args.art, "-ss", args.art_profile, "-i", genome, "-p",
-             "-l", str(args.read_length), "-f", str(args.coverage),
-             "-m", str(args.fragment_mean), "-s", str(args.fragment_sd),
-             "-rs", str(seed), "-o", prefix, "-na"], log)
-        for produced, wanted in zip([prefix + "1.fq", prefix + "2.fq"], reads):
-            if not os.path.exists(produced):
-                raise RuntimeError(f"ART produced no {produced}")
-            os.replace(produced, wanted)
-        return reads
+    run([args.art, "-ss", args.art_profile, "-i", genome, "-p",
+         "-l", str(args.read_length), "-f", str(args.coverage),
+         "-m", str(args.fragment_mean), "-s", str(args.fragment_sd),
+         "-rs", str(seed), "-o", prefix, "-na"], log)
 
-    length = genome_length(genome)
-    # wgsim counts read PAIRS, and each pair contributes 2 x read length.
-    pairs = int(args.coverage * length / (2 * args.read_length))
-    run([args.wgsim, "-N", str(pairs),
-         "-1", str(args.read_length), "-2", str(args.read_length),
-         "-e", str(args.error_rate), "-r", "0", "-R", "0", "-X", "0",
-         "-S", str(seed), genome] + reads, log)
+    for produced, wanted in zip([prefix + "1.fq", prefix + "2.fq"], reads):
+        if not os.path.exists(produced):
+            raise RuntimeError("ART produced no " + produced)
+        os.replace(produced, wanted)
     return reads
 
 
@@ -347,12 +338,6 @@ def main(argv=None):
                              "the disk cost and are regenerable from "
                              "genome.fasta and the recorded seed.")
 
-    parser.add_argument("--simulator", choices=("art", "wgsim"), default="art",
-                        help="Read simulator. ART carries empirical "
-                             "platform-specific quality profiles and is the "
-                             "publication-grade choice; wgsim is faster but "
-                             "applies one uniform error rate with invented "
-                             "quality strings. Default: %(default)s")
     parser.add_argument("--art", default="art_illumina",
                         help="Path to art_illumina.")
     parser.add_argument("--art-profile", default="HSXt",
@@ -365,7 +350,6 @@ def main(argv=None):
                         help="Fragment length SD for ART. Default: %(default)s")
     parser.add_argument("--coverage", type=float, default=50.0)
     parser.add_argument("--read-length", type=int, default=150)
-    parser.add_argument("--error-rate", type=float, default=0.001)
     parser.add_argument("--assemblers", nargs="+", default=["spades"],
                         choices=("spades", "megahit"),
                         help="Assemblers to test. The assembly graph is PICOTA's "
@@ -417,7 +401,6 @@ def main(argv=None):
     parser.add_argument("--min-identity", type=float, default=95.0)
     parser.add_argument("--min-coverage", type=float, default=0.95)
 
-    parser.add_argument("--wgsim", default="wgsim")
     parser.add_argument("--spades", default="spades.py")
     parser.add_argument("--blastn", default="blastn")
     parser.add_argument("--makeblastdb", default="makeblastdb")

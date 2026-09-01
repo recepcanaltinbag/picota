@@ -355,7 +355,7 @@ class GraphWork:
 
 class Cycle:
     def __init__(self, name, sequence, length, component_number, path,
-                 node_depths=None):
+                 node_depths=None, node_spans=None):
         self.name = name
         self.sequence = sequence
         self.length = length
@@ -365,6 +365,67 @@ class Cycle:
         # Per-node read depth, aligned with `path`. None entries mean the
         # assembler reported no usable coverage for that node.
         self.node_depths = node_depths if node_depths is not None else []
+        # (start, end) of each node within `sequence`, 1-based inclusive and
+        # aligned with `path`. Needed to say which node carries a given region of
+        # the cycle -- an IS annotation, for instance -- and therefore what read
+        # depth that region sits at.
+        self.node_spans = node_spans if node_spans is not None else []
+
+    def depth_at(self, start, end):
+        """
+        Median depth of the nodes overlapping [start, end] in cycle coordinates.
+
+        Returns None when no node overlaps or none has a known depth. Median
+        rather than mean because a region can straddle a node boundary and pick
+        up a sliver of a neighbour.
+        """
+        overlapping = []
+        for (node_start, node_end), depth in zip(self.node_spans, self.node_depths):
+            if depth is None or depth <= 0:
+                continue
+            if node_start <= end and start <= node_end:
+                overlapping.append(depth)
+        if not overlapping:
+            return None
+        overlapping.sort()
+        middle = len(overlapping) // 2
+        if len(overlapping) % 2:
+            return overlapping[middle]
+        return (overlapping[middle - 1] + overlapping[middle]) / 2
+
+    def junction_depth_ratio(self, is_regions, cargo_regions):
+        """
+        Read depth over the IS regions divided by depth over the cargo.
+
+        Deliberately NOT called a copy-number estimate. The idealised argument
+        says it should be one -- every genomic copy of the flanking IS collapses
+        into a single graph node, so that node carries their summed depth while
+        the cargo sits at single-copy depth -- but measured against known ground
+        truth the ratio badly understates copy number: a genome carrying 16
+        copies of the shared element gives ratios of 1.8 to 3.8, not 16. A real
+        assembly graph does not collapse the element into one node the way the
+        argument assumes; the cycle traverses 14 to 18 nodes, the IS annotation
+        spans several of them, and the assembler's own coverage handling
+        redistributes depth further.
+
+        What it does carry is a direction. Cycles built on a multi-copy IS score
+        systematically higher than cycles whose flanking element is present
+        twice (medians of roughly 2.3 against 1.6 in the scenarios), so the ratio
+        is worth reporting as evidence about the structure. It is not worth
+        quoting as a copy number.
+
+        Returns None when either side has no node with a known depth.
+        """
+        is_depths = [d for d in (self.depth_at(s, e) for s, e in is_regions)
+                     if d is not None]
+        cargo_depths = [d for d in (self.depth_at(s, e) for s, e in cargo_regions)
+                        if d is not None]
+        if not is_depths or not cargo_depths:
+            return None
+        cargo = sorted(cargo_depths)[len(cargo_depths) // 2]
+        if cargo <= 0:
+            return None
+        return max(is_depths) / cargo
 
     @property
     def depth_ratio(self):
@@ -502,6 +563,15 @@ def cycle_info_optimized(path, nodes, edges, cycle_info_list):
     seq_parts.append(sequences[-1])
     the_final_seq = ''.join(seq_parts)
 
+    # Where each node ends up in the finished cycle. seq_parts[i] is node i with
+    # its overlap into the next node already trimmed, so the spans follow from
+    # the part lengths directly.
+    node_spans = []
+    cursor = 0
+    for part in seq_parts:
+        node_spans.append((cursor + 1, cursor + len(part)))
+        cursor += len(part)
+
     # Reverse complement calculation done only once
     reverse_final_seq = reverse_complement(the_final_seq)
 
@@ -513,7 +583,7 @@ def cycle_info_optimized(path, nodes, edges, cycle_info_list):
     # Return a new Cycle object if no match is found
     node_depths = [nodes[node].get("Depth") for node in path]
     return Cycle('name', the_final_seq, len(the_final_seq), component_number, path,
-                 node_depths)
+                 node_depths, node_spans)
 
 
 def cycle_info(path, nodes, edges, cycle_info_list):
@@ -580,7 +650,7 @@ def write_depth_report(out_cycle_file, cycles):
     """
     report_path = os.path.splitext(out_cycle_file)[0] + '.depths.tsv'
     header = ['CycleID', 'Length', 'ComponentNumber', 'DepthRatio',
-              'MaxNodeDepth', 'MinNodeDepth', 'NodeDepths']
+              'MaxNodeDepth', 'MinNodeDepth', 'NodeDepths', 'NodeSpans']
     with open(report_path, 'w') as handle:
         handle.write('\t'.join(header) + '\n')
         for cycle in cycles:
@@ -595,6 +665,7 @@ def write_depth_report(out_cycle_file, cycles):
                 f"{max(known):.3f}" if known else 'NA',
                 f"{min(known):.3f}" if known else 'NA',
                 ';'.join('NA' if d is None else f"{d:.3f}" for d in cycle.node_depths),
+                ';'.join(f"{a}-{b}" for a, b in cycle.node_spans) or 'NA',
             ]) + '\n')
     return report_path
 

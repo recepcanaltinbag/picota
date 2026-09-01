@@ -150,3 +150,99 @@ class TestDepthIsReportOnly:
         plain.write_text("".join(stripped))
 
         assert len(run_cycle_pipeline(with_depth)) == len(run_cycle_pipeline(str(plain)))
+
+
+class TestNodeSpans:
+    """
+    Where each node sits inside the finished cycle. Without this the depth of a
+    particular region -- the IS, say -- cannot be looked up at all.
+    """
+
+    def test_spans_cover_the_whole_cycle_without_gaps(self, tmp_path):
+        gfa = shared_repeat_n_cargos(str(tmp_path / "g.gfa"), 2)
+        from src.cycle_finderv2 import GraphWork, cycle_info_optimized
+        graph_work = GraphWork()
+        graph_work.find_all_path = True
+        node_dict, edge_dict = graph_work.parse_gfa(gfa)
+        graph_work.dfs_iterative(graph_work.generate_genome_graph(node_dict, edge_dict))
+        cycle = cycle_info_optimized(graph_work.allPaths[0], node_dict, edge_dict, [])
+
+        assert len(cycle.node_spans) == len(cycle.path)
+        assert cycle.node_spans[0][0] == 1
+        assert cycle.node_spans[-1][1] == cycle.length
+        for (_, end), (next_start, _) in zip(cycle.node_spans, cycle.node_spans[1:]):
+            assert next_start == end + 1
+
+    def test_spans_appear_in_the_sidecar(self, tmp_path):
+        cycles = [Cycle("Cycle_1", "ACGT", 4, 2, ["a+", "b+"], [90.0, 30.0],
+                        [(1, 2), (3, 4)])]
+        out = write_depth_report(str(tmp_path / "s.fasta"), cycles)
+        rows = [ln.rstrip("\n").split("\t") for ln in open(out)]
+        assert "NodeSpans" in rows[0]
+        assert rows[1][rows[0].index("NodeSpans")] == "1-2;3-4"
+
+
+class TestDepthAt:
+    def _cycle(self):
+        return Cycle("c", "N" * 4000, 4000, 3, ["is+", "cargo+", "tail+"],
+                     [120.0, 30.0, 28.0], [(1, 1500), (1501, 3500), (3501, 4000)])
+
+    def test_region_inside_one_node(self):
+        assert self._cycle().depth_at(100, 900) == 120.0
+
+    def test_region_inside_a_later_node(self):
+        assert self._cycle().depth_at(2000, 3000) == 30.0
+
+    def test_region_straddling_two_nodes_takes_the_median(self):
+        assert self._cycle().depth_at(1400, 1600) == pytest.approx(75.0)
+
+    def test_region_outside_every_node(self):
+        assert self._cycle().depth_at(9000, 9500) is None
+
+    def test_nodes_without_depth_are_skipped(self):
+        cycle = Cycle("c", "N" * 100, 100, 2, ["a+", "b+"], [None, 40.0],
+                      [(1, 50), (51, 100)])
+        assert cycle.depth_at(1, 50) is None
+        assert cycle.depth_at(60, 90) == 40.0
+
+
+class TestJunctionDepthRatio:
+    """
+    The comparison the reviewer asked for: IS depth against cargo depth.
+
+    The arithmetic is exact; what it means is not. Against known ground truth the
+    ratio understates copy number severely -- 16 genomic copies read as 1.8 to
+    3.8 -- so these tests pin the calculation, not an interpretation of it.
+    """
+
+    def _cycle(self, is_depth, cargo_depth):
+        return Cycle("c", "N" * 4000, 4000, 2, ["is+", "cargo+"],
+                     [is_depth, cargo_depth], [(1, 1500), (1501, 4000)])
+
+    def test_ratio_is_is_depth_over_cargo_depth(self):
+        cycle = self._cycle(120.0, 30.0)
+        assert cycle.junction_depth_ratio([(200, 1400)], [(1600, 3900)]) == pytest.approx(4.0)
+
+    def test_equal_depths_give_a_ratio_near_one(self):
+        """An IS at the same depth as its cargo is not a multi-copy element."""
+        cycle = self._cycle(31.0, 30.0)
+        ratio = cycle.junction_depth_ratio([(200, 1400)], [(1600, 3900)])
+        assert ratio == pytest.approx(1.033, rel=0.01)
+
+    def test_none_when_depth_unknown(self):
+        cycle = self._cycle(None, 30.0)
+        assert cycle.junction_depth_ratio([(200, 1400)], [(1600, 3900)]) is None
+
+    def test_none_when_cargo_has_no_depth(self):
+        cycle = self._cycle(120.0, None)
+        assert cycle.junction_depth_ratio([(200, 1400)], [(1600, 3900)]) is None
+
+    def test_several_is_regions_take_the_deepest(self):
+        """Both flanking copies map to one node; the deepest is the shared one."""
+        cycle = Cycle("c", "N" * 4000, 4000, 3, ["is+", "cargo+", "is2+"],
+                      [120.0, 30.0, 35.0], [(1, 1200), (1201, 3000), (3001, 4000)])
+        assert cycle.junction_depth_ratio([(100, 1100), (3100, 3900)],
+                                          [(1400, 2900)]) == pytest.approx(4.0)
+
+    def test_empty_regions(self):
+        assert self._cycle(120.0, 30.0).junction_depth_ratio([], [(1600, 3900)]) is None
