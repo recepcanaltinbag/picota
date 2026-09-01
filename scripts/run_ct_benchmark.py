@@ -6,13 +6,17 @@ Drive the whole PICOTA benchmark: simulate genomes with known composite
 transposons, sequence them, assemble, run detection, and score
 (docs/VALIDATION.md, phase 0.5).
 
-One case is one (backbone, CT count, seed) combination. For each it runs
+One case is one (backbone, CT count, seed) combination, scored under every
+requested assembler, deduplication mode and min_size_of_cycle. For each it runs
 
-    simulate_ct_genome.py -> wgsim -> SPAdes -> cycle_analysis -> score
+    simulate_ct_genome.py -> ART -> SPAdes/MEGAHIT -> cycle_analysis -> score
 
-and appends a row to summary.tsv. Sweeping backbones and CT counts is the point:
-a single genome at a single density says little, and a recall number that holds
-across two host chromosomes and 3 to 12 implanted CTs says a great deal more.
+and appends a row to summary.tsv. The sweeping is the point: a single genome, at
+one CT density, from one assembler, with one seed, measures a coincidence. A
+recall figure that holds across two host chromosomes, 3 to 12 implanted CTs,
+several seeds and more than one assembler measures the tool -- and the assembly
+graph is PICOTA's input, so a single-assembler number describes the pair rather
+than PICOTA.
 
 Cases are independent and resumable -- a case whose summary row already exists
 is skipped, so an interrupted sweep can simply be re-run.
@@ -29,7 +33,8 @@ is faster but applies one uniform error rate with invented quality strings; use
 it for development loops, not for published numbers.
 
 Requires art_illumina (or wgsim), spades.py, blastn and makeblastdb on PATH;
-override with --art / --wgsim / --spades / --blastn / --makeblastdb.
+MEGAHIT additionally needs megahit, megahit_toolkit and fastg2gfa. Override any
+of them with --art / --wgsim / --spades / --megahit / --blastn / --makeblastdb.
 """
 
 import argparse
@@ -43,8 +48,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PICOTA_DIR = os.path.join(SCRIPT_DIR, "..", "picota")
 
 SUMMARY_COLUMNS = [
-    "Case", "Backbone", "NCTs", "SharedIS", "Seed", "Mode", "MinCycle",
-    "GenomeLength",
+    "Case", "Backbone", "NCTs", "SharedIS", "Seed", "Assembler", "Mode",
+    "MinCycle", "GenomeLength",
     "Segments", "Links", "ReportedCycles", "TruncatedSearches",
     "CTRecall", "CTTotal", "Precision", "PrecisionTotal",
     "CopyDistinct", "CopyDistinctTotal",
@@ -127,20 +132,50 @@ def simulate_reads(args, case_dir, genome, seed):
     return reads
 
 
-def sequence_and_assemble(args, case_dir, seed):
+def assemble(args, case_dir, reads, assembler):
+    """
+    Assemble and return the GFA path.
+
+    Two assemblers rather than one because the assembly graph is PICOTA's input:
+    a recall figure from a single assembler measures the pair, not the tool.
+    SPAdes and MEGAHIT differ in how aggressively they simplify repeats, which
+    is exactly the structure a composite transposon lives in.
+    """
+    assembly_dir = os.path.join(case_dir, assembler)
+    log = os.path.join(case_dir, f"{assembler}.log")
+
+    if assembler == "spades":
+        run([args.spades, "-1", reads[0], "-2", reads[1], "-o", assembly_dir,
+             "-k", args.kmers, "--only-assembler", "-t", str(args.threads),
+             "-m", str(args.memory_gb)], log)
+        gfa = os.path.join(assembly_dir, "assembly_graph_with_scaffolds.gfa")
+    else:
+        run([args.megahit, "-1", reads[0], "-2", reads[1], "-o", assembly_dir,
+             "-t", str(args.threads), "--k-list", args.kmers.replace(",", ",")], log)
+        contigs_dir = os.path.join(assembly_dir, "intermediate_contigs")
+        largest_k = max(int(k) for k in args.kmers.split(","))
+        fastg = os.path.join(contigs_dir, f"k{largest_k}.contigs.fa")
+        if not os.path.exists(fastg):
+            raise RuntimeError(f"MEGAHIT produced no k{largest_k} contigs")
+        gfa = os.path.join(assembly_dir, "assembly_graph.gfa")
+        with open(os.path.join(case_dir, f"{assembler}_gfa.log"), "a") as handle:
+            fastg_path = gfa + ".fastg"
+            subprocess.run([args.megahit_toolkit, "contig2fastg",
+                            str(largest_k), fastg],
+                           stdout=open(fastg_path, "w"), stderr=handle, check=True)
+            subprocess.run([args.fastg2gfa, fastg_path],
+                           stdout=open(gfa, "w"), stderr=handle, check=True)
+
+    if not os.path.exists(gfa):
+        raise RuntimeError(f"{assembler} produced no GFA in {assembly_dir}")
+    return gfa
+
+
+def sequence_and_assemble(args, case_dir, seed, assembler):
     genome = os.path.join(case_dir, "genome.fasta")
     length = genome_length(genome)
     reads = simulate_reads(args, case_dir, genome, seed)
-
-    assembly_dir = os.path.join(case_dir, "spades")
-    run([args.spades, "-1", reads[0], "-2", reads[1], "-o", assembly_dir,
-         "-k", args.kmers, "--only-assembler", "-t", str(args.threads),
-         "-m", str(args.memory_gb)], os.path.join(case_dir, "spades.log"))
-
-    gfa = os.path.join(assembly_dir, "assembly_graph_with_scaffolds.gfa")
-    if not os.path.exists(gfa):
-        raise RuntimeError(f"SPAdes produced no GFA in {assembly_dir}")
-    return gfa, length
+    return assemble(args, case_dir, reads, assembler), length
 
 
 def detect_cycles(args, gfa, out_fasta, mode, min_cycle):
@@ -190,33 +225,62 @@ def free_intermediates(case_dir):
         if os.path.exists(path):
             os.remove(path)
 
-    assembly = os.path.join(case_dir, "spades")
-    if not os.path.isdir(assembly):
-        return
     keep = {"assembly_graph_with_scaffolds.gfa", "assembly_graph.fastg",
-            "contigs.fasta", "spades.log"}
-    for entry in os.listdir(assembly):
-        path = os.path.join(assembly, entry)
-        if entry in keep:
+            "assembly_graph.gfa", "contigs.fasta", "final.contigs.fa",
+            "spades.log", "log"}
+    for assembler in ("spades", "megahit"):
+        assembly = os.path.join(case_dir, assembler)
+        if not os.path.isdir(assembly):
             continue
-        shutil.rmtree(path, ignore_errors=True) if os.path.isdir(path) else os.remove(path)
+        for entry in os.listdir(assembly):
+            path = os.path.join(assembly, entry)
+            if entry in keep:
+                continue
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                os.remove(path)
 
 
 def existing_cases(summary_path):
     if not os.path.exists(summary_path):
         return set()
     with open(summary_path) as handle:
-        return {(row["Case"], row["Mode"], int(row["MinCycle"]))
+        # Summaries written before the assembler dimension existed have no
+        # Assembler column; those runs were all SPAdes.
+        return {(row["Case"], row.get("Assembler") or "spades", row["Mode"],
+                 int(row["MinCycle"]))
                 for row in csv.DictReader(handle, delimiter="\t")}
 
 
 def append_row(summary_path, row):
-    is_new = not os.path.exists(summary_path)
+    """
+    Append one result row, rewriting the header if the schema has grown.
+
+    A summary written by an older version lacks columns this one produces, and
+    silently appending wider rows to it would misalign every field. Rather than
+    fail, the old file is migrated: existing rows keep their values and gain
+    empty cells for the new columns.
+    """
+    if os.path.exists(summary_path):
+        with open(summary_path) as handle:
+            existing = list(csv.DictReader(handle, delimiter="\t"))
+        current = existing[0].keys() if existing else SUMMARY_COLUMNS
+        if set(current) != set(SUMMARY_COLUMNS):
+            with open(summary_path, "w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=SUMMARY_COLUMNS,
+                                        delimiter="\t", restval="")
+                writer.writeheader()
+                for old in existing:
+                    writer.writerow({k: old.get(k, "") for k in SUMMARY_COLUMNS})
+    else:
+        with open(summary_path, "w", newline="") as handle:
+            csv.DictWriter(handle, fieldnames=SUMMARY_COLUMNS,
+                           delimiter="\t").writeheader()
+
     with open(summary_path, "a", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SUMMARY_COLUMNS, delimiter="\t")
-        if is_new:
-            writer.writeheader()
-        writer.writerow(row)
+        csv.DictWriter(handle, fieldnames=SUMMARY_COLUMNS, delimiter="\t",
+                       restval="").writerow(row)
 
 
 def main(argv=None):
@@ -256,6 +320,16 @@ def main(argv=None):
     parser.add_argument("--coverage", type=float, default=50.0)
     parser.add_argument("--read-length", type=int, default=150)
     parser.add_argument("--error-rate", type=float, default=0.001)
+    parser.add_argument("--assemblers", nargs="+", default=["spades"],
+                        choices=("spades", "megahit"),
+                        help="Assemblers to test. The assembly graph is PICOTA's "
+                             "input, so a number from one assembler measures the "
+                             "pair rather than the tool. Default: %(default)s")
+    parser.add_argument("--megahit", default="megahit")
+    parser.add_argument("--megahit-toolkit", default="megahit_toolkit")
+    parser.add_argument("--fastg2gfa",
+                        default=os.path.join(PICOTA_DIR, "..", "picota", "tools",
+                                             "gfaview", "misc", "fastg2gfa"))
     parser.add_argument("--kmers", default="55,77,99")
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--memory-gb", type=int, default=24)
@@ -315,53 +389,69 @@ def main(argv=None):
                 try:
                     if not os.path.exists(os.path.join(case_dir, "ground_truth.tsv")):
                         simulate_case(args, case_dir, backbone, n_cts, shared, seed)
-                    gfa = os.path.join(case_dir, "spades",
-                                       "assembly_graph_with_scaffolds.gfa")
-                    if os.path.exists(gfa):
-                        length = genome_length(os.path.join(case_dir, "genome.fasta"))
-                    else:
-                        gfa, length = sequence_and_assemble(args, case_dir, seed)
-                    segments, links = count_gfa(gfa)
+                    length = genome_length(os.path.join(case_dir, "genome.fasta"))
+                    reads = [os.path.join(case_dir, "r1.fq"),
+                             os.path.join(case_dir, "r2.fq")]
+                    if not all(os.path.exists(path) for path in reads):
+                        reads = simulate_reads(
+                            args, case_dir,
+                            os.path.join(case_dir, "genome.fasta"), seed)
                 except Exception as error:  # noqa: BLE001 - one bad case must not stop the sweep
                     print(f"[fail] {case}: {error}", file=sys.stderr)
                     if not args.keep_intermediates:
                         free_intermediates(case_dir)
                     continue
 
-                for mode in args.modes:
-                  for min_cycle in args.min_cycles:
-                    if (case, mode, min_cycle) in done:
-                        continue
-                    cycles = os.path.join(case_dir, f"cycles_{mode}_{min_cycle}.fasta")
+                for assembler in args.assemblers:
                     try:
-                        reported, truncated = detect_cycles(args, gfa, cycles,
-                                                            mode, min_cycle)
-                        result = score_case(args, case_dir, cycles)
+                        gfa = assemble(args, case_dir, reads, assembler)
+                        segments, links = count_gfa(gfa)
                     except Exception as error:  # noqa: BLE001
-                        print(f"[fail] {case}/{mode}/{min_cycle}: {error}",
-                              file=sys.stderr)
+                        print(f"[fail] {case}/{assembler}: {error}", file=sys.stderr)
                         continue
 
-                    recall, recall_total = result["ct_recall"]
-                    precision, precision_total = result["precision"]
-                    distinct, distinct_total = result["copy_distinctness"]
-                    append_row(summary_path, {
-                        "Case": case, "Backbone": label, "NCTs": n_cts,
-                        "SharedIS": shared, "Seed": seed, "Mode": mode,
-                        "MinCycle": min_cycle, "GenomeLength": length, "Segments": segments, "Links": links,
-                        "ReportedCycles": reported, "TruncatedSearches": truncated,
-                        "CTRecall": recall, "CTTotal": recall_total,
-                        "Precision": precision, "PrecisionTotal": precision_total,
-                        "CopyDistinct": distinct, "CopyDistinctTotal": distinct_total,
-                    })
-                    print(f"       {mode} min_cycle={min_cycle}: "
-                          f"recall {recall}/{recall_total}, "
-                          f"precision {precision}/{precision_total}, "
-                          f"copy-distinct {distinct}/{distinct_total}", file=sys.stderr)
+                    for mode in args.modes:
+                      for min_cycle in args.min_cycles:
+                        if (case, assembler, mode, min_cycle) in done:
+                            continue
+                        cycles = os.path.join(
+                            case_dir, f"cycles_{assembler}_{mode}_{min_cycle}.fasta")
+                        try:
+                            reported, truncated = detect_cycles(
+                                args, gfa, cycles, mode, min_cycle)
+                            result = score_case(args, case_dir, cycles)
+                        except Exception as error:  # noqa: BLE001
+                            print(f"[fail] {case}/{assembler}/{mode}/{min_cycle}: "
+                                  f"{error}", file=sys.stderr)
+                            continue
+
+                        recall, recall_total = result["ct_recall"]
+                        precision, precision_total = result["precision"]
+                        distinct, distinct_total = result["copy_distinctness"]
+                        append_row(summary_path, {
+                            "Case": case, "Backbone": label, "NCTs": n_cts,
+                            "SharedIS": shared, "Seed": seed,
+                            "Assembler": assembler, "Mode": mode,
+                            "MinCycle": min_cycle, "GenomeLength": length,
+                            "Segments": segments, "Links": links,
+                            "ReportedCycles": reported,
+                            "TruncatedSearches": truncated,
+                            "CTRecall": recall, "CTTotal": recall_total,
+                            "Precision": precision,
+                            "PrecisionTotal": precision_total,
+                            "CopyDistinct": distinct,
+                            "CopyDistinctTotal": distinct_total,
+                        })
+                        print(f"       {assembler}/{mode} min_cycle={min_cycle}: "
+                              f"recall {recall}/{recall_total}, "
+                              f"precision {precision}/{precision_total}, "
+                              f"copy-distinct {distinct}/{distinct_total}",
+                              file=sys.stderr)
 
                 if not args.keep_intermediates:
                     free_intermediates(case_dir)
 
+    
     print(f"\nSummary: {summary_path}", file=sys.stderr)
     return 0
 
