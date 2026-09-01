@@ -17,6 +17,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from simulate_ct_genome import (  # noqa: E402
+    STOP_CODONS,
+    make_orf,
     choose_positions,
     load_backbone,
     place_inserts,
@@ -436,3 +438,49 @@ class TestPlacementInSimulation:
         _, first, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path, seed=1))
         _, second, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path, seed=2))
         assert [r["CT_Start"] for r in first] != [r["CT_Start"] for r in second]
+
+
+class TestNovelCargo:
+    """
+    Composite transposons whose cargo has no database homology. PICOTA's score
+    is largely a sum of homology hits, so a benchmark built only from CARD genes
+    would test the tool on the easy half of its own problem.
+    """
+
+    def test_orf_starts_with_a_start_codon(self):
+        assert make_orf(900, random.Random(1)).startswith("ATG")
+
+    def test_orf_ends_with_a_stop_codon(self):
+        assert make_orf(900, random.Random(2))[-3:] in STOP_CODONS
+
+    def test_orf_has_no_internal_stop(self):
+        """Otherwise Prodigal truncates it and the cargo is not a gene."""
+        orf = make_orf(1200, random.Random(3))
+        codons = [orf[i:i+3] for i in range(0, len(orf) - 3, 3)]
+        assert not (set(codons) & STOP_CODONS)
+
+    def test_orf_length_is_a_multiple_of_three(self):
+        assert len(make_orf(900, random.Random(4))) % 3 == 0
+
+    def test_orf_is_deterministic(self):
+        assert make_orf(600, random.Random(5)) == make_orf(600, random.Random(5))
+
+    def test_novel_cts_are_labelled(self, is_fasta, cargo_fasta, tmp_path):
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                           n_cts=3, shared_is=2, novel_cts=1))
+        assert [r["Cargo_Type"] for r in records] == ["AMR", "AMR", "novel"]
+
+    def test_novel_cargo_is_not_a_card_gene(self, is_fasta, cargo_fasta, tmp_path):
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                           n_cts=3, shared_is=2, novel_cts=1))
+        assert records[-1]["Cargo_Genes"].startswith("novel_orf_")
+
+    def test_novel_cts_cannot_exceed_total(self, is_fasta, cargo_fasta, tmp_path):
+        with pytest.raises(SystemExit):
+            simulate(make_args(is_fasta, cargo_fasta, tmp_path, n_cts=2, novel_cts=3))
+
+    def test_coordinates_still_correct_with_novel_cargo(self, is_fasta, cargo_fasta, tmp_path):
+        genome, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                                n_cts=3, shared_is=2, novel_cts=2))
+        for record in records:
+            assert genome[record["CT_Start"] - 1:record["CT_End"]] == record["Sequence"]

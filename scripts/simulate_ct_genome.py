@@ -48,8 +48,8 @@ IS_MAX_LENGTH = 2500
 
 GROUND_TRUTH_COLUMNS = [
     "CT_ID", "IS_Name", "IS_Family", "IS_Length", "IS_Divergence_Pct",
-    "IS_Orientation", "Cargo_Genes", "Cargo_Length", "CT_Start", "CT_End",
-    "CT_Length", "IS_Genome_Copies",
+    "IS_Orientation", "Cargo_Genes", "Cargo_Type", "Cargo_Length", "CT_Start",
+    "CT_End", "CT_Length", "IS_Genome_Copies",
 ]
 
 
@@ -174,6 +174,31 @@ def random_backbone(length, gc_content, rng):
                    for _ in range(length))
 
 
+STOP_CODONS = {"TAA", "TAG", "TGA"}
+
+
+def make_orf(length, rng):
+    """
+    A random open reading frame: start codon, no internal stops, stop codon.
+
+    This is cargo for a *novel* composite transposon -- one whose payload is not
+    an antibiotic resistance or xenobiotic gene and therefore has no homology to
+    any database PICOTA searches. Prodigal will still call it as a gene, so the
+    candidate reaches scoring exactly as a real novel element would; what it
+    cannot do is collect homology points. Testing with only CARD cargo would
+    measure PICOTA on the easy half of its own problem.
+    """
+    codons = ["ATG"]
+    for _ in range(max(length // 3 - 2, 1)):
+        while True:
+            codon = "".join(rng.choice(DNA) for _ in range(3))
+            if codon not in STOP_CODONS:
+                codons.append(codon)
+                break
+    codons.append(rng.choice(sorted(STOP_CODONS)))
+    return "".join(codons)
+
+
 def mutate(seq, divergence_pct, rng):
     """Apply independent substitutions at the given percentage."""
     if divergence_pct <= 0:
@@ -256,12 +281,21 @@ def simulate(args):
                                    args.is_min_length, args.is_max_length)
     cargo_pool = load_cargo_genes(args.cargo_fasta, rng, args.n_cts * args.cargo_genes)
 
+    if args.novel_cts > args.n_cts:
+        raise SystemExit("--novel-cts cannot exceed --n-cts")
+
     assignments = []
     shared = is_elements[0] if args.shared_is else None
     others = iter(is_elements[1:] if args.shared_is else is_elements)
     for index in range(args.n_cts):
         element = shared if index < args.shared_is else next(others)
-        cargo = cargo_pool[index * args.cargo_genes:(index + 1) * args.cargo_genes]
+        # The last --novel-cts elements carry cargo with no database homology.
+        if index >= args.n_cts - args.novel_cts:
+            cargo = [("novel_orf_%d_%d" % (index + 1, g + 1),
+                      make_orf(rng.randint(600, 1400), rng))
+                     for g in range(args.cargo_genes)]
+        else:
+            cargo = cargo_pool[index * args.cargo_genes:(index + 1) * args.cargo_genes]
         assignments.append((element, cargo))
 
     # Count how many copies of each IS end up in the genome: two per composite
@@ -288,6 +322,7 @@ def simulate(args):
             "IS_Divergence_Pct": args.is_divergence,
             "IS_Orientation": args.is_orientation,
             "Cargo_Genes": ";".join(name for name, _ in cargo),
+            "Cargo_Type": "novel" if cargo[0][0].startswith("novel_orf_") else "AMR",
             "Cargo_Length": len(cargo_seq),
             "CT_Length": len(ct_seq),
             "IS_Genome_Copies": is_copy_counts[is_name],
@@ -394,6 +429,12 @@ def build_parser():
                              "where deduplication decides recall. Default: %(default)s")
     parser.add_argument("--is-max-length", type=int, default=IS_MAX_LENGTH,
                         help="Longest IS element to draw. Default: %(default)s")
+    parser.add_argument("--novel-cts", type=int, default=0,
+                        help="How many of the composite transposons carry cargo "
+                             "with NO database homology -- random open reading "
+                             "frames rather than CARD genes. These are the novel "
+                             "elements PICOTA claims to find, and they cannot "
+                             "collect homology score. Default: %(default)s")
     parser.add_argument("--cargo-genes", type=int, default=2,
                         help="AMR genes per cargo. Default: %(default)s")
     parser.add_argument("--placement", choices=("random", "even"), default="random",
