@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from select_benchmark_strains import (  # noqa: E402
     OUTPUT_COLUMNS,
     build_assembly_query,
-    build_assembly_query_broad,
+    build_assembly_query_reference_only,
     build_sra_query,
     collect_candidates,
     estimate_coverage,
@@ -65,9 +65,17 @@ class TestQueries:
         assert '"complete genome"[Assembly Level]' in query
         assert '"latest refseq"[filter]' in query
 
-    def test_broad_query_drops_the_reference_genome_restriction(self):
-        assert '"reference genome"[filter]' in build_assembly_query("Escherichia coli")
-        assert '"reference genome"[filter]' not in build_assembly_query_broad("Escherichia coli")
+    def test_default_query_is_not_restricted_to_reference_genomes(self):
+        """
+        The reference-genome filter cuts E. coli from 5350 closed assemblies to
+        2, and the survivor is K-12 MG1655 -- no resistance CTs, so useless here.
+        """
+        assert '"reference genome"[filter]' not in build_assembly_query("Escherichia coli")
+
+    def test_reference_only_query_adds_the_restriction(self):
+        query = build_assembly_query_reference_only("Escherichia coli")
+        assert '"reference genome"[filter]' in query
+        assert '"complete genome"[Assembly Level]' in query
 
     def test_sra_query_pins_platform_strategy_and_layout(self):
         query = build_sra_query("SAMEA122163316")

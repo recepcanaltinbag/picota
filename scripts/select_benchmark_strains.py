@@ -8,7 +8,9 @@ Finds strains that can serve as ground truth for measuring how well PICOTA
 reconstructs composite transposons. A usable benchmark strain needs:
 
   1. A CLOSED genome -- assembly level "Complete Genome", so every composite
-     transposon and every IS copy is resolved and countable.
+     transposon and every IS copy is resolved and countable. NCBI reference
+     genomes are deliberately not preferred: they are lab strains with few
+     resistance composite transposons.
   2. Illumina paired-end WGS reads from the SAME BioSample. Same isolate is
      non-negotiable: reads from a different strain make the ground truth drift.
   3. Enough read depth that a short-read assembly is meaningful.
@@ -76,15 +78,23 @@ _STRAIN_RE = re.compile(r"strain=([^;]+)")
 
 
 def build_assembly_query(species):
-    """Search term for closed, current RefSeq genomes of one species."""
-    return (f'"{species}"[Organism] AND "complete genome"[Assembly Level] '
-            'AND "latest refseq"[filter] AND "reference genome"[filter] NOT anomalous[filter]')
+    """
+    Search term for closed, current RefSeq genomes of one species.
 
-
-def build_assembly_query_broad(species):
-    """As build_assembly_query, without the reference-genome restriction."""
+    Deliberately NOT restricted to NCBI reference genomes. That filter cuts
+    E. coli from 5350 closed assemblies to 2, and the survivor is K-12 MG1655 --
+    a lab strain carrying essentially no resistance composite transposons, which
+    is the opposite of what this benchmark needs. Clinical MDR isolates are
+    where multi-copy IS elements with differing cargo actually live, and none of
+    them are reference genomes.
+    """
     return (f'"{species}"[Organism] AND "complete genome"[Assembly Level] '
             'AND "latest refseq"[filter] NOT anomalous[filter]')
+
+
+def build_assembly_query_reference_only(species):
+    """As build_assembly_query, restricted to NCBI reference genomes."""
+    return build_assembly_query(species) + ' AND "reference genome"[filter]' 
 
 
 def build_sra_query(biosample):
@@ -242,7 +252,7 @@ class EntrezClient:
 
 
 def collect_candidates(client, species_list, limit, min_coverage,
-                       broad=False, progress=None):
+                       reference_only=False, progress=None):
     """
     Find one benchmark candidate per closed genome that has usable reads.
 
@@ -251,7 +261,8 @@ def collect_candidates(client, species_list, limit, min_coverage,
     """
     candidates = []
     for species in species_list:
-        query = (build_assembly_query_broad if broad else build_assembly_query)(species)
+        query = (build_assembly_query_reference_only if reference_only
+                 else build_assembly_query)(species)
         assembly_ids = client.esearch("assembly", query, limit)
         if progress:
             progress(f"{species}: {len(assembly_ids)} closed assemblies")
@@ -320,8 +331,9 @@ def main(argv=None):
                         help="Max assemblies to inspect per species.")
     parser.add_argument("--min-coverage", type=float, default=40.0,
                         help="Reject runs below this estimated depth.")
-    parser.add_argument("--broad", action="store_true",
-                        help="Search all closed genomes, not only NCBI reference genomes.")
+    parser.add_argument("--reference-only", action="store_true",
+                        help="Restrict to NCBI reference genomes. Rarely useful here: "
+                             "reference genomes are lab strains with few resistance CTs.")
     parser.add_argument("--out", default="benchmark_candidates.tsv",
                         help="Output TSV path.")
     args = parser.parse_args(argv)
@@ -329,7 +341,7 @@ def main(argv=None):
     client = EntrezClient(args.email, args.api_key)
     candidates = collect_candidates(
         client, args.species, args.limit, args.min_coverage,
-        broad=args.broad,
+        reference_only=args.reference_only,
         progress=lambda message: print(message, file=sys.stderr, flush=True))
 
     if not candidates:

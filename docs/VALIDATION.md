@@ -62,7 +62,15 @@ Strain selection is scripted so the criteria are reproducible rather than
 anecdotal. `scripts/select_benchmark_strains.py` screens properties 1 and 2
 against NCBI (closed RefSeq assemblies, then public Illumina paired-end WGS runs
 from the same BioSample) and writes a shortlist TSV with the estimated read
-depth each run would give:
+depth each run would give.
+
+It deliberately does **not** restrict to NCBI reference genomes. That filter
+takes E. coli from 5350 closed assemblies down to 2, and the survivor is K-12
+MG1655 -- a lab strain with essentially no resistance composite transposons,
+which is the opposite of what this benchmark needs. Clinical MDR isolates are
+where multi-copy IS elements with differing cargo live, and none of them are
+reference genomes. `--reference-only` restores the restriction if it is ever
+wanted.
 
 ```
 python scripts/select_benchmark_strains.py \

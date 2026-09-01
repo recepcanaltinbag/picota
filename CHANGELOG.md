@@ -37,6 +37,10 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   have public Illumina paired-end WGS runs from the same BioSample, with the
   read depth each run would give over that genome. Network access is isolated
   in `EntrezClient` so the parsing and ranking logic is testable offline.
+  Deliberately not restricted to NCBI reference genomes: that filter reduces
+  E. coli from 5350 closed assemblies to 2, and the survivor is K-12 MG1655,
+  a lab strain with essentially no resistance composite transposons.
+  `--reference-only` restores the restriction.
 - **`tests/test_select_benchmark_strains.py`** — 29 offline tests using record
   shapes taken from live NCBI esummary responses.
 - **`tests/test_depth.py`** — 21 tests covering every depth encoding, the
