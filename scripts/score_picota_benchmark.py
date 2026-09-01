@@ -141,8 +141,19 @@ def score(ground_truth, rows, cycle_ids, min_identity, min_coverage):
     for cts in shared_groups.values():
         distinct_found += len({matches[ct][0] for ct in cts if matches[ct][0]})
 
+    # Recall split by whether the cargo was findable by homology at all. PICOTA's
+    # score is largely a sum of database hits, so a headline recall that mixes
+    # CARD cargo with novel cargo can hide a systematic blind spot.
+    by_cargo = collections.defaultdict(lambda: [0, 0])
+    for ct_id, record in ground_truth.items():
+        cargo_type = record.get("Cargo_Type", "AMR")
+        by_cargo[cargo_type][1] += 1
+        if matches[ct_id][0]:
+            by_cargo[cargo_type][0] += 1
+
     return {
         "matches": matches,
+        "by_cargo": dict(by_cargo),
         "ct_recall": (len(recovered), len(ground_truth)),
         "precision": (len(true_positives), len(cycle_ids)),
         "copy_distinctness": (distinct_found, distinct_expected),
@@ -164,6 +175,9 @@ def report(result, ground_truth, handle=sys.stdout):
     got, total = result["precision"]
     print(f"Precision:           {got}/{total} reported cycles explained by a CT",
           file=handle)
+    for cargo_type, (got, total) in sorted(result.get("by_cargo", {}).items()):
+        print(f"  {cargo_type + ' cargo:':<20} {got}/{total} recovered", file=handle)
+
     got, total = result["copy_distinctness"]
     if total:
         print(f"Copy-distinctness:   {got}/{total} CTs sharing an IS reported "

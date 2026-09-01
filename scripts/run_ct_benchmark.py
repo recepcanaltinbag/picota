@@ -48,11 +48,12 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PICOTA_DIR = os.path.join(SCRIPT_DIR, "..", "picota")
 
 SUMMARY_COLUMNS = [
-    "Case", "Backbone", "NCTs", "SharedIS", "Seed", "Assembler", "Mode",
-    "MinCycle", "GenomeLength",
+    "Case", "Backbone", "NCTs", "SharedIS", "NovelCTs", "Seed", "Assembler",
+    "Mode", "MinCycle", "Stage", "GenomeLength",
     "Segments", "Links", "ReportedCycles", "TruncatedSearches",
     "CTRecall", "CTTotal", "Precision", "PrecisionTotal",
     "CopyDistinct", "CopyDistinctTotal",
+    "NovelRecall", "NovelTotal", "AMRRecall", "AMRTotal",
 ]
 
 
@@ -91,6 +92,7 @@ def simulate_case(args, case_dir, backbone, n_cts, shared_is, seed):
          "--is-copies-outside", str(args.is_copies_outside),
          "--is-divergence", str(args.is_divergence),
          "--cargo-genes", str(args.cargo_genes),
+         "--novel-cts", str(args.novel_cts),
          "--spacing", str(args.spacing), "--seed", str(seed),
          "--is-min-length", str(args.is_min_length),
          "--is-max-length", str(args.is_max_length),
@@ -176,6 +178,50 @@ def sequence_and_assemble(args, case_dir, seed, assembler):
     length = genome_length(genome)
     reads = simulate_reads(args, case_dir, genome, seed)
     return assemble(args, case_dir, reads, assembler), length
+
+
+def score_cycles(args, case_dir, cycles_fasta, tag):
+    """
+    Run PICOTA's scoring stage; return the FASTA of candidates that survive it.
+
+    Cycle detection is not PICOTA's output, scored candidates are. Measuring only
+    detection reports the recall of an intermediate and says nothing about how
+    many candidates the tool would actually put in front of a user.
+    """
+    sys.path.insert(0, os.path.abspath(PICOTA_DIR))
+    from src.scoringv4ProtBlast import scoring_main  # noqa: E402
+
+    out_dir = os.path.join(case_dir, "scoring_" + tag)
+    dbs = os.path.join(PICOTA_DIR, "DBs")
+    scoring_main(cycles_fasta, out_dir,
+                 os.path.join(dbs, "Antibiotics/protein_fasta_protein_homolog_model.fasta"),
+                 os.path.join(dbs, "Xenobiotics/Xenobiotics_classified.fasta"),
+                 os.path.join(dbs, "ISes/_tncentral_nointegrall_isfinder-TNs.fasta"),
+                 os.path.join(dbs, "CompTns/Known_Tns.fasta"),
+                 os.path.join(case_dir, "blastdb_" + tag),
+                 threshold_final_score=args.score_threshold,
+                 path_of_prodigal=args.prodigal, path_of_blastn=args.blastn,
+                 path_of_makeblastdb=args.makeblastdb,
+                 path_of_blastx=args.blastx, path_of_blastp=args.blastp)
+
+    tab = os.path.join(out_dir, "picota_final_tab")
+    if not os.path.exists(tab):
+        raise RuntimeError("scoring produced no picota_final_tab in " + out_dir)
+
+    kept = set()
+    with open(tab) as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            kept.add(row["CycleID"])
+
+    scored_fasta = os.path.join(case_dir, "cycles_" + tag + "_scored.fasta")
+    with open(cycles_fasta) as source, open(scored_fasta, "w") as dest:
+        emit = False
+        for line in source:
+            if line.startswith(">"):
+                emit = line[1:].strip() in kept
+            if emit:
+                dest.write(line)
+    return scored_fasta, len(kept)
 
 
 def detect_cycles(args, gfa, out_fasta, mode, min_cycle):
@@ -337,6 +383,9 @@ def main(argv=None):
     parser.add_argument("--is-copies-outside", type=int, default=6)
     parser.add_argument("--is-divergence", type=float, default=0.5)
     parser.add_argument("--cargo-genes", type=int, default=2)
+    parser.add_argument("--novel-cts", type=int, default=0,
+                        help="Per case, how many CTs carry cargo with no database "
+                             "homology. Default: %(default)s")
     parser.add_argument("--spacing", type=int, default=20000)
     parser.add_argument("--is-min-length", type=int, default=700)
     parser.add_argument("--is-max-length", type=int, default=2500)
@@ -356,6 +405,15 @@ def main(argv=None):
     parser.add_argument("--max-components", type=int, default=25)
     parser.add_argument("--k-mer-sim", type=int, default=80)
     parser.add_argument("--threshold-sim", type=int, default=80)
+    parser.add_argument("--score", action="store_true",
+                        help="Also run PICOTA's scoring stage and report metrics "
+                             "for the candidates that survive it. Scored "
+                             "candidates are the tool's actual output; cycle "
+                             "detection is an intermediate.")
+    parser.add_argument("--score-threshold", type=float, default=50.0)
+    parser.add_argument("--prodigal", default="prodigal")
+    parser.add_argument("--blastx", default="blastx")
+    parser.add_argument("--blastp", default="blastp")
     parser.add_argument("--min-identity", type=float, default=95.0)
     parser.add_argument("--min-coverage", type=float, default=0.95)
 
@@ -414,39 +472,57 @@ def main(argv=None):
                       for min_cycle in args.min_cycles:
                         if (case, assembler, mode, min_cycle) in done:
                             continue
-                        cycles = os.path.join(
-                            case_dir, f"cycles_{assembler}_{mode}_{min_cycle}.fasta")
+                        tag = "%s_%s_%d" % (assembler, mode, min_cycle)
+                        cycles = os.path.join(case_dir, "cycles_%s.fasta" % tag)
                         try:
-                            reported, truncated = detect_cycles(
-                                args, gfa, cycles, mode, min_cycle)
-                            result = score_case(args, case_dir, cycles)
+                            reported, truncated = detect_cycles(args, gfa, cycles,
+                                                                mode, min_cycle)
+                            stages = [("detection", cycles, reported)]
+                            if args.score:
+                                scored, n_scored = score_cycles(args, case_dir,
+                                                                cycles, tag)
+                                stages.append(("scored", scored, n_scored))
                         except Exception as error:  # noqa: BLE001
-                            print(f"[fail] {case}/{assembler}/{mode}/{min_cycle}: "
-                                  f"{error}", file=sys.stderr)
+                            print("[fail] %s/%s: %s" % (case, tag, error),
+                                  file=sys.stderr)
                             continue
 
-                        recall, recall_total = result["ct_recall"]
-                        precision, precision_total = result["precision"]
-                        distinct, distinct_total = result["copy_distinctness"]
-                        append_row(summary_path, {
-                            "Case": case, "Backbone": label, "NCTs": n_cts,
-                            "SharedIS": shared, "Seed": seed,
-                            "Assembler": assembler, "Mode": mode,
-                            "MinCycle": min_cycle, "GenomeLength": length,
-                            "Segments": segments, "Links": links,
-                            "ReportedCycles": reported,
-                            "TruncatedSearches": truncated,
-                            "CTRecall": recall, "CTTotal": recall_total,
-                            "Precision": precision,
-                            "PrecisionTotal": precision_total,
-                            "CopyDistinct": distinct,
-                            "CopyDistinctTotal": distinct_total,
-                        })
-                        print(f"       {assembler}/{mode} min_cycle={min_cycle}: "
-                              f"recall {recall}/{recall_total}, "
-                              f"precision {precision}/{precision_total}, "
-                              f"copy-distinct {distinct}/{distinct_total}",
-                              file=sys.stderr)
+                        for stage, fasta, n_reported in stages:
+                            try:
+                                result = score_case(args, case_dir, fasta)
+                            except Exception as error:  # noqa: BLE001
+                                print("[fail] %s/%s/%s: %s"
+                                      % (case, tag, stage, error), file=sys.stderr)
+                                continue
+
+                            recall, recall_total = result["ct_recall"]
+                            precision, precision_total = result["precision"]
+                            distinct, distinct_total = result["copy_distinctness"]
+                            by_cargo = result.get("by_cargo", {})
+                            novel = by_cargo.get("novel", (0, 0))
+                            amr = by_cargo.get("AMR", (0, 0))
+                            append_row(summary_path, {
+                                "Case": case, "Backbone": label, "NCTs": n_cts,
+                                "SharedIS": shared, "NovelCTs": args.novel_cts,
+                                "Seed": seed, "Assembler": assembler,
+                                "Mode": mode, "MinCycle": min_cycle,
+                                "Stage": stage, "GenomeLength": length,
+                                "Segments": segments, "Links": links,
+                                "ReportedCycles": n_reported,
+                                "TruncatedSearches": truncated,
+                                "CTRecall": recall, "CTTotal": recall_total,
+                                "Precision": precision,
+                                "PrecisionTotal": precision_total,
+                                "CopyDistinct": distinct,
+                                "CopyDistinctTotal": distinct_total,
+                                "NovelRecall": novel[0], "NovelTotal": novel[1],
+                                "AMRRecall": amr[0], "AMRTotal": amr[1],
+                            })
+                            print("       %s/%s %s: recall %d/%d, precision %d/%d,"
+                                  " copy-distinct %d/%d"
+                                  % (assembler, mode, stage, recall, recall_total,
+                                     precision, precision_total, distinct,
+                                     distinct_total), file=sys.stderr)
 
                 if not args.keep_intermediates:
                     free_intermediates(case_dir)
