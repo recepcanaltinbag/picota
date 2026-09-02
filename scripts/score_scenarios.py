@@ -53,12 +53,12 @@ SCENARIO_LABEL = {
 }
 
 
-def score_cycles(case, threshold, tools):
+def score_cycles(case, threshold, tools, score_type=0):
     """Run PICOTA scoring; return {CycleID: score0} for candidates above threshold."""
     sys.path.insert(0, os.path.abspath(PICOTA_DIR))
     from src.scoringv4ProtBlast import scoring_main  # noqa: E402
 
-    out_dir = os.path.join(case, "scoring_t%d" % threshold)
+    out_dir = os.path.join(case, "scoring_t%d_s%d" % (threshold, score_type))
     tab = os.path.join(out_dir, "picota_final_tab")
     if not os.path.exists(tab):
         dbs = os.path.join(PICOTA_DIR, "DBs")
@@ -68,11 +68,13 @@ def score_cycles(case, threshold, tools):
                      os.path.join(dbs, "ISes/_tncentral_nointegrall_isfinder-TNs.fasta"),
                      os.path.join(dbs, "CompTns/Known_Tns.fasta"),
                      os.path.join(case, "blastdb_t%d" % threshold),
+                     total_score_type=score_type,
                      threshold_final_score=threshold, **tools)
     if not os.path.exists(tab):
         return {}
     with open(tab) as handle:
-        return {row["CycleID"]: float(row["score0"])
+        column = "score%d" % score_type
+        return {row["CycleID"]: float(row[column])
                 for row in csv.DictReader(handle, delimiter="\t")}
 
 
@@ -81,7 +83,7 @@ def components(cycle_id):
     return int(match.group(1)) if match else None
 
 
-def evaluate(case, threshold, tools):
+def evaluate(case, threshold, tools, score_type=0):
     ground_truth = read_ground_truth(os.path.join(case, "ground_truth.tsv"))
     cycles = os.path.join(case, "cycles.fasta")
     detected = [l[1:].strip() for l in open(cycles) if l.startswith(">")]
@@ -97,7 +99,7 @@ def evaluate(case, threshold, tools):
             if len(positions) / length >= 0.95:
                 cycle_of_ct.setdefault(ct_id, []).append(cycle)
 
-    scores = score_cycles(case, threshold, tools)
+    scores = score_cycles(case, threshold, tools, score_type)
     recovered = {ct: [c for c in cs if c in scores] for ct, cs in cycle_of_ct.items()}
     recovered = {ct: cs for ct, cs in recovered.items() if cs}
 
@@ -125,6 +127,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Score a graded scenario run.")
     parser.add_argument("--scenarios", required=True)
     parser.add_argument("--threshold", type=float, default=50.0)
+    parser.add_argument("--score-type", type=int, default=0, choices=(0, 1, 2),
+                        help="Which total_score to threshold on; must match "
+                             "total_score_type in config.yaml.")
     parser.add_argument("--prodigal", default="prodigal")
     parser.add_argument("--blastn", default="blastn")
     parser.add_argument("--makeblastdb", default="makeblastdb")
@@ -148,7 +153,8 @@ def main(argv=None):
     print(header)
     print("-" * len(header))
     for name in present:
-        r = evaluate(os.path.join(args.scenarios, name), int(args.threshold), tools)
+        r = evaluate(os.path.join(args.scenarios, name), int(args.threshold),
+                     tools, args.score_type)
         score_range = ("%.0f-%.0f" % (r["score_min"], r["score_max"])
                        if r["score_min"] is not None else "-")
         comp_range = ("%d-%d" % (r["comp_min"], r["comp_max"])

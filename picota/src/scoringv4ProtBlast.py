@@ -71,7 +71,49 @@ def genbak_create(nuc_seq, seq_acc, seq_id, seq_description, feature_list, out_f
         SeqIO.write(record, output_file, 'genbank')
 
 
-def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number):
+def _length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns, max_z, dist_type):
+    """How well the candidate's length matches the known CT length distribution, in [0, 1]."""
+    z = abs(len_of_cycle - mean_of_CompTns) / std_of_CompTns
+    if dist_type == 1 and len_of_cycle < mean_of_CompTns:
+        z = 0
+    return max(0.0, 1.0 - min(z, max_z) / max_z)
+
+
+def _component_fit(comp_number):
+    """
+    How close the cycle is to the two-node shape a composite transposon makes.
+
+    A smooth decay rather than the sqrt(|comp - 2|) term inside score2's
+    exponent, which moved the total by under four points across the whole range
+    from two components to eighteen and so could not rank anything.
+    """
+    return 1.0 / (1.0 + abs(comp_number - 2) / 4.0)
+
+
+def _multicopy_fit(depth_ratio):
+    """
+    Evidence that the flanking IS is present in more than one genomic copy.
+
+    A composite transposon is defined by two copies of its IS, but both collapse
+    into a single graph node, so the cycle shows only one. Read depth over that
+    node against the cargo is the only remaining evidence of how many copies it
+    stands for. A ratio near 1 says the element is single-copy and the structure
+    is therefore not a composite transposon, whatever its homology says.
+
+    Unknown depth returns 0.5 rather than 0: an assembly that reports no
+    coverage should not be penalised for it.
+    """
+    if depth_ratio is None:
+        return 0.5
+    return min(1.0, max(0.0, (depth_ratio - 1.0) / 1.5))
+
+
+def _best(scores):
+    """Best hit quality in [0, 1]. Quality of the best hit, never a count."""
+    return min(1.0, max(scores) / 100.0) if scores else 0.0
+
+
+def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number, depth_ratio=None, novel_cargo_floor=0.30):
     min_z = 0
     z = (abs(len_of_cycle - mean_of_CompTns))/std_of_CompTns
     if z > max_z:
@@ -119,8 +161,30 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
 
         total_score = ((antcxc) * isc) + 10**z_c_l
 
+    elif total_score_type == 3:
+        # IS quality gates the whole score because an insertion sequence is a
+        # necessary condition, not a bonus: no IS means no composite transposon,
+        # and a weak IS hit should scale everything down proportionally.
+        #
+        # The three weighted terms answer two separable questions -- structure
+        # and multi-copy evidence ask "is this a composite transposon", cargo
+        # asks "is it interesting" -- at 0.70 against 0.30. score2 has that
+        # split the other way round at roughly 10/90, which is why it labels
+        # rather than ranks and why cargo absent from a database is unreportable
+        # however good the structure.
+        is_quality = _best(lst_is)
+        cargo_quality = max(_best(lst_ant), _best(lst_xe))
+        if cargo_quality <= 0:
+            cargo_quality = novel_cargo_floor
+
+        structural = _length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns,
+                                 max_z, dist_type) * 0.5 + _component_fit(comp_number) * 0.5
+        total_score = 100.0 * is_quality * (0.40 * structural
+                                            + 0.30 * _multicopy_fit(depth_ratio)
+                                            + 0.30 * cargo_quality)
+
     else:
-        raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2')
+        raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2, 3')
 
     return total_score
 

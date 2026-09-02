@@ -54,7 +54,7 @@ PICOTA_DIR = os.path.join(SCRIPT_DIR, "..", "picota")
 METRIC_VERSION = 2
 
 SUMMARY_COLUMNS = [
-    "MetricVersion", "Case", "Backbone", "NCTs", "SharedIS", "NovelCTs", "Seed", "Assembler",
+    "MetricVersion", "ScoreType", "Case", "Backbone", "NCTs", "SharedIS", "NovelCTs", "Seed", "Assembler",
     "Mode", "MinCycle", "Stage", "GenomeLength",
     "Segments", "Links", "ReportedCycles", "TruncatedSearches",
     "CTRecall", "CTTotal", "Precision", "PrecisionTotal",
@@ -196,6 +196,7 @@ def score_cycles(args, case_dir, cycles_fasta, tag):
                  os.path.join(dbs, "ISes/_tncentral_nointegrall_isfinder-TNs.fasta"),
                  os.path.join(dbs, "CompTns/Known_Tns.fasta"),
                  os.path.join(case_dir, "blastdb_" + tag),
+                 total_score_type=args.score_type,
                  threshold_final_score=args.score_threshold,
                  path_of_prodigal=args.prodigal, path_of_blastn=args.blastn,
                  path_of_makeblastdb=args.makeblastdb,
@@ -401,6 +402,14 @@ def main(argv=None):
                              "candidates are the tool's actual output; cycle "
                              "detection is an intermediate.")
     parser.add_argument("--score-threshold", type=float, default=50.0)
+    parser.add_argument("--score-type", type=int, default=0, choices=(0, 1, 2),
+                        help="Which total_score to threshold on, matching "
+                             "total_score_type in config.yaml. These are not "
+                             "interchangeable: score0 sums homology hits and is "
+                             "unbounded, while score2 multiplies an "
+                             "AMR-or-xenobiotic term by an IS term, so a cargo "
+                             "absent from both databases can never exceed 10 "
+                             "however good the structure is. Default: %(default)s")
     parser.add_argument("--prodigal", default="prodigal")
     parser.add_argument("--blastx", default="blastx")
     parser.add_argument("--blastp", default="blastp")
@@ -492,6 +501,7 @@ def main(argv=None):
                             amr = by_cargo.get("AMR", (0, 0))
                             append_row(summary_path, {
                                 "MetricVersion": METRIC_VERSION,
+                                "ScoreType": args.score_type,
                                 "Case": case, "Backbone": label, "NCTs": n_cts,
                                 "SharedIS": shared, "NovelCTs": args.novel_cts,
                                 "Seed": seed, "Assembler": assembler,
