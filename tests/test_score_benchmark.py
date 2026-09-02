@@ -132,3 +132,48 @@ class TestCopyDistinctness:
                 blast_row("cyc1", "CT002_x", 1, 4000)]
         result = score(ground_truth, rows, ["cyc1"], 95.0, 0.95)
         assert result["copy_distinctness"] == (1, 2)
+
+
+class TestStaleSummaryRejection:
+    """
+    A summary written under superseded metric rules must not be re-aggregated.
+    This is the failure mode that produced a published precision figure four
+    points too high: the definition changed, the stored file did not, and
+    nothing connected the two.
+    """
+
+    def _summary(self, tmp_path, version):
+        import csv as _csv
+        path = tmp_path / "summary.tsv"
+        columns = ["MetricVersion", "Case", "Stage", "ReportedCycles",
+                   "CTRecall", "CTTotal", "Precision", "PrecisionTotal",
+                   "CopyDistinct", "CopyDistinctTotal"]
+        with open(path, "w", newline="") as handle:
+            writer = _csv.DictWriter(handle, fieldnames=columns, delimiter="\t")
+            writer.writeheader()
+            row = dict.fromkeys(columns, "1")
+            row.update(MetricVersion=version, Case="c", Stage="scored")
+            writer.writerow(row)
+        return str(path)
+
+    def test_current_version_loads(self, tmp_path):
+        import summarize_benchmark as sb
+        assert len(sb.load(self._summary(tmp_path, sb.CURRENT_METRIC_VERSION))) == 1
+
+    def test_older_version_is_refused(self, tmp_path):
+        import summarize_benchmark as sb
+        with pytest.raises(SystemExit):
+            sb.load(self._summary(tmp_path, sb.CURRENT_METRIC_VERSION - 1))
+
+    def test_unstamped_file_is_refused(self, tmp_path):
+        """Files written before the stamp existed are exactly the stale ones."""
+        import csv as _csv
+        path = tmp_path / "old.tsv"
+        with open(path, "w", newline="") as handle:
+            writer = _csv.DictWriter(handle, fieldnames=["Case", "Precision"],
+                                     delimiter="\t")
+            writer.writeheader()
+            writer.writerow({"Case": "c", "Precision": "9"})
+        import summarize_benchmark as sb
+        with pytest.raises(SystemExit):
+            sb.load(str(path))

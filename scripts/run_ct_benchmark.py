@@ -47,8 +47,14 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PICOTA_DIR = os.path.join(SCRIPT_DIR, "..", "picota")
 
+# Bumped whenever a metric's definition changes. A stored summary carries the
+# version it was written under, so a file produced by older rules is detected
+# rather than silently re-aggregated with the current ones -- which is exactly
+# how a corrected precision figure would otherwise creep back into a table.
+METRIC_VERSION = 2
+
 SUMMARY_COLUMNS = [
-    "Case", "Backbone", "NCTs", "SharedIS", "NovelCTs", "Seed", "Assembler",
+    "MetricVersion", "Case", "Backbone", "NCTs", "SharedIS", "NovelCTs", "Seed", "Assembler",
     "Mode", "MinCycle", "Stage", "GenomeLength",
     "Segments", "Links", "ReportedCycles", "TruncatedSearches",
     "CTRecall", "CTTotal", "Precision", "PrecisionTotal",
@@ -485,6 +491,7 @@ def main(argv=None):
                             novel = by_cargo.get("novel", (0, 0))
                             amr = by_cargo.get("AMR", (0, 0))
                             append_row(summary_path, {
+                                "MetricVersion": METRIC_VERSION,
                                 "Case": case, "Backbone": label, "NCTs": n_cts,
                                 "SharedIS": shared, "NovelCTs": args.novel_cts,
                                 "Seed": seed, "Assembler": assembler,

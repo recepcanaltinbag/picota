@@ -325,19 +325,32 @@ def simulate(args):
 
     # Count how many copies of each IS end up in the genome: two per composite
     # transposon that uses it, plus any free-standing copies requested.
+    # Two flanking copies per composite transposon, plus one more inside the
+    # cargo when the interrupting element is the flanking one, plus any
+    # free-standing copies. Omitting the cargo-internal copy understates the
+    # count by one per element, which is a ground-truth error rather than a
+    # cosmetic one: it is what a reader would compare a depth ratio against.
+    per_element = 3 if args.cargo_is_mode == "same" else 2
     is_copy_counts = {}
     for (name_family, _), _ in assignments:
-        is_copy_counts[name_family[0]] = is_copy_counts.get(name_family[0], 0) + 2
+        is_copy_counts[name_family[0]] = is_copy_counts.get(name_family[0], 0) + per_element
     if shared:
         is_copy_counts[shared[0][0]] = is_copy_counts.get(shared[0][0], 0) + args.is_copies_outside
 
     # A single extra element used to interrupt every cargo in "different" mode,
-    # so it too is multi-copy across the genome.
+    # so it too is multi-copy across the genome. It must not be one of the
+    # flanking elements: an independent draw can collide, and a collision turns
+    # this scenario silently into the "same" one for that composite transposon.
     interrupting_is = None
     if args.cargo_is_mode == "different":
-        interrupting_is = load_is_elements(args.is_fasta, rng, 1,
-                                           args.is_min_length,
-                                           args.is_max_length)[0]
+        flanking = {name for (name, _), _ in is_elements}
+        candidates = load_is_elements(args.is_fasta, rng, distinct_is_needed + 1,
+                                      args.is_min_length, args.is_max_length)
+        interrupting_is = next((c for c in candidates if c[0][0] not in flanking),
+                               None)
+        if interrupting_is is None:
+            raise SystemExit("could not draw an IS element distinct from the "
+                             "flanking ones; widen --is-min-length/--is-max-length")
 
     # One pool of repeat elements shared by every composite transposon, so each
     # is genuinely multi-copy across the genome rather than unique to one cargo.

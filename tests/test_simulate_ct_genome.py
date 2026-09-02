@@ -484,3 +484,55 @@ class TestNovelCargo:
                                                 n_cts=3, shared_is=2, novel_cts=2))
         for record in records:
             assert genome[record["CT_Start"] - 1:record["CT_End"]] == record["Sequence"]
+
+
+class TestCargoISCounting:
+    """
+    Ground-truth arithmetic around an IS that also sits inside the cargo. Both
+    cases below were wrong once: the copy count omitted the cargo-internal copy,
+    and the interrupting element was drawn without excluding the flanking ones,
+    so a collision could silently turn "different IS" into "same IS".
+    """
+
+    def test_same_mode_counts_the_cargo_internal_copy(self, is_fasta, cargo_fasta, tmp_path):
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                           n_cts=2, shared_is=0,
+                                           cargo_is_mode="same"))
+        for record in records:
+            assert record["IS_Genome_Copies"] == 3, "2 flanking + 1 inside the cargo"
+
+    def test_none_mode_counts_two(self, is_fasta, cargo_fasta, tmp_path):
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                           n_cts=2, shared_is=0))
+        assert all(r["IS_Genome_Copies"] == 2 for r in records)
+
+    def test_different_mode_counts_two_for_the_flanking_element(self, is_fasta,
+                                                                cargo_fasta, tmp_path):
+        """The interrupting element is a different one, so it adds no copy here."""
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                           n_cts=2, shared_is=0,
+                                           cargo_is_mode="different"))
+        assert all(r["IS_Genome_Copies"] == 2 for r in records)
+
+    def test_shared_mode_adds_free_standing_copies(self, is_fasta, cargo_fasta, tmp_path):
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                           n_cts=3, shared_is=2,
+                                           is_copies_outside=4,
+                                           cargo_is_mode="same"))
+        # three per shared element, two of them share it, plus four free-standing
+        assert records[0]["IS_Genome_Copies"] == 3 * 2 + 4
+
+    @pytest.mark.parametrize("seed", [1, 2, 3, 4, 5])
+    def test_interrupting_element_is_never_a_flanking_one(self, is_fasta,
+                                                          cargo_fasta, tmp_path, seed):
+        """
+        A collision would make the scenario the harder one while the table still
+        called it the easier one. The fixture offers only three elements, so a
+        careless draw collides often.
+        """
+        _, records, _ = simulate(make_args(is_fasta, cargo_fasta, tmp_path,
+                                           n_cts=2, shared_is=0, seed=seed,
+                                           cargo_is_mode="different"))
+        flanking = {r["IS_Name"] for r in records}
+        interrupting = {r["Cargo_IS"] for r in records}
+        assert not (flanking & interrupting)

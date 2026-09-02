@@ -45,9 +45,28 @@ def fmt(value):
     return "-" if value is None else f"{value * 100:.1f}%"
 
 
+CURRENT_METRIC_VERSION = 2
+
+
 def load(path):
+    """
+    Read a summary, refusing one written under superseded metric definitions.
+
+    Precision once counted any candidate built from element sequence, including
+    fragments. Re-aggregating a file written under that rule would silently
+    reproduce the old, too-high figure, so a stale file is an error rather than
+    a warning.
+    """
     with open(path) as handle:
-        return list(csv.DictReader(handle, delimiter="\t"))
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    for row in rows:
+        version = as_int(row.get("MetricVersion"), 0)
+        if version != CURRENT_METRIC_VERSION:
+            raise SystemExit(
+                "%s was written with metric version %d, this script expects %d. "
+                "Re-score the runs rather than aggregating stale numbers."
+                % (path, version, CURRENT_METRIC_VERSION))
+    return rows
 
 
 def case_metrics(row):
