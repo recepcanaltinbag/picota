@@ -23,8 +23,13 @@ paths:
   path_of_spades: "spades.py"
   path_of_fastp: "fastp"
   skip_filtering: true
-  #assembler_type: "megahit"
-  assembler_type: "megahit"
+  # SPAdes, not MEGAHIT. Measured on simulated genomes with known composite
+  # transposons: PICOTA recovers 40/40 elements from the SPAdes assembly graph
+  # and 19/40 from the MEGAHIT graph of the same reads. MEGAHIT simplifies
+  # repeats harder, so the bubbles a composite transposon makes are not in its
+  # graph to be found -- and a structure absent from the graph cannot be
+  # recovered by any amount of scoring downstream.
+  assembler_type: "spades"
   path_of_megahit: "megahit"
 
   # Tools

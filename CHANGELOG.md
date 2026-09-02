@@ -153,6 +153,12 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   `_basename_parts[1] if len(...) > 1 else ''` guard.
 
 ### Changed
+- **`assembler_type` now defaults to `spades`** in all shipped configs, was
+  `megahit`. On simulated genomes with known composite transposons, PICOTA
+  recovers 40/40 elements from the SPAdes assembly graph and 19/40 from the
+  MEGAHIT graph of the same reads. MEGAHIT simplifies repeats harder, so the
+  bubbles are not in its graph to be found; its perfect precision reflects
+  reporting less, not reporting better.
 - `scoring_main()` now calls `write_enriched_csv()` automatically at the end.
   The enriched CSV is written to the same directory as `picota_final_tab`.
 - README updated with enriched output column reference and E2E test instructions.

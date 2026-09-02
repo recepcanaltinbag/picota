@@ -121,7 +121,27 @@ is no way to tell an improvement from a regression.
 
 ---
 
-## 6. Immediate next steps
+## 6. Assembler choice
+
+`assembler_type` now defaults to `spades` in all shipped configs; it was
+`megahit`. Measured on simulated genomes with known composite transposons, same
+reads and same ground truth:
+
+| | recall | PPV |
+|---|---|---|
+| SPAdes graph | **40/40 (100%)** | 46/48 (96%) |
+| MEGAHIT graph | **19/40 (48%)** | 19/19 (100%) |
+
+MEGAHIT's perfect precision is not an advantage — it reports fewer candidates
+because its graph holds fewer bubbles, having simplified the repeats harder. The
+trade is one-directional for this task: a structure missing from the graph
+cannot be recovered by any scoring downstream, whereas a spurious candidate can
+be filtered. The same effect appears in the contigs: elements intact in a single
+contig were 3/8 under SPAdes and 0/8 under MEGAHIT.
+
+---
+
+## 7. Immediate next steps
 
 1. **Phase 0.5 stage 2** — run `scripts/select_benchmark_strains.py`, then
    annotate IS elements on the shortlisted genomes (ISEScan) and build the
