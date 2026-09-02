@@ -123,11 +123,23 @@ def score(ground_truth, rows, cycle_ids, min_identity, min_coverage):
 
     recovered = [ct for ct, (cycle, _) in matches.items() if cycle]
 
-    # Precision: a reported cycle counts as a true positive when most of ITS
-    # length is explained by ground-truth CTs. A chimera stitching a CT to
-    # unrelated backbone fails this even though it "hits" a CT.
-    explained = query_covered_fraction(rows, min_identity)
-    true_positives = [c for c in cycle_ids if explained.get(c, 0.0) >= min_coverage]
+    # Precision: a reported cycle counts as a true positive only when it
+    # represents a COMPLETE element -- it must cover at least `min_coverage` of
+    # some ground-truth composite transposon.
+    #
+    # An earlier version asked only whether the candidate's own sequence was
+    # CT-derived, which is a weaker and misleading test: a fragment of a
+    # composite transposon is made entirely of that element's sequence and
+    # passed, so partial candidates covering 78% of an element were counted as
+    # true positives and precision came out too high. Being built from the right
+    # sequence is not the same as being the right thing.
+    covers_an_element = set()
+    for ct_id, per_cycle in coverage.items():
+        length = int(ground_truth[ct_id]["CT_Length"])
+        for cycle, positions in per_cycle.items():
+            if len(positions) / length >= min_coverage:
+                covers_an_element.add(cycle)
+    true_positives = [c for c in cycle_ids if c in covers_an_element]
 
     # Copy-distinctness: among CTs sharing an IS, how many came back as
     # SEPARATE cycles. Two ground-truth CTs mapped onto one cycle count once.
