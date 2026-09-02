@@ -43,15 +43,24 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PICOTA_DIR = os.path.join(SCRIPT_DIR, "..", "picota")
 
-SCENARIOS = [
-    ("baseline",      ["--shared-is", "0"]),
-    ("shared_is",     ["--shared-is", "4", "--is-copies-outside", "8"]),
-    ("novel_cargo",   ["--shared-is", "0", "--novel-cts", "4"]),
-    ("cargo_is_diff", ["--shared-is", "0", "--cargo-is-mode", "different"]),
-    ("cargo_is_same", ["--shared-is", "0", "--cargo-is-mode", "same"]),
-    ("compact",       ["--shared-is", "0", "--cargo-genes", "1",
-                       "--is-min-length", "700", "--is-max-length", "900"]),
-]
+def scenarios(n_cts):
+    """
+    Scenario definitions, scaled to the requested number of elements.
+
+    Each is a pure case -- every element shares the IS, or every element carries
+    novel cargo -- so the counts follow n_cts rather than being fixed, and the
+    table can be run at whatever size gives the conclusions enough weight.
+    """
+    return [
+        ("baseline",      ["--shared-is", "0"]),
+        ("shared_is",     ["--shared-is", str(n_cts),
+                           "--is-copies-outside", str(2 * n_cts)]),
+        ("novel_cargo",   ["--shared-is", "0", "--novel-cts", str(n_cts)]),
+        ("cargo_is_diff", ["--shared-is", "0", "--cargo-is-mode", "different"]),
+        ("cargo_is_same", ["--shared-is", "0", "--cargo-is-mode", "same"]),
+        ("compact",       ["--shared-is", "0", "--cargo-genes", "1",
+                           "--is-min-length", "700", "--is-max-length", "900"]),
+    ]
 
 
 def run(command, log, check=True):
@@ -75,7 +84,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     os.makedirs(args.out_dir, exist_ok=True)
-    chosen = [s for s in SCENARIOS if not args.only or s[0] in args.only]
+    chosen = [s for s in scenarios(args.n_cts) if not args.only or s[0] in args.only]
 
     for name, extra in chosen:
         case = os.path.join(args.out_dir, name)

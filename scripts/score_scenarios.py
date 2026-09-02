@@ -127,7 +127,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Score a graded scenario run.")
     parser.add_argument("--scenarios", required=True)
     parser.add_argument("--threshold", type=float, default=50.0)
-    parser.add_argument("--score-type", type=int, default=0, choices=(0, 1, 2),
+    parser.add_argument("--score-type", type=int, default=0, choices=(0, 1, 2, 3),
                         help="Which total_score to threshold on; must match "
                              "total_score_type in config.yaml.")
     parser.add_argument("--prodigal", default="prodigal")

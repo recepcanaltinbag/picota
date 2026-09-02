@@ -402,7 +402,7 @@ def main(argv=None):
                              "candidates are the tool's actual output; cycle "
                              "detection is an intermediate.")
     parser.add_argument("--score-threshold", type=float, default=50.0)
-    parser.add_argument("--score-type", type=int, default=0, choices=(0, 1, 2),
+    parser.add_argument("--score-type", type=int, default=0, choices=(0, 1, 2, 3),
                         help="Which total_score to threshold on, matching "
                              "total_score_type in config.yaml. These are not "
                              "interchangeable: score0 sums homology hits and is "

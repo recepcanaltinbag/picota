@@ -28,7 +28,7 @@ class CodingRegion:
         self.gene = ''
 
 class GeneticInfo:
-    def __init__(self, seqacc, qseqid, seq_description, feature_list, nuc_seq, score0, score1, score2):
+    def __init__(self, seqacc, qseqid, seq_description, feature_list, nuc_seq, score0, score1, score2, score3=0.0):
         self.seq_acc = seqacc
         self.seq_id = qseqid
         self.seq_description = seq_description
@@ -37,6 +37,7 @@ class GeneticInfo:
         self.score0 = score0
         self.score1 = score1
         self.score2 = score2
+        self.score3 = score3
 
 # --------------------------- Helper Functions ---------------------------
 
@@ -511,6 +512,23 @@ def scoring_main(cycle_folder, picota_out_folder,
 
         genetic_info_list = []
 
+        # Per-cycle depth, when the detection stage left a sidecar next to the
+        # FASTA. Keyed by the cycle id exactly as it appears in the header.
+        depth_ratios = {}
+        depths_path = os.path.splitext(cycle_file)[0] + '.depths.tsv'
+        if os.path.exists(depths_path):
+            with open(depths_path) as depths_handle:
+                header = depths_handle.readline().rstrip('\n').split('\t')
+                try:
+                    id_at, ratio_at = header.index('CycleID'), header.index('DepthRatio')
+                except ValueError:
+                    id_at = ratio_at = None
+                if id_at is not None:
+                    for depth_line in depths_handle:
+                        cells = depth_line.rstrip('\n').split('\t')
+                        if len(cells) > max(id_at, ratio_at) and cells[ratio_at] != 'NA':
+                            depth_ratios[cells[id_at]] = float(cells[ratio_at])
+
         # Cycle split
         split_fasta(cycle_file, splitted_cycle_single_folder)
         splitted_cycles = glob.glob(os.path.join(splitted_cycle_single_folder, "*"))
@@ -608,8 +626,14 @@ def scoring_main(cycle_folder, picota_out_folder,
             score0 = calculate_total_score(0, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
             score1 = calculate_total_score(1, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
             score2 = calculate_total_score(2, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
+            # score3 additionally uses read depth over the IS against the cargo,
+            # which is read from the cycle FASTA's .depths.tsv sidecar when one
+            # exists. Without it the multi-copy term falls back to neutral, so a
+            # run whose assembler reported no coverage is not penalised for it.
+            cycle_id = os.path.basename(splitted_cycle)
+            score3 = calculate_total_score(3, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number, depth_ratios.get(cycle_id))
 
-            t_score = [score0, score1, score2][total_score_type]
+            t_score = [score0, score1, score2, score3][total_score_type]
 
             if t_score > threshold_final_score:
                 logger.info(f'Analyzing: {os.path.basename(splitted_cycle)}')
@@ -625,7 +649,7 @@ def scoring_main(cycle_folder, picota_out_folder,
             qseqid = os.path.basename(splitted_cycle)
             seqacc = 'No Accession'
             seq_description = f'this annotation made by PICOTA pipeline, score0:{score0}, score1:{score1}, score2:{score2}'
-            the_gen_info = GeneticInfo(seqacc, qseqid, seq_description, cds_list, nuc_of_cycle, score0, score1, score2)
+            the_gen_info = GeneticInfo(seqacc, qseqid, seq_description, cds_list, nuc_of_cycle, score0, score1, score2, score3)
 
             if t_score > threshold_final_score:
                 genetic_info_list.append((the_gen_info, t_score))
@@ -679,6 +703,7 @@ def scoring_main(cycle_folder, picota_out_folder,
                 str(gen_info[0].score0),
                 str(gen_info[0].score1),
                 str(gen_info[0].score2),
+                str(gen_info[0].score3),
                 str(len(IS_str)), ';'.join(IS_str), ';'.join(IS_coords),
                 str(len(Ant_str)), ';'.join(Ant_str), ';'.join(Ant_coords),
                 str(len(Xeno_str)), ';'.join(Xeno_str), ';'.join(Xeno_coords),
@@ -692,7 +717,7 @@ def scoring_main(cycle_folder, picota_out_folder,
 
     # Final tab yazımı
     with open(picota_final_tab, 'w') as f_out:
-        f_out.write('\t'.join(['CycleID', 'SRAID', 'kmer', 'score0', 'score1', 'score2',
+        f_out.write('\t'.join(['CycleID', 'SRAID', 'kmer', 'score0', 'score1', 'score2', 'score3',
                                'NumIS', 'ISproducts', 'IScoords',
                                'NumAnt', 'Antproducts', 'Antcoords',
                                'NumXeno', 'Xenoproducts', 'Xenocoords','NumCompTN','CompTN','CompTNscoords']) + '\n')
