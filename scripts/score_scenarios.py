@@ -141,29 +141,58 @@ def main(argv=None):
              "path_of_makeblastdb": args.makeblastdb,
              "path_of_blastx": args.blastx, "path_of_blastp": args.blastp}
 
-    present = [n for n in SCENARIO_ORDER
-               if os.path.exists(os.path.join(args.scenarios, n, "cycles.fasta"))]
+    # One genome per seed, so a scenario is a set of case directories rather
+    # than one. Elements inside a genome share its assembly and read set and are
+    # not independent; genomes are, which is why the totals pool across seeds
+    # instead of reporting a single run.
+    import glob
+
+    cases_of = {}
+    for name in SCENARIO_ORDER:
+        found = sorted(
+            d for d in glob.glob(os.path.join(args.scenarios, name + "_s*"))
+            if os.path.exists(os.path.join(d, "cycles.fasta")))
+        if not found and os.path.exists(
+                os.path.join(args.scenarios, name, "cycles.fasta")):
+            found = [os.path.join(args.scenarios, name)]
+        if found:
+            cases_of[name] = found
+
+    present = [n for n in SCENARIO_ORDER if n in cases_of]
     if not present:
         print("no scored scenarios in %s" % args.scenarios, file=sys.stderr)
         return 1
 
-    header = ("%-15s %-33s %4s %5s %5s %4s %4s %4s %13s %8s"
-              % ("scenario", "structure", "CTs", "det.", "scor.", "TP", "FN", "FP",
-                 "score range", "comp"))
+    header = ("%-15s %-33s %3s %4s %5s %5s %4s %4s %4s %13s %8s"
+              % ("scenario", "structure", "gen", "CTs", "det.", "scor.", "TP",
+                 "FN", "FP", "score range", "comp"))
     print(header)
     print("-" * len(header))
     for name in present:
-        r = evaluate(os.path.join(args.scenarios, name), int(args.threshold),
-                     tools, args.score_type)
-        score_range = ("%.0f-%.0f" % (r["score_min"], r["score_max"])
-                       if r["score_min"] is not None else "-")
-        comp_range = ("%d-%d" % (r["comp_min"], r["comp_max"])
-                      if r["comp_min"] is not None else "-")
-        print("%-15s %-33s %4d %5d %5d %4d %4d %4d %13s %8s"
-              % (name, SCENARIO_LABEL.get(name, ""), r["cts"], r["detected"],
-                 r["scored"], r["tp"], r["fn"], r["fp"], score_range, comp_range))
+        pooled = {"cts": 0, "detected": 0, "detected_tp": 0, "scored": 0,
+                  "tp": 0, "fn": 0, "fp": 0}
+        lows, highs, comp_lows, comp_highs = [], [], [], []
+        for case in cases_of[name]:
+            r = evaluate(case, int(args.threshold), tools, args.score_type)
+            for key in pooled:
+                pooled[key] += r[key]
+            if r["score_min"] is not None:
+                lows.append(r["score_min"])
+                highs.append(r["score_max"])
+            if r["comp_min"] is not None:
+                comp_lows.append(r["comp_min"])
+                comp_highs.append(r["comp_max"])
+        score_range = ("%.0f-%.0f" % (min(lows), max(highs)) if lows else "-")
+        comp_range = ("%d-%d" % (min(comp_lows), max(comp_highs))
+                      if comp_lows else "-")
+        print("%-15s %-33s %3d %4d %5d %5d %4d %4d %4d %13s %8s"
+              % (name, SCENARIO_LABEL.get(name, ""), len(cases_of[name]),
+                 pooled["cts"], pooled["detected"], pooled["scored"],
+                 pooled["tp"], pooled["fn"], pooled["fp"],
+                 score_range, comp_range))
 
-    print("\ndet.  = candidate cycles from graph traversal")
+    print("\ngen   = independent genomes pooled, one per seed")
+    print("det.  = candidate cycles from graph traversal")
     print("scor. = candidates above the score threshold of %g" % args.threshold)
     print("TP/FN = implanted elements recovered / missed in the SCORED output")
     print("FP    = scored candidates matching no implanted element")

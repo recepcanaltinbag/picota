@@ -45,19 +45,36 @@ ASSEMBLERS = ("spades", "megahit")
 
 def graph_recovered(case, assembler, ground_truth, min_coverage, blastn,
                     makeblastdb):
-    """Elements a detected cycle covers to at least min_coverage."""
+    """
+    (elements a cycle covers, cycles covering no element, cycles detected).
+
+    A cycle counts for an element only when it covers min_coverage of it. The
+    weaker test -- any BLAST hit between the two -- once inflated a precision
+    figure here: two candidates were 100% composite-transposon sequence but
+    spanned 78% of the element, and counting them as recoveries reported more
+    true positives than there were implanted elements.
+
+    The unmatched count matters on this axis in particular. Free-standing IS
+    copies give the graph a high-depth node with many edges, and cycles closing
+    through it are exactly what a detector reading bubbles would be expected to
+    over-report as copy number rises.
+    """
     cycles = os.path.join(case, "cycles_%s.fasta" % assembler)
     if not os.path.exists(cycles):
         return None
+    detected = {line[1:].strip() for line in open(cycles) if line.startswith(">")}
     ground_truth_fasta = os.path.join(case, "ground_truth_cts.fasta")
     coverage = covered_positions(
         run_blast(cycles, ground_truth_fasta, blastn, makeblastdb), 95.0)
-    found = set()
+
+    found, matched_cycles = set(), set()
     for ct_id, per_cycle in coverage.items():
         length = int(ground_truth[ct_id]["CT_Length"])
-        if any(len(p) / length >= min_coverage for p in per_cycle.values()):
-            found.add(ct_id)
-    return found
+        for cycle, positions in per_cycle.items():
+            if len(positions) / length >= min_coverage:
+                found.add(ct_id)
+                matched_cycles.add(cycle)
+    return found, detected - matched_cycles, detected
 
 
 def contig_recovered(case, assembler, ground_truth, min_coverage, min_identity,
@@ -90,6 +107,9 @@ def main(argv=None):
 
     # copies -> route -> [recovered, total]
     totals = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0]))
+    # copies -> assembler -> [cycles matching no element, cycles detected]
+    unmatched_totals = collections.defaultdict(
+        lambda: collections.defaultdict(lambda: [0, 0]))
 
     for case in sorted(glob.glob(os.path.join(args.sweep, "*"))):
         tsv = os.path.join(case, "ground_truth.tsv")
@@ -103,12 +123,19 @@ def main(argv=None):
 
         row = {}
         found_by_route = {}
+        unmatched_by_assembler = {}
         for assembler in ASSEMBLERS:
             for route, fn in (("graph", graph_recovered),
                               ("contig", contig_recovered)):
                 if route == "graph":
-                    found = fn(case, assembler, ground_truth,
-                               args.min_coverage, args.blastn, args.makeblastdb)
+                    result = fn(case, assembler, ground_truth,
+                                args.min_coverage, args.blastn, args.makeblastdb)
+                    if result is not None:
+                        found, unmatched, detected = result
+                        unmatched_by_assembler[assembler] = (len(unmatched),
+                                                             len(detected))
+                    else:
+                        found = None
                 else:
                     found = fn(case, assembler, ground_truth,
                                args.min_coverage, args.min_identity,
@@ -130,6 +157,9 @@ def main(argv=None):
                 continue
             totals[copies][key][0] += len(found)
             totals[copies][key][1] += n
+        for assembler, (unmatched, detected) in unmatched_by_assembler.items():
+            unmatched_totals[copies][assembler][0] += unmatched
+            unmatched_totals[copies][assembler][1] += detected
 
         if args.per_case:
             print("%-16s copies %3d  n %3d  %s"
@@ -155,6 +185,23 @@ def main(argv=None):
                                                         100 * got / total)
                                    if total else "-"))
         print("%8d %6d  %s" % (copies, n, "  ".join(cells)))
+
+    print()
+    print("Cycles matching no implanted element (graph route)")
+    header = "%8s  %-22s %-22s" % ("copies", "spades", "megahit")
+    print(header)
+    print("-" * len(header))
+    for copies in sorted(unmatched_totals):
+        cells = []
+        for assembler in ASSEMBLERS:
+            unmatched, detected = unmatched_totals[copies][assembler]
+            cells.append("%-22s" % ("%d/%d (%3.0f%%)"
+                                    % (unmatched, detected,
+                                       100 * unmatched / detected)
+                                    if detected else "-"))
+        print("%8d  %s" % (copies, " ".join(cells)))
+    print("\nDetection only: these are candidate cycles, before scoring "
+          "rejects them.")
     return 0
 
 

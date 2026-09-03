@@ -104,10 +104,18 @@ def build_parser():
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--backbone", help="Host genome; omit for random filler.")
     parser.add_argument("--backbone-length", type=int, default=500000)
-    parser.add_argument("--n-cts", type=int, default=4)
+    parser.add_argument("--n-cts", type=int, default=4,
+                        help="Elements per genome. Kept small deliberately: "
+                             "forty elements add eighty IS copies on top of the "
+                             "host's own, which makes the chromosome more "
+                             "repetitive than any real isolate and changes "
+                             "assembly globally rather than at the element.")
     parser.add_argument("--coverage", type=float, default=50.0)
     parser.add_argument("--threads", type=int, default=4)
-    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--seeds", type=int, nargs="+", default=list(range(1, 11)),
+                        help="One genome per seed. Elements within a genome "
+                             "share its assembly and read set, so they are not "
+                             "independent measurements; genomes are.")
     parser.add_argument("--art", default="art_illumina")
     parser.add_argument("--spades", default="spades.py")
     parser.add_argument("--megahit", default="megahit")
@@ -139,8 +147,9 @@ def main(argv=None):
     os.makedirs(args.out_dir, exist_ok=True)
     chosen = [s for s in scenarios(args.n_cts) if not args.only or s[0] in args.only]
 
-    for name, extra in chosen:
-        case = os.path.join(args.out_dir, name)
+    plan = [(name, extra, seed) for name, extra in chosen for seed in args.seeds]
+    for name, extra, seed in plan:
+        case = os.path.join(args.out_dir, "%s_s%d" % (name, seed))
         done = all(os.path.exists(os.path.join(case, "cycles_%s.fasta" % a))
                    for a in args.assembler)
         if done:
@@ -148,12 +157,12 @@ def main(argv=None):
             continue
         os.makedirs(case, exist_ok=True)
         log = os.path.join(case, "run.log")
-        print("[run ] %s" % name, file=sys.stderr, flush=True)
+        print("[run ] %s seed %d" % (name, seed), file=sys.stderr, flush=True)
 
         cmd = [sys.executable, os.path.join(SCRIPT_DIR, "simulate_ct_genome.py"),
                "--out-dir", case, "--n-cts", str(args.n_cts),
                "--is-divergence", "0.5", "--spacing", "20000",
-               "--seed", str(args.seed)]
+               "--seed", str(seed)]
         if args.backbone:
             cmd += ["--backbone-fasta", args.backbone]
         else:
@@ -165,7 +174,7 @@ def main(argv=None):
         prefix = os.path.join(case, "art_")
         run([args.art, "-ss", "HSXt", "-i", genome, "-p", "-l", "150",
              "-f", str(args.coverage), "-m", "350", "-s", "50",
-             "-rs", str(args.seed), "-o", prefix, "-na"], log)
+             "-rs", str(seed), "-o", prefix, "-na"], log)
 
         sys.path.insert(0, os.path.abspath(PICOTA_DIR))
         from src.cycle_finderv2 import cycle_analysis  # noqa: E402
@@ -177,7 +186,7 @@ def main(argv=None):
                            "Cycle", 1, 25, 80, 80, dedup_mode="strict")
             if assembler == "spades":
                 shutil.copyfile(cycles, os.path.join(case, "cycles.fasta"))
-            print("       %s / %s: %d cycles" % (name, assembler, sum(
+            print("       %s s%d / %s: %d cycles" % (name, seed, assembler, sum(
                 1 for line in open(cycles) if line.startswith(">"))),
                 file=sys.stderr, flush=True)
 
@@ -190,7 +199,7 @@ def main(argv=None):
             "read_length": 150,
             "read_simulator": "art_illumina",
             "art_profile": "HSXt",
-            "scenario": name,
+            "scenario": name, "seed": seed, "n_cts": args.n_cts,
         }, tool_overrides={"art_illumina": args.art})
 
         for leftover in (prefix + "1.fq", prefix + "2.fq"):
