@@ -80,6 +80,12 @@ def main(argv=None):
     parser.add_argument("--blastn", default="blastn")
     parser.add_argument("--makeblastdb", default="makeblastdb")
     parser.add_argument("--per-case", action="store_true")
+    parser.add_argument("--include-incomplete", action="store_true",
+                        help="Aggregate cases that are missing a route. Off by "
+                             "default: a half-finished case otherwise enters "
+                             "the totals with a smaller denominator for some "
+                             "routes than others, and the percentages stop "
+                             "being comparable across the row.")
     args = parser.parse_args(argv)
 
     # copies -> route -> [recovered, total]
@@ -96,6 +102,7 @@ def main(argv=None):
         n = len(ground_truth)
 
         row = {}
+        found_by_route = {}
         for assembler in ASSEMBLERS:
             for route, fn in (("graph", graph_recovered),
                               ("contig", contig_recovered)):
@@ -106,12 +113,23 @@ def main(argv=None):
                     found = fn(case, assembler, ground_truth,
                                args.min_coverage, args.min_identity,
                                args.blastn, args.makeblastdb)
-                if found is None:
-                    continue
                 key = "%s_%s" % (route, assembler)
-                row[key] = len(found)
-                totals[copies][key][0] += len(found)
-                totals[copies][key][1] += n
+                found_by_route[key] = found
+                if found is not None:
+                    row[key] = len(found)
+
+        missing = [k for k, v in found_by_route.items() if v is None]
+        if missing and not args.include_incomplete:
+            print("[skip] %s: still missing %s"
+                  % (os.path.basename(case), ", ".join(sorted(missing))),
+                  file=sys.stderr)
+            continue
+
+        for key, found in found_by_route.items():
+            if found is None:
+                continue
+            totals[copies][key][0] += len(found)
+            totals[copies][key][1] += n
 
         if args.per_case:
             print("%-16s copies %3d  n %3d  %s"
@@ -125,7 +143,11 @@ def main(argv=None):
     print("-" * len(header))
     for copies in sorted(totals):
         counts = totals[copies]
-        n = max(v[1] for v in counts.values()) if counts else 0
+        denominators = {v[1] for v in counts.values()}
+        n = max(denominators) if denominators else 0
+        if len(denominators) > 1:
+            print("[warn] copies=%d: routes disagree on the denominator %s"
+                  % (copies, sorted(denominators)), file=sys.stderr)
         cells = []
         for route in routes:
             got, total = counts.get(route, [0, 0])
