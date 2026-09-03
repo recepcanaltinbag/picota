@@ -17,7 +17,7 @@ Status: 2026-09-01. Companion document: [VALIDATION.md](VALIDATION.md).
   step-progress logging, E2E tests over the bundled `test_data/testNitro.gfa`.
 - **Test suite** — unit, smoke, and an end-to-end test
   (`tests/test_e2e_simulated_ct.py`) that implants composite transposons,
-  sequences them with wgsim, assembles with SPAdes and checks PICOTA recovers
+  sequences them with ART, assembles with SPAdes and checks PICOTA recovers
   them. About 13 seconds; skipped when the tools are absent.
 
 ### Not implemented
@@ -182,12 +182,56 @@ depth added nothing: that was true of `depth_ratio` (max node over min node),
 which tracks cycle length, and false of `junction_depth_ratio`, which compares
 the annotated IS against the cargo.
 
+**Length gates rather than contributes.** As a weighted term at 20% of the
+total, length could not express that a composite transposon has a characteristic
+size: two 35–38 kb cycles from an untouched wild-type genome, each holding an IS
+and a CARD hit some 30 kb apart, scored 68.6 and 65.8 against a threshold of 50.
+Multiplying by the length fit instead puts them at 31.1 and 26.6. Under
+`dist_type` 1 anything at or below the mean has a fit of 1, so no real element
+pays for the change, and the gate removed 5 further false positives across the
+scenarios — `shared_is` from 6 to 2, `cargo_is_diff` from 2 to 1 — without
+costing a single true positive.
+
+Both revisions were prompted by this benchmark, which should be stated when the
+mode is reported. Each is argued from the definition of the structure rather
+than fitted to improve a number, but the distinction is the reader's to judge.
+
+### Measured and not adopted
+
+Four alternatives were implemented and scored against the same data. None is in
+the released mode, and the reason is recorded here so the question does not have
+to be reopened from scratch.
+
+| criterion | true positives lost | false positives removed |
+|---|---|---|
+| deepest node must carry the IS | 5 | 0 |
+| cycle's closing node must carry the IS | 6 | 4 |
+| IS-to-cargo distance as a weighted term | — | 0 beyond the length gate |
+| removing the depth term | ordering inverts | — |
+
+The first two operationalise the principle that a composite transposon's cycle
+closes *on* its IS. Both cost more than they return, for the same reason: the
+dominant false-positive class is recombinations of real elements — cycles that
+splice one element's IS to another's cargo — and those do close on an IS. No
+IS-based topological test separates them from the elements they are made of.
+
+IS-to-cargo distance fails for a structural reason worth stating, because it
+looks compelling until measured. The cycle contains the IS and the cargo, so the
+distance between them is bounded above by the cycle length: a large distance
+implies a long cycle, and the length gate already rejects those. Distance can
+only reject a subset of what length rejects. The numbers follow — 52–366 bp for
+real elements against 28,178 bp for the wild-type candidates, but 164–186 bp for
+every scenario false positive, indistinguishable from the real elements because
+those candidates are built from real elements whose cargo genuinely does abut
+their IS.
+
 ---
 
 ## 8. Negative control
 
 Wild-type *E. coli* K-12 MG1655, no implanted elements, same reads, assembly and
-pipeline: 17 cycles in the graph, **0 reported under score0 and 2 under score2**.
+pipeline: 17 cycles in the graph, **0 reported under score0, 2 under score2 and
+0 under score3**.
 
 The graph of an untouched genome does contain cycles — MG1655 carries dozens of
 native IS elements — and scoring rejects essentially all of them. The two
@@ -196,6 +240,11 @@ CARD recognises, flanked by IS. This is not a false-positive rate against zero
 truth, since those may be real IS-bounded structures; what it establishes is
 that the pipeline does not manufacture composite transposons where none were
 placed.
+
+Both are 35–38 kb cycles whose IS and CARD hit lie some 30 kb apart — an IS and
+a resistance gene in the same chromosomal neighbourhood rather than an element
+bounded by two copies of one IS. score3 rejects them at 31.1 and 26.6 because
+length gates there; this is the case that motivated the change (§7).
 
 ---
 

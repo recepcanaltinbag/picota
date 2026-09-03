@@ -137,8 +137,9 @@ PICOTA's output against that ground truth.
 python scripts/simulate_ct_genome.py --out-dir sim/ \
     --backbone-length 400000 --n-cts 5 --shared-is 4 \
     --is-copies-outside 5 --is-divergence 0.5 --cargo-genes 1 --seed 3
-wgsim -N <reads> -1 150 -2 150 sim/genome.fasta r1.fq r2.fq
-spades.py -1 r1.fq -2 r2.fq -o sim/sp -k 55,77,99 --only-assembler
+art_illumina -ss HSXt -i sim/genome.fasta -p -l 150 -f 50 -m 350 -s 50 \
+    -o sim/r  # empirical HiSeq X quality profile, not a flat error rate
+spades.py -1 sim/r1.fq -2 sim/r2.fq -o sim/sp -k 55,77,99 --only-assembler
 # run cycle_analysis on sim/sp/assembly_graph_with_scaffolds.gfa, then:
 python scripts/score_picota_benchmark.py \
     --ground-truth sim/ground_truth.tsv \
@@ -202,11 +203,47 @@ What strict mode actually buys on real data is **precision**: a higher fraction
 of reported cycles correspond to genuine composite transposons, with recall
 unchanged.
 
+#### Structural scenarios, twelve elements each
+
+Six chromosomes, each implanting twelve elements into MG1655 and varying **one**
+structural property while holding everything else fixed, so a drop between rows
+is attributable to the structure rather than to chance. Scored under score3 at a
+threshold of 50.
+
+| scenario | structure | in graph | reported | TP | FN | FP | score |
+|---|---|---|---|---|---|---|---|
+| baseline | unique IS, CARD cargo | 12 | 12 | **12** | 0 | 0 | 79–94 |
+| novel_cargo | cargo in no database | 12 | 12 | **12** | 0 | 0 | 58–73 |
+| cargo_is_diff | a different IS inside the cargo | 15 | 14 | **12** | 0 | 1 | 80–91 |
+| compact | cycle below `min_size_of_cycle` | 8 | 7 | 7 | 5 | 0 | 68–96 |
+| shared_is | twelve elements on one 48-copy IS | 27 | 6 | 4 | 8 | 2 | 63–66 |
+| cargo_is_same | flanking IS also inside the cargo | 22 | 22 | 0 | 12 | 22 | — |
+
+Three things this table is meant to show, including the ones that do not
+flatter the tool:
+
+**Scoring is not the bottleneck anywhere.** Across all six scenarios and 72
+elements the scoring stage loses exactly one candidate. Every other loss happens
+earlier — at assembly, at graph traversal, or at the size filter. `shared_is`
+reports 4 of 12 not because scoring rejects the other eight but because only
+four survive the graph as recoverable cycles; all three scoring modes return the
+same four.
+
+**novel_cargo is the case score2 cannot do at all.** Twelve elements whose cargo
+matches nothing in CARD or the xenobiotic set are all recovered at 58–73. Under
+score2 every one of them scores 10 against a threshold of 50.
+
+**cargo_is_same is a genuine failure, not a scoring artefact.** When the
+flanking IS also occurs inside the cargo, the cycle that PICOTA reports is a
+sub-element, and none of the twelve implanted elements is recovered whole. This
+is a limit of reading cycles out of the graph and is not addressed by any
+scoring change.
+
 ### 3.6 Negative control
 
 Wild-type *E. coli* K-12 MG1655 with nothing implanted, run through the same
 reads, assembly and pipeline: 17 cycles detected in the graph, **0 reported
-under score0 and 2 under score2**.
+under score0, 2 under score2 and 0 under score3**.
 
 Read as a false-positive rate this would be misleading, because MG1655 is not a
 composite-transposon-free genome — it carries dozens of native IS elements and
@@ -214,6 +251,12 @@ some may genuinely flank cargo. The two surviving candidates are most likely its
 *ampC*-family genes, which CARD recognises. What the control establishes is
 narrower and still worth having: the pipeline does not manufacture composite
 transposons where none were placed.
+
+Both are 35–38 kb cycles whose IS and CARD hit sit some 30 kb apart — an IS and
+a resistance gene in one chromosomal neighbourhood, not an element bounded by
+two copies of one IS. score3 scores them 31.1 and 26.6, because length gates
+there rather than contributing 20% of the total; this is the case that motivated
+that change (ROADMAP §7).
 
 ### 3.7 Does the assembly already answer the question?
 

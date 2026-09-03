@@ -3,11 +3,12 @@ End-to-end test: implant composite transposons, sequence, assemble, detect.
 
 Every other test in this suite checks a component. This one checks the claim the
 tool actually makes -- put N composite transposons into a genome and PICOTA
-finds them -- by running the real pipeline: simulate_ct_genome.py -> wgsim ->
+finds them -- by running the real pipeline: simulate_ct_genome.py -> ART ->
 SPAdes -> cycle_analysis -> BLAST against ground truth. A small genome keeps it
 to a few seconds.
 
-Skipped automatically when wgsim, spades.py or blastn are not on PATH.
+Skipped automatically when spades.py, blastn or both read simulators are
+absent from PATH.
 
 Run:
     python3 -m pytest tests/test_e2e_simulated_ct.py -v
