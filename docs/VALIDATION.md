@@ -210,20 +210,26 @@ structural property while holding everything else fixed, so a drop between rows
 is attributable to the structure rather than to chance. Scored under score3 at a
 threshold of 50.
 
-| scenario | structure | in graph | reported | TP | FN | FP | score |
-|---|---|---|---|---|---|---|---|
-| baseline | unique IS, CARD cargo | 12 | 12 | **12** | 0 | 0 | 79–94 |
-| novel_cargo | cargo in no database | 12 | 12 | **12** | 0 | 0 | 58–73 |
-| cargo_is_diff | a different IS inside the cargo | 15 | 14 | **12** | 0 | 1 | 80–91 |
-| compact | cycle below `min_size_of_cycle` | 8 | 7 | 7 | 5 | 0 | 68–96 |
-| shared_is | twelve elements on one 48-copy IS | 27 | 6 | 4 | 8 | 2 | 63–66 |
-| cargo_is_same | flanking IS also inside the cargo | 22 | 22 | 0 | 12 | 22 | — |
+The first two columns count **cycles**; the rest count **elements** out of the
+twelve implanted. Keeping them apart matters: `cargo_is_same` produces 22
+candidate cycles and recovers none of the twelve elements.
+
+| scenario | structure | cycles | scored | in graph | recovered | lost detecting | lost scoring | FP | score |
+|---|---|---|---|---|---|---|---|---|---|
+| baseline | unique IS, CARD cargo | 12 | 12 | 12/12 | **12/12** | 0 | 0 | 0 | 79–94 |
+| novel_cargo | cargo in no database | 12 | 12 | 12/12 | **12/12** | 0 | 0 | 0 | 58–73 |
+| cargo_is_diff | a different IS inside the cargo | 15 | 14 | 12/12 | **12/12** | 0 | 0 | 1 | 80–91 |
+| compact | cycle below `min_size_of_cycle` | 8 | 7 | 8/12 | 7/12 | 4 | 1 | 0 | 68–96 |
+| shared_is | twelve elements on one 48-copy IS | 27 | 6 | 4/12 | 4/12 | 8 | 0 | 2 | 63–66 |
+| cargo_is_same | flanking IS also inside the cargo | 22 | 22 | 0/12 | 0/12 | 12 | 0 | 22 | — |
+| **total** | | 96 | 73 | **48/72** | **47/72** | **24** | **1** | **25** | 58–96 |
 
 Three things this table is meant to show, including the ones that do not
 flatter the tool:
 
 **Scoring is not the bottleneck anywhere.** Across all six scenarios and 72
-elements the scoring stage loses exactly one candidate. Every other loss happens
+elements, 48 reach the graph as a recoverable cycle and 47 survive scoring — the
+scoring stage loses exactly one. Every other loss happens
 earlier — at assembly, at graph traversal, or at the size filter. `shared_is`
 reports 4 of 12 not because scoring rejects the other eight but because only
 four survive the graph as recoverable cycles; all three scoring modes return the

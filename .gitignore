@@ -109,3 +109,7 @@ results/
 *.fq
 *.gz
 *.fasta.fai
+
+# Intermediate run outputs, not inputs and not results worth keeping
+megahit_out/
+picota/testNitro_sra_ids.csv
