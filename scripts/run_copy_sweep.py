@@ -16,9 +16,10 @@ the assembly graph that PICOTA reads, and the contigs a reader would otherwise
 inspect by hand. That is the comparison the sweep exists to make: contigs and
 graphs do not decay at the same rate.
 
-Copy levels are 2 (the element itself, nothing else), 4, 8, 16 and 32. Two seeds
-per level, twenty elements each, so every level rests on forty elements rather
-than a handful.
+Copy levels are 2, 3, 4, 5, 6 and 8 -- the range over which single-copy
+resolution actually breaks down, rather than an order-of-magnitude sweep whose
+upper half measures a decision already made. Three seeds per level, twenty
+elements each, so every level rests on sixty elements.
 
 Usage:
   python scripts/run_copy_sweep.py --out-dir sweep/ --backbone ref/mg1655.fna \\
@@ -38,13 +39,18 @@ sys.path.insert(0, SCRIPT_DIR)
 from run_manifest import write_run_parameters  # noqa: E402
 from run_scenarios import assemble, run  # noqa: E402
 
-# 5 kb rather than the 20 kb the scenarios use: at 32 copies twenty elements
-# need 620 insertion points, and 20 kb spacing would want 12 Mb of chromosome.
-# 5 kb is still an order of magnitude above the 350 bp fragment size, so the
-# copies stay independently placed.
-SPACING = 5000
+# The same 20 kb the scenarios use, which keeps the two tables comparable and
+# removes a confound. A sweep reaching 32 copies cannot hold it: twenty elements
+# then need 620 insertion points and 20 kb spacing would want 12 Mb of
+# chromosome, so the copies have to be packed closer and copy number starts
+# covarying with the distance between copies. Stopping at 8 keeps spacing fixed.
+SPACING = 20000
 
-COPY_LEVELS = (2, 4, 8, 16, 32)
+# Where the transition actually happens. Two copies is the fewest a composite
+# transposon can have, and SPAdes resolves some of them; by five or six it does
+# not. An order-of-magnitude sweep spends most of its levels on the far side of
+# a decision that is already over.
+COPY_LEVELS = (2, 3, 4, 5, 6, 8)
 
 
 def cases(levels, seeds, n_cts):
@@ -59,7 +65,10 @@ def main(argv=None):
     parser.add_argument("--backbone", required=True)
     parser.add_argument("--n-cts", type=int, default=20)
     parser.add_argument("--levels", type=int, nargs="+", default=list(COPY_LEVELS))
-    parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2])
+    parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
+    parser.add_argument("--spacing", type=int, default=SPACING,
+                        help="Minimum distance between inserts. Held equal to "
+                             "the scenarios' 20 kb so the two tables compare.")
     parser.add_argument("--coverage", type=float, default=50.0)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--min-cycle-size", type=int, default=1000)
@@ -96,7 +105,7 @@ def main(argv=None):
              "--out-dir", case, "--n-cts", str(n_cts),
              "--shared-is", "0",
              "--is-copies-per-element", str(copies - 2),
-             "--is-divergence", "0.5", "--spacing", str(SPACING),
+             "--is-divergence", "0.5", "--spacing", str(args.spacing),
              "--backbone-fasta", args.backbone, "--seed", str(seed)], log)
 
         prefix = os.path.join(case, "art_")
@@ -124,7 +133,7 @@ def main(argv=None):
             "read_length": 150,
             "read_simulator": "art_illumina",
             "art_profile": "HSXt",
-            "copy_level": copies, "seed": seed,
+            "copy_level": copies, "seed": seed, "spacing": args.spacing,
         }, tool_overrides={"art_illumina": args.art})
 
         for leftover in (prefix + "1.fq", prefix + "2.fq"):
