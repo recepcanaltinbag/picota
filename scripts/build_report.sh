@@ -34,6 +34,19 @@ MIN_COVERAGE="${MIN_COVERAGE:-0.95}"
 
 mkdir -p "$OUT"
 
+# Warm the per-case scoring cache in parallel first. score_scenarios.py walks
+# cases in sequence, and each one runs Prodigal and four BLAST passes, which left
+# most cores idle and took 2.7 minutes per case. The work is per-case independent
+# and cached on picota_final_tab, so filling that cache from separate processes
+# and letting score_scenarios.py read it back gives the same numbers from the
+# same code path in about a third of the time.
+echo "==> scoring ${SCORE_TYPE} at threshold ${THRESHOLD} (${SCORE_JOBS:-4} parallel)"
+ls -d "$BENCH"/scenarios_v2/*_s*/ 2>/dev/null \
+    | xargs -P "${SCORE_JOBS:-4}" -I{} python3 "$HERE/score_one_case.py" {} \
+        --threshold "$THRESHOLD" --score-type "$SCORE_TYPE" \
+    || echo "  (warm-up incomplete; score_scenarios.py will fill the rest)"
+
+echo
 echo "==> scenario table (score${SCORE_TYPE}, threshold ${THRESHOLD})"
 python3 "$HERE/score_scenarios.py" \
     --scenarios "$BENCH/scenarios_v2" \
