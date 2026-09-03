@@ -751,10 +751,19 @@ def scoring_main(cycle_folder, picota_out_folder,
         for line in final_list_comps:
             f_out.write(line + '\n')
 
-    # Enriched CSV output
+    # Enriched CSV output.
+    # Imported as `src.output_formatter`: every caller reaches this module as
+    # `src.scoringv4ProtBlast`, so `src` is a package rather than a sys.path
+    # entry and a bare `from output_formatter import ...` never resolves. It
+    # raised ImportError into the broad handler below and was reported as
+    # "generation skipped", so the file was silently never written.
     try:
+        from src.output_formatter import write_enriched_csv
+    except ImportError:  # direct execution with src/ on the path
         from output_formatter import write_enriched_csv
-        enriched_csv = os.path.join(picota_out_folder, 'picota_enriched.csv')
+
+    enriched_csv = os.path.join(picota_out_folder, 'picota_enriched.csv')
+    try:
         n_cts = write_enriched_csv(picota_final_tab, enriched_csv)
         logger.info(f"[+] Enriched CSV written: {enriched_csv} ({n_cts} composite transposons)")
     except Exception as _fmt_err:

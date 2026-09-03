@@ -13,6 +13,7 @@ The test writes all output to a pytest tmp_path directory and cleans
 up automatically on success.
 """
 
+import inspect
 import csv
 import os
 import shutil
@@ -289,6 +290,33 @@ class TestE2E_EnrichedCSV:
 
 class TestE2E_OutputFormatter:
     """Unit tests for output_formatter.py (no BLAST needed)."""
+
+    def test_scoring_reaches_the_formatter_the_way_production_does(self):
+        """
+        Regression: scoring_main used a bare `from output_formatter import ...`.
+        Every caller reaches the module as `src.scoringv4ProtBlast`, so `src` is
+        a package and the bare form raised ImportError -- into a broad handler
+        that logged "Enriched CSV generation skipped" and carried on. The file
+        was never written in any normal run and no test above this one noticed,
+        because they all import the formatter directly rather than through
+        scoring.
+
+        Asserted without BLAST, Prodigal or a pipeline run: resolve the import
+        exactly as scoring_main does, from a module reached the same way.
+        """
+        import importlib
+
+        scoring = importlib.import_module("src.scoringv4ProtBlast")
+        assert scoring.__name__ == "src.scoringv4ProtBlast", \
+            "test must exercise the package path, not a sys.path shortcut"
+
+        source = inspect.getsource(scoring.scoring_main)
+        assert "from src.output_formatter import write_enriched_csv" in source, \
+            "scoring_main must import the formatter as a package member"
+
+        # And the import it performs must actually resolve.
+        from src.output_formatter import write_enriched_csv
+        assert callable(write_enriched_csv)
 
     def _make_tab(self, tmp_path, content: str) -> str:
         p = str(tmp_path / 'picota_final_tab')
