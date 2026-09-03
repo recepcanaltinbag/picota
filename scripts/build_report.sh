@@ -14,6 +14,9 @@
 # Usage:
 #   scripts/build_report.sh <benchmark-dir> <output-dir>
 #
+# Set MEFINDER to a mefinder executable to include the tool comparison:
+#   MEFINDER=/path/to/mefinder scripts/build_report.sh bench/ report/
+#
 # Expects <benchmark-dir> to contain scenarios_v2/ and copysweep/ as produced by
 # run_scenarios.py and run_copy_sweep.py, and ref/ with the host genomes.
 
@@ -23,6 +26,8 @@ BENCH="${1:?usage: build_report.sh <benchmark-dir> <output-dir>}"
 OUT="${2:?usage: build_report.sh <benchmark-dir> <output-dir>}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# MobileElementFinder is optional: the table is skipped rather than failing the
+# build when it is absent, since it is an external tool with its own database.
 THRESHOLD="${THRESHOLD:-50}"
 SCORE_TYPE="${SCORE_TYPE:-3}"
 MIN_COVERAGE="${MIN_COVERAGE:-0.95}"
@@ -47,6 +52,20 @@ python3 "$HERE/compare_contig_recovery.py" \
     "$BENCH/scenarios_v2" --assembler spades megahit \
     --min-coverage "$MIN_COVERAGE" \
     | tee "$OUT/table_contig_baseline.txt"
+
+echo
+echo "==> PICOTA against MobileElementFinder"
+if [ -x "${MEFINDER:-}" ]; then
+    python3 "$HERE/compare_tools.py" \
+        --runs "$BENCH/copysweep" \
+        --mefinder "$MEFINDER" \
+        --min-coverage "$MIN_COVERAGE" \
+        --threads "${MEF_THREADS:-2}" --jobs "${MEF_JOBS:-4}" \
+        | tee "$OUT/table_tool_comparison.txt"
+else
+    echo "  skipped: set MEFINDER to the mefinder executable to include this table"
+    echo "  (pip install MobileElementFinder)"
+fi
 
 echo
 echo "==> element catalogue"
