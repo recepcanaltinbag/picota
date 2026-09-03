@@ -189,19 +189,27 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
             cargo_quality = novel_cargo_floor
         multicopy = _multicopy_fit(depth_ratio)
 
-        # The gate is presence-with-quality, not quality alone. No IS still
+        # The IS gate is presence-with-quality, not quality alone. No IS still
         # scores zero, but a hit at 59% identity-coverage is unambiguously an
         # insertion sequence and halving the whole score for it compounded with
         # the component penalty to put the shared-IS case 0.1 points under the
         # threshold -- penalising twice for one structure.
         gate = 0.5 + 0.5 * is_quality if is_quality > 0 else 0.0
 
-        structural = (_length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns,
-                                  max_z, dist_type) * 0.5
-                      + _component_fit(comp_number, multicopy) * 0.5)
-        total_score = 100.0 * gate * (0.40 * structural
-                                      + 0.30 * multicopy
-                                      + 0.30 * cargo_quality)
+        # Length gates rather than contributes, for the same reason the IS does:
+        # a composite transposon has a characteristic size, and something six
+        # times the mean is not one whatever its homology. As a weighted term at
+        # 20% of the total it could not express that -- two cycles of 35 and 37
+        # kb in a wild-type genome, with an IS and a resistance gene 30 kb apart,
+        # scored 68.6 and 65.8. Real elements pay nothing for this: under
+        # dist_type 1 anything shorter than the mean has a length fit of 1.
+        length_gate = _length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns,
+                                  max_z, dist_type)
+
+        total_score = 100.0 * gate * length_gate * (
+            0.40 * _component_fit(comp_number, multicopy)
+            + 0.30 * multicopy
+            + 0.30 * cargo_quality)
 
     else:
         raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2, 3')

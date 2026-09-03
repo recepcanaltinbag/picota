@@ -153,6 +153,12 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   `_basename_parts[1] if len(...) > 1 else ''` guard.
 
 ### Changed
+- **`min_size_of_cycle` now defaults to 1000**, was 2000. The graph cycle of a
+  composite transposon is IS + cargo rather than IS + cargo + IS, so a compact
+  element yields a cycle far shorter than itself. Twelve implanted elements of
+  2,470–3,095 bp produce cycles of 1,761–2,280 bp: the old threshold recovered
+  8 of 12, the new one all 12, at a cost on a wild-type genome of 17 candidate
+  cycles rising to 22. IS26 with a single resistance gene sits in this range.
 - **`assembler_type` now defaults to `spades`** in all shipped configs, was
   `megahit`. On simulated genomes with known composite transposons, PICOTA
   recovers 40/40 elements from the SPAdes assembly graph and 19/40 from the

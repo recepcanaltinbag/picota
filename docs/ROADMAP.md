@@ -42,7 +42,7 @@ XPASS failures and forces the marker to be removed.
 | **D3** | [`cycle_kmer_hash.py:12`](../picota/src/cycle_kmer_hash.py) | `get_kmer_hashes` returns a set, not a multiset, so repeat copy number is invisible. **Fixed by `dedup_mode: strict`** | Legacy collapses `IS-cargo` and `IS-cargo-IS` into one candidate, discarding the *complete* CT. Strict keeps both |
 | **D4** | [`cycle_kmer_hash.py:118-119`](../picota/src/cycle_kmer_hash.py) | Similarity denominator is `len(new_cycle)`, a containment measure used to make an identity decision. **Fixed by `dedup_mode: strict`** | Legacy result depends on DFS traversal order: the same two cycles give 1 or 2 outputs. Strict is symmetric |
 | **D5** | `k_mer_sim: 80` in `config.yaml` | Exact k-mer matching is a cliff whose position depends entirely on k. **Mitigated, not fixed.** `estimated_ani()` gives a k-stable identity estimate, but no k-mer statistic can carry the merge decision — see §3.1 | Legacy: shared k-mers fall 86% → 64% → 34% across 0.1% → 0.5% → 1% divergence. Strict adds a Jaccard floor and a length criterion and errs toward keeping candidates |
-| **D7** | `min_size_of_cycle: 2000` in `config.yaml` | The graph cycle for a composite transposon is IS + cargo, not IS + cargo + IS, so the default threshold silently drops compact CTs. IS26 at 820 bp plus one resistance gene yields a cycle under 2 kb | Found by `tests/test_e2e_simulated_ct.py`: an implanted CT whose cycle is 1877 bp is missed at the default and recovered at `min_size_of_cycle: 1000`. Compact IS26-bounded single-gene units are among the most common CTs in clinical isolates, so the default is not neutral |
+| ~~**D7**~~ | `min_size_of_cycle` in `config.yaml` — **resolved, default now 1000** | The graph cycle for a composite transposon is IS + cargo, not IS + cargo + IS, so the default threshold silently drops compact CTs. IS26 at 820 bp plus one resistance gene yields a cycle under 2 kb | Found by `tests/test_e2e_simulated_ct.py`: an implanted CT whose cycle is 1877 bp is missed at the default and recovered at `min_size_of_cycle: 1000`. Compact IS26-bounded single-gene units are among the most common CTs in clinical isolates, so the default is not neutral |
 | ~~**D6**~~ | [`cycle_finderv2.py`](../picota/src/cycle_finderv2.py) | ~~`path_limit` truncation assigns a dead local and reports nothing~~ **Resolved** | `GraphWork.truncated_searches` counts them and `cycle_analysis` warns that the enumeration was not exhaustive. On the bundled `testNitro.gfa` the default `path_limit: 25` truncates 96 searches; raising it to 50 truncates none and returns the **same 35 paths** (longest 14 nodes), so nothing was actually lost there. The counter flags *unverified completeness*, not proven loss |
 
 D2 is the defect that matters most for the whole-genome benchmark: it is
@@ -199,7 +199,36 @@ placed.
 
 ---
 
-## 9. Immediate next steps
+## 9. Minimum cycle size
+
+`min_size_of_cycle` now defaults to 1000; it was 2000. The graph cycle of a
+composite transposon is IS + cargo, not IS + cargo + IS, because both flanking
+copies collapse into a single node — so a compact element produces a cycle far
+shorter than itself and the old threshold discarded it before anything scored it.
+
+| threshold | compact elements recovered | cycles on a wild-type genome |
+|---|---|---|
+| 2000 | 8/12 | 17 |
+| 1500 | 12/12 | 21 |
+| **1000** | **12/12** | **22** |
+| 500 | 12/12 | 23 |
+
+Twelve implanted elements of 2,470–3,095 bp produce cycles of 1,761–2,280 bp.
+Recovery is complete from 1500 down, and the cost measured on wild-type MG1655
+with nothing implanted rises only from 17 candidate cycles to 22. 1000 was
+chosen over 1500 for headroom: IS26 at 820 bp with a single resistance gene —
+the most common composite transposon in clinical isolates — yields a cycle near
+1,400 bp and would fall under 1500.
+
+This is a threshold moved to a measured place, not removed. An element more
+compact still would fall under 1000 too. Replacing the length cut with a
+structural test — does the cycle contain a complete IS and at least one ORF —
+would remove the class of failure rather than relocate it, and belongs with the
+scoring work rather than here.
+
+---
+
+## 10. Immediate next steps
 
 1. **Phase 0.5 stage 2** — run `scripts/select_benchmark_strains.py`, then
    annotate IS elements on the shortlisted genomes (ISEScan) and build the

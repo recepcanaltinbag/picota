@@ -52,7 +52,14 @@ paths:
 # -------------------------
 options:
   delete_fastq_files: true
-  min_size_of_cycle: 2000
+  # 1000, not 2000. The graph cycle of a composite transposon is IS + cargo,
+  # not IS + cargo + IS -- both flanking copies collapse into one node -- so a
+  # compact element produces a cycle far shorter than itself. Measured on twelve
+  # implanted elements of 2470-3095 bp, whose cycles run 1761-2280 bp: the old
+  # threshold recovered 8 of 12, this one recovers all 12. The cost on a
+  # wild-type genome with nothing implanted is 17 candidate cycles rising to 22.
+  # IS26 at 820 bp with a single resistance gene sits in exactly this range.
+  min_size_of_cycle: 1000
   max_size_of_cycle: 40000
   name_prefix_cycle: "Cycle"
   min_component_number: 1

@@ -181,3 +181,35 @@ class TestScore3:
     def test_invalid_score_type_still_raises(self):
         with pytest.raises(Exception):
             calculate_total_score(4, DIST, MAX_Z, MEAN, STD, 5800, [], [100], [], 2)
+
+
+class TestLengthGate:
+    """
+    Length gates rather than contributes, for the same reason the IS does: a
+    composite transposon has a characteristic size, and something six times the
+    mean is not one whatever its homology says. As a weighted term at 20% of the
+    total it could not express that -- two 35-37 kb cycles in a wild-type genome,
+    with an IS and a resistance gene 30 kb apart, scored 68.6 and 65.8.
+    """
+
+    def test_a_wildly_oversized_cycle_is_rejected(self):
+        assert score(ant=(80,), is_=(80,), length=35689, comp=11,
+                     depth_ratio=13.5) < 50
+
+    def test_real_elements_pay_nothing_for_it(self):
+        """Under dist_type 1 anything shorter than the mean has a length fit of 1."""
+        assert score(ant=(100,), length=3861, comp=2) == pytest.approx(100.0)
+        assert score(ant=(100,), length=1800, comp=2) == pytest.approx(100.0)
+
+    def test_shared_is_candidates_still_clear_the_threshold(self):
+        assert score(ant=(100,), is_=(59,), length=3560, comp=16,
+                     depth_ratio=54.0) > 60
+
+    def test_a_large_but_plausible_element_still_passes(self):
+        """Some composite transposons genuinely run to 20 kb."""
+        assert score(ant=(100,), length=20000, comp=2) > 50
+
+    def test_length_penalty_is_monotone(self):
+        lengths = [5800, 10000, 20000, 30000, 40000]
+        values = [score(ant=(100,), length=length, comp=2) for length in lengths]
+        assert all(a >= b for a, b in zip(values, values[1:]))
