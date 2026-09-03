@@ -37,6 +37,7 @@ Usage:
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 
@@ -63,13 +64,39 @@ def scenarios(n_cts):
     ]
 
 
+def assemble(args, case, prefix, assembler, log):
+    """Assemble and return the GFA path. MEGAHIT emits no GFA of its own, so
+    its largest-k contigs go through contig2fastg and fastg2gfa."""
+    out = os.path.join(case, assembler)
+    if assembler == "spades":
+        run([args.spades, "-1", prefix + "1.fq", "-2", prefix + "2.fq",
+             "-o", out, "-k", "55,77,99", "--only-assembler",
+             "-t", str(args.threads), "-m", "16"], log)
+        return os.path.join(out, "assembly_graph_with_scaffolds.gfa")
+
+    run([args.megahit, "-1", prefix + "1.fq", "-2", prefix + "2.fq",
+         "-o", out, "-t", str(args.threads), "--k-list", "55,77,99"], log)
+    contigs = os.path.join(out, "intermediate_contigs", "k99.contigs.fa")
+    if not os.path.exists(contigs):
+        raise RuntimeError("MEGAHIT produced no k99 contigs in %s" % out)
+    gfa = os.path.join(out, "assembly_graph.gfa")
+    with open(log, "a") as handle:
+        with open(gfa + ".fastg", "w") as fastg:
+            subprocess.run([args.megahit_toolkit, "contig2fastg", "99", contigs],
+                           stdout=fastg, stderr=handle, check=True)
+        with open(gfa, "w") as out_gfa:
+            subprocess.run([args.fastg2gfa, gfa + ".fastg"],
+                           stdout=out_gfa, stderr=handle, check=True)
+    return gfa
+
+
 def run(command, log, check=True):
     with open(log, "a") as handle:
         return subprocess.run(command, stdout=handle, stderr=subprocess.STDOUT,
                               check=check)
 
 
-def main(argv=None):
+def build_parser():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[3])
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--backbone", help="Host genome; omit for random filler.")
@@ -80,15 +107,40 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--art", default="art_illumina")
     parser.add_argument("--spades", default="spades.py")
+    parser.add_argument("--megahit", default="megahit")
+    parser.add_argument("--megahit-toolkit", default="megahit_core",
+                        help="contig2fastg provider; PICOTA itself calls "
+                             "megahit_core (src/assembly.py).")
+    parser.add_argument("--fastg2gfa",
+                        default=os.path.join(PICOTA_DIR, "tools", "gfaview",
+                                             "misc", "fastg2gfa"),
+                        help="Defaults to the copy PICOTA ships and config.yaml "
+                             "already points at, so the benchmark converts "
+                             "MEGAHIT graphs exactly as the pipeline does.")
+    parser.add_argument("--assembler", nargs="+", default=["spades"],
+                        choices=("spades", "megahit"),
+                        help="Assemblers to run. Each writes its own "
+                             "cycles fasta; spades also writes cycles.fasta.")
+    parser.add_argument("--min-cycle-size", type=int, default=1000,
+                        help="Passed to cycle_analysis. Must track "
+                             "min_size_of_cycle in config.yaml -- this was "
+                             "hardcoded to 2000 and silently held the compact "
+                             "scenario at the pre-2026-09 threshold.")
     parser.add_argument("--only", nargs="+", help="Run only these scenarios.")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
 
     os.makedirs(args.out_dir, exist_ok=True)
     chosen = [s for s in scenarios(args.n_cts) if not args.only or s[0] in args.only]
 
     for name, extra in chosen:
         case = os.path.join(args.out_dir, name)
-        if os.path.exists(os.path.join(case, "cycles.fasta")):
+        done = all(os.path.exists(os.path.join(case, "cycles_%s.fasta" % a))
+                   for a in args.assembler)
+        if done:
             print("[skip] %s" % name, file=sys.stderr)
             continue
         os.makedirs(case, exist_ok=True)
@@ -112,23 +164,23 @@ def main(argv=None):
              "-f", str(args.coverage), "-m", "350", "-s", "50",
              "-rs", str(args.seed), "-o", prefix, "-na"], log)
 
-        assembly = os.path.join(case, "spades")
-        run([args.spades, "-1", prefix + "1.fq", "-2", prefix + "2.fq",
-             "-o", assembly, "-k", "55,77,99", "--only-assembler",
-             "-t", str(args.threads), "-m", "16"], log)
+        sys.path.insert(0, os.path.abspath(PICOTA_DIR))
+        from src.cycle_finderv2 import cycle_analysis  # noqa: E402
+
+        for assembler in args.assembler:
+            gfa = assemble(args, case, prefix, assembler, log)
+            cycles = os.path.join(case, "cycles_%s.fasta" % assembler)
+            cycle_analysis(gfa, cycles, True, 25, args.min_cycle_size, 40000,
+                           "Cycle", 1, 25, 80, 80, dedup_mode="strict")
+            if assembler == "spades":
+                shutil.copyfile(cycles, os.path.join(case, "cycles.fasta"))
+            print("       %s / %s: %d cycles" % (name, assembler, sum(
+                1 for line in open(cycles) if line.startswith(">"))),
+                file=sys.stderr, flush=True)
+
         for leftover in (prefix + "1.fq", prefix + "2.fq"):
             if os.path.exists(leftover):
                 os.remove(leftover)
-
-        sys.path.insert(0, os.path.abspath(PICOTA_DIR))
-        from src.cycle_finderv2 import cycle_analysis  # noqa: E402
-        cycle_analysis(os.path.join(assembly, "assembly_graph_with_scaffolds.gfa"),
-                       os.path.join(case, "cycles.fasta"),
-                       True, 25, 2000, 40000, "Cycle", 1, 25, 80, 80,
-                       dedup_mode="strict")
-        print("       %s: %d cycles" % (name, sum(
-            1 for line in open(os.path.join(case, "cycles.fasta"))
-            if line.startswith(">"))), file=sys.stderr)
 
     print("\nScenarios in %s" % args.out_dir, file=sys.stderr)
     return 0

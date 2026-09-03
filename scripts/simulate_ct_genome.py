@@ -336,6 +336,13 @@ def simulate(args):
         is_copy_counts[name_family[0]] = is_copy_counts.get(name_family[0], 0) + per_element
     if shared:
         is_copy_counts[shared[0][0]] = is_copy_counts.get(shared[0][0], 0) + args.is_copies_outside
+    # Decoy copies of every element's own IS. --is-copies-outside raises the
+    # copy number of one shared element and so confounds copy number with how
+    # many composite transposons share it; this raises each element's own IS
+    # independently, which is what isolating copy number as a variable needs.
+    if args.is_copies_per_element:
+        for name in {nf[0] for nf, _ in (a[0] for a in assignments)}:
+            is_copy_counts[name] += args.is_copies_per_element
 
     # A single extra element used to interrupt every cargo in "different" mode,
     # so it too is multi-copy across the genome. It must not be one of the
@@ -395,6 +402,19 @@ def simulate(args):
         for _ in range(args.is_copies_outside):
             inserts.append(mutate(shared[1], args.is_divergence, rng))
 
+    # Free-standing copies of each element's own IS, mutated independently so
+    # they diverge from the flanking pair exactly as those diverge from one
+    # another. Placed once per distinct element, not once per composite
+    # transposon, so a shared IS is not counted twice.
+    if args.is_copies_per_element:
+        seen = set()
+        for (name_family, is_seq), _ in assignments:
+            if name_family[0] in seen:
+                continue
+            seen.add(name_family[0])
+            for _ in range(args.is_copies_per_element):
+                inserts.append(mutate(is_seq, args.is_divergence, rng))
+
     # Extra copies of each cargo repeat, so the assembler really cannot place
     # them and the cargo fragments as intended.
     for repeat in repeat_pool:
@@ -405,7 +425,8 @@ def simulate(args):
         backbone_name, backbone = load_backbone(args.backbone_fasta)
     else:
         backbone_name = "simulated_chromosome"
-        needed = (len(pending) + args.is_copies_outside + 1) * args.spacing
+        needed = (len(pending) * (1 + args.is_copies_per_element)
+                  + args.is_copies_outside + 1) * args.spacing
         backbone = random_backbone(max(args.backbone_length, needed),
                                    args.gc_content, rng)
 
@@ -482,6 +503,13 @@ def build_parser():
     parser.add_argument("--is-copies-outside", type=int, default=6,
                         help="Extra free-standing copies of the shared IS. "
                              "Default: %(default)s")
+    parser.add_argument("--is-copies-per-element", type=int, default=0,
+                        help="Free-standing copies of EACH element's own IS, so "
+                             "every element sits at 2 + N genome copies "
+                             "(3 + N under --cargo-is-mode same). Unlike "
+                             "--is-copies-outside, which raises one shared "
+                             "element, this varies copy number without varying "
+                             "how many composite transposons share an IS.")
     parser.add_argument("--is-divergence", type=float, default=0.5,
                         help="Percent divergence applied to each IS copy "
                              "independently. Default: %(default)s")
