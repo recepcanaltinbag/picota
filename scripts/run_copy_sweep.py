@@ -35,6 +35,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PICOTA_DIR = os.path.join(SCRIPT_DIR, "..", "picota")
 sys.path.insert(0, SCRIPT_DIR)
 
+from run_manifest import write_run_parameters  # noqa: E402
 from run_scenarios import assemble, run  # noqa: E402
 
 # 5 kb rather than the 20 kb the scenarios use: at 32 copies twenty elements
@@ -113,6 +114,18 @@ def main(argv=None):
             print("       %s / %-7s %d cycles" % (name, assembler, sum(
                 1 for line in open(cycles) if line.startswith(">"))),
                 file=sys.stderr, flush=True)
+
+        write_run_parameters(case, {
+            "min_cycle_size": args.min_cycle_size,
+            "coverage": args.coverage,
+            "assemblers": list(args.assembler),
+            "kmers": "55,77,99",
+            "dedup_mode": "strict",
+            "read_length": 150,
+            "read_simulator": "art_illumina",
+            "art_profile": "HSXt",
+            "copy_level": copies, "seed": seed,
+        }, tool_overrides={"art_illumina": args.art})
 
         for leftover in (prefix + "1.fq", prefix + "2.fq"):
             if os.path.exists(leftover):

@@ -29,8 +29,8 @@ import shutil
 import sys
 
 MANIFEST_COLUMNS = [
-    "Case", "Source", "GenomeLength", "NumCTs", "SharedIS", "NovelCargo",
-    "CargoIS", "Backbone", "Seed",
+    "Case", "Source", "GenomeLength", "NumCTs", "SharedIS", "CopiesPerElement",
+    "ISGenomeCopies", "NovelCargo", "CargoIS", "MinCycleSize", "Backbone", "Seed",
 ]
 
 
@@ -41,15 +41,26 @@ def case_dirs(roots):
                 yield root, path
 
 
-def summarise(payload):
+def summarise(payload, run_payload=None):
     params = payload.get("parameters", {})
+    run_params = (run_payload or {}).get("parameters", {})
     cts = payload.get("composite_transposons", [])
+    # The realised copy number, not the requested one: cargo_is_mode "same"
+    # puts a third copy inside the cargo, so 2 + N understates it by one and a
+    # reader comparing a depth ratio against this column would be misled.
+    copies = sorted({c.get("IS_Genome_Copies") for c in cts
+                     if c.get("IS_Genome_Copies") is not None})
     return {
         "GenomeLength": payload.get("genome_length", ""),
         "NumCTs": len(cts),
         "SharedIS": params.get("shared_is", ""),
+        "CopiesPerElement": params.get("is_copies_per_element", 0),
+        "ISGenomeCopies": (str(copies[0]) if len(copies) == 1
+                           else "%d-%d" % (copies[0], copies[-1]) if copies
+                           else ""),
         "NovelCargo": sum(1 for c in cts if c.get("Cargo_Type") == "novel"),
         "CargoIS": params.get("cargo_is_mode", "none"),
+        "MinCycleSize": run_params.get("min_cycle_size", ""),
         "Backbone": payload.get("backbone", ""),
         "Seed": params.get("seed", ""),
     }
@@ -78,11 +89,25 @@ def main(argv=None):
             source_path = os.path.join(case, src)
             if os.path.exists(source_path):
                 shutil.copy2(source_path, os.path.join(args.out, "%s_%s" % (label, suffix)))
+        # How the genome was built and how it was then sequenced, assembled and
+        # traversed. The second half decides the result as much as the first --
+        # the compact scenario reported the wrong number for weeks because the
+        # harness used a cycle size the case directory did not record -- so both
+        # travel with the supplement.
+        run_path = os.path.join(case, "run_parameters.json")
+        run_payload = json.load(open(run_path)) if os.path.exists(run_path) else {}
         with open(os.path.join(args.out, "%s_parameters.json" % label), "w") as handle:
-            json.dump(payload.get("parameters", {}), handle, indent=2)
+            # Genome-build parameters stay at the top level, where readers of
+            # earlier supplements already expect them; the run settings and
+            # tool versions are added alongside rather than nesting everything
+            # and breaking that layout.
+            combined = dict(payload.get("parameters", {}))
+            combined["run"] = run_payload.get("parameters", {})
+            combined["tools"] = run_payload.get("tools", {})
+            json.dump(combined, handle, indent=2, sort_keys=True)
 
         row = {"Case": label, "Source": source}
-        row.update(summarise(payload))
+        row.update(summarise(payload, run_payload))
         rows.append(row)
 
     with open(os.path.join(args.out, "manifest.tsv"), "w") as handle:
