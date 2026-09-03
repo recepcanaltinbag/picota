@@ -141,7 +141,65 @@ contig were 3/8 under SPAdes and 0/8 under MEGAHIT.
 
 ---
 
-## 7. Immediate next steps
+## 7. Scoring modes
+
+`total_score_type` selects among four. They are not interchangeable and the
+choice changes what the tool can find at all.
+
+| mode | form | novel cargo | range | ranks? |
+|---|---|---|---|---|
+| 0 | sum of homology hits, unbounded | yes | 65–300 | weakly |
+| 1 | presence x 100 per class | yes | — | no |
+| 2 | `90 x [cargo] x [IS] + 10^z` | **never** | 96–100 | no |
+| 3 | `gate x (0.40 structure + 0.30 multi-copy + 0.30 cargo)` | yes | 50–100 | yes |
+
+score2 cannot report cargo absent from CARD and the xenobiotic set at any
+threshold: with no such hit its first term is zero, leaving a maximum of 10
+against a threshold of 50. A composite transposon carrying a metabolic operon is
+still one, so defining the structure by its cargo answers a different question
+from the one the tool claims to. The same imbalance costs it ranking — ninety of
+its hundred points are one yes/no question, so a cycle of eighteen components
+scores within four points of a clean two-component one.
+
+score3 inverts that balance and is the mode this benchmark recommends. Two
+design points were established by measurement rather than assumed:
+
+**Component count and multi-copy evidence are not independent.** A first draft
+penalised many components uniformly, which put every shared-IS candidate at
+49.3–49.9 against a threshold of 50 — reporting none of them, on the case the
+tool exists for. A two-copy element should assemble into a clean bubble, so many
+components there is real evidence against it; an element whose IS sits in dozens
+of copies necessarily threads many nodes, and charging it the same penalty bills
+the candidate for the structure being detected. Component tolerance now scales
+with the multi-copy evidence.
+
+**The depth term is load-bearing, not decorative.** Removing it was measured
+against keeping it: a genuine shared-IS element scores 72.4 against 54.0 for an
+unexplained complex cycle with the term, and 62.0 against 78.0 without — the
+ordering inverts, because component count is then penalised uniformly and the
+better IS hit wins. This supersedes the earlier finding in §3 that per-cycle
+depth added nothing: that was true of `depth_ratio` (max node over min node),
+which tracks cycle length, and false of `junction_depth_ratio`, which compares
+the annotated IS against the cargo.
+
+---
+
+## 8. Negative control
+
+Wild-type *E. coli* K-12 MG1655, no implanted elements, same reads, assembly and
+pipeline: 17 cycles in the graph, **0 reported under score0 and 2 under score2**.
+
+The graph of an untouched genome does contain cycles — MG1655 carries dozens of
+native IS elements — and scoring rejects essentially all of them. The two
+surviving under score2 are most likely its native *ampC*-family genes, which
+CARD recognises, flanked by IS. This is not a false-positive rate against zero
+truth, since those may be real IS-bounded structures; what it establishes is
+that the pipeline does not manufacture composite transposons where none were
+placed.
+
+---
+
+## 9. Immediate next steps
 
 1. **Phase 0.5 stage 2** — run `scripts/select_benchmark_strains.py`, then
    annotate IS elements on the shortlisted genomes (ISEScan) and build the
@@ -167,7 +225,12 @@ The assembly k is not recorded in the GFA, so this is left uncorrected; it biase
 nodes shorter than a few times k and is harmless for the rest. On the bundled
 `testNitro.gfa` the resulting `DepthRatio` spans 1.32 to 7.01 across five cycles.
 
-Phase 1 shipped a `depths.tsv` sidecar but nothing consumes it yet. Before
+**Superseded:** `junction_depth_ratio` — the annotated IS against the cargo,
+rather than max node over min node — is now a weighted term in score3 and
+carries the discrimination described in §7. The finding below stands only for
+the cruder `depth_ratio`.
+
+Phase 1 shipped a `depths.tsv` sidecar; score3 consumes it. Before
 `depth_ratio` is allowed to influence scoring, its distribution has to be
 characterised on real runs: single-copy bubbles should sit near 1 and genuine
 composite transposons at or above 2, and that separation needs to be observed,

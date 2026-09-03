@@ -202,7 +202,44 @@ What strict mode actually buys on real data is **precision**: a higher fraction
 of reported cycles correspond to genuine composite transposons, with recall
 unchanged.
 
-### 3.6 Predicted baseline
+### 3.6 Negative control
+
+Wild-type *E. coli* K-12 MG1655 with nothing implanted, run through the same
+reads, assembly and pipeline: 17 cycles detected in the graph, **0 reported
+under score0 and 2 under score2**.
+
+Read as a false-positive rate this would be misleading, because MG1655 is not a
+composite-transposon-free genome — it carries dozens of native IS elements and
+some may genuinely flank cargo. The two surviving candidates are most likely its
+*ampC*-family genes, which CARD recognises. What the control establishes is
+narrower and still worth having: the pipeline does not manufacture composite
+transposons where none were placed.
+
+### 3.7 Does the assembly already answer the question?
+
+If the elements can be read off the contigs, neither the assembly graph nor
+PICOTA is needed. Measured on the same assemblies, counting an element as
+recovered only when a *single* contig carries at least 95% of it in one
+contiguous alignment:
+
+| route | intact | on a 14-copy IS | on a 2-copy IS |
+|---|---|---|---|
+| SPAdes contigs | 3/8 | 0/4 | 3/4 |
+| MEGAHIT contigs | 0/8 | 0/4 | 0/4 |
+| PICOTA, SPAdes graph | **8/8** | **4/4** | **4/4** |
+
+Across the eight-run sweep, 26 of 80 elements are intact in a SPAdes contig.
+Assembly fails exactly where the IS is multi-copy: two copies leave two possible
+pairings that paired-end links usually settle, fourteen do not. The one two-copy
+element SPAdes could not resolve has the longest IS of the four, 1,828 bp against
+1,304, 1,449 and 1,602 — consistent with repeat length as a second limit, on
+four cases.
+
+Summing several alignments from one contig would not do: a contig holding only
+IS+cargo aligns twice to an IS-cargo-IS element, once at each flanking copy, and
+appears complete while missing an entire IS.
+
+### 3.8 Predicted baseline
 
 Copy-distinctness recall is expected to be poor before phases 2 and 3 land. On
 synthetic graphs the current deduplication caps output at two candidates
