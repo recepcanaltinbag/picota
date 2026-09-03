@@ -80,15 +80,25 @@ def _length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns, max_z, dist_type)
     return max(0.0, 1.0 - min(z, max_z) / max_z)
 
 
-def _component_fit(comp_number):
+def _component_fit(comp_number, multicopy=0.0):
     """
-    How close the cycle is to the two-node shape a composite transposon makes.
+    How close the cycle is to the two-node shape a composite transposon makes,
+    with the tolerance widened by evidence that its IS is multi-copy.
 
     A smooth decay rather than the sqrt(|comp - 2|) term inside score2's
-    exponent, which moved the total by under four points across the whole range
-    from two components to eighteen and so could not rank anything.
+    exponent, which moved the total by under four points from two components to
+    eighteen and so could not rank anything.
+
+    The two signals are not independent, and treating them as such was wrong. A
+    single-copy element should assemble into a clean two-node bubble, so many
+    components there is genuine evidence against the candidate. When the IS is
+    present in dozens of copies the cycle necessarily threads many nodes -- that
+    is the structure, not a defect -- and penalising it charges the candidate
+    for the very thing being detected. The tolerance therefore scales from 4 at
+    no multi-copy evidence to 20 at full.
     """
-    return 1.0 / (1.0 + abs(comp_number - 2) / 4.0)
+    scale = 4.0 + 16.0 * max(0.0, min(1.0, multicopy))
+    return 1.0 / (1.0 + abs(comp_number - 2) / scale)
 
 
 def _multicopy_fit(depth_ratio):
@@ -177,12 +187,21 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
         cargo_quality = max(_best(lst_ant), _best(lst_xe))
         if cargo_quality <= 0:
             cargo_quality = novel_cargo_floor
+        multicopy = _multicopy_fit(depth_ratio)
 
-        structural = _length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns,
-                                 max_z, dist_type) * 0.5 + _component_fit(comp_number) * 0.5
-        total_score = 100.0 * is_quality * (0.40 * structural
-                                            + 0.30 * _multicopy_fit(depth_ratio)
-                                            + 0.30 * cargo_quality)
+        # The gate is presence-with-quality, not quality alone. No IS still
+        # scores zero, but a hit at 59% identity-coverage is unambiguously an
+        # insertion sequence and halving the whole score for it compounded with
+        # the component penalty to put the shared-IS case 0.1 points under the
+        # threshold -- penalising twice for one structure.
+        gate = 0.5 + 0.5 * is_quality if is_quality > 0 else 0.0
+
+        structural = (_length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns,
+                                  max_z, dist_type) * 0.5
+                      + _component_fit(comp_number, multicopy) * 0.5)
+        total_score = 100.0 * gate * (0.40 * structural
+                                      + 0.30 * multicopy
+                                      + 0.30 * cargo_quality)
 
     else:
         raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2, 3')

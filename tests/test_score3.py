@@ -103,8 +103,16 @@ class TestScore3:
         """An IS is a necessary condition, so it gates rather than contributes."""
         assert score(ant=(100,), is_=()) == 0.0
 
-    def test_weak_is_scales_the_whole_score(self):
-        assert score(ant=(100,), is_=(40,)) == pytest.approx(40.0, abs=1.0)
+    def test_weak_is_lowers_the_score_without_halving_it(self):
+        """
+        The gate is presence-with-quality, not quality alone. A hit at 40%
+        identity-coverage is still unambiguously an insertion sequence; scaling
+        the whole score by 0.4 for it compounded with the component penalty and
+        put genuine shared-IS candidates 0.1 points under the threshold.
+        """
+        weak, strong = score(ant=(100,), is_=(40,)), score(ant=(100,), is_=(100,))
+        assert weak < strong
+        assert weak > strong * 0.6
 
     def test_novel_cargo_stays_reportable(self):
         """
@@ -119,9 +127,40 @@ class TestScore3:
         """Homology cannot rescue a structure that is not multi-copy."""
         assert score(ant=(100,), depth_ratio=1.0) < score(ant=(100,), depth_ratio=3.0)
 
-    def test_components_actually_move_the_score(self):
-        spread = score(ant=(100,), comp=2) - score(ant=(100,), comp=18)
+    def test_components_move_the_score_for_a_single_copy_element(self):
+        """
+        Where many components are genuinely suspicious -- a two-copy element
+        should assemble into a clean bubble -- the penalty still bites.
+        """
+        spread = (score(ant=(100,), comp=2, depth_ratio=1.0)
+                  - score(ant=(100,), comp=18, depth_ratio=1.0))
         assert spread > 10, "structure must rank, not merely label"
+
+    def test_component_tolerance_widens_with_multi_copy_evidence(self):
+        """
+        The two signals are not independent. A cycle threading eighteen nodes is
+        evidence against a single-copy element and expected of one whose IS sits
+        in dozens of copies; charging both the same penalises the very structure
+        being detected.
+        """
+        single = score(ant=(100,), comp=18, depth_ratio=1.0)
+        multi = score(ant=(100,), comp=18, depth_ratio=54.0)
+        assert multi > single + 15
+
+    def test_multi_copy_evidence_outranks_an_unexplained_complex_cycle(self):
+        """
+        The discrimination the depth term exists for, and the reason it is not
+        optional: without it this ordering inverts, and a single-copy element
+        with a complex cycle outscores a genuine shared-IS composite transposon.
+        """
+        real_shared = score(ant=(100,), is_=(59,), length=3560, comp=18,
+                            depth_ratio=54.0)
+        unexplained = score(ant=(100,), is_=(100,), comp=18, depth_ratio=1.0)
+        assert real_shared > unexplained
+
+    def test_single_copy_clean_cycle_is_not_a_perfect_score(self):
+        """A composite transposon needs two copies; one copy is not one."""
+        assert score(ant=(100,), comp=2, depth_ratio=1.0) < 80
 
     def test_score2_barely_moves_over_the_same_range(self):
         """The comparison that motivates score3, pinned so it cannot be forgotten."""
