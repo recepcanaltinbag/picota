@@ -32,7 +32,7 @@ recovered from draft assemblies that never resolved them into contigs.
               └─ cargo ┘                          shorter than the element
 ```
 
-Measured on 480 implanted elements across 120 simulated genomes: **95.0%
+Measured on 520 implanted elements across 130 simulated genomes: **95.0%
 sensitivity at 90.9% precision across five of six scenarios**, and on ten
 wild-type genomes with nothing implanted, none of the 180 candidate cycles clear
 the threshold. The sixth scenario — where the flanking IS also occurs inside the
@@ -55,6 +55,29 @@ scenario numbers are in [Scoring](#scoring).
 | 8 | Long-read validation *(optional)* | minimap2 | circular-read evidence |
 
 Stages 3–7 can be run alone on an existing GFA.
+
+---
+
+## Why not just read the contigs?
+
+An element counts as recovered only when a single contig — or a single detected
+cycle — carries at least 95% of it in one alignment:
+
+| Route | Found | Missed | |
+|---|---|---|---|
+| MEGAHIT contigs | 0/520 | 520 | 0% |
+| SPAdes contigs | 94/520 | 426 | 18% |
+| PICOTA on the MEGAHIT graph | 188/520 | 332 | 36% |
+| **PICOTA on the SPAdes graph** | **480/520** | 40 | **92%** |
+
+Those 426 elements are in the data — the reads sequenced them, the assembler
+built a graph containing them — but no contig carries one whole.
+
+The gap is not uniform, and where it opens is the point. With two genomic copies
+of the flanking IS and nothing repeating inside the element, SPAdes contigs
+already recover 52–78%. **One additional copy of that IS takes them to 5–7.5%**,
+and a repeat inside the element takes them to zero. The graph holds 95–100%
+throughout.
 
 ---
 
@@ -312,35 +335,15 @@ the value `threshold_final_score` ships with.
 
 ### What the benchmark says
 
-Measured on 480 implanted elements across 120 simulated genomes, plus 10
-wild-type controls (see [docs/VALIDATION.md](docs/VALIDATION.md)):
-
-520 composite transposons implanted into 130 simulated genomes, six
-architectures and seven IS copy levels, plus ten wild-type controls.
-
-**What assembly alone leaves behind**, counting an element as recovered only
-when a single contig or cycle carries ≥95% of it in one alignment:
-
-| Route | Found | Missed | |
-|---|---|---|---|
-| MEGAHIT contigs | 0/520 | 520 | 0% |
-| SPAdes contigs | 94/520 | 426 | 18% |
-| PICOTA on the MEGAHIT graph | 188/520 | 332 | 36% |
-| **PICOTA on the SPAdes graph** | **480/520** | 40 | **92%** |
-
-The gap depends on the structure. Where nothing repeats inside the element and
-the flanking IS has two genomic copies, SPAdes contigs reach 52–78%. One extra
-copy of that IS takes them to 5–7.5%; a repeat inside the element takes them to
-zero. The graph holds 95–100% throughout.
-
-**After scoring**, per architecture:
+Per architecture, after scoring at a threshold of 50. The routes table at the
+top of this README covers detection; this one covers what survives scoring.
 
 | Scenario | Sensitivity | Precision |
 |---|---|---|
 | `baseline` — unique IS, CARD cargo | 92.5% | 97.4% |
 | `novel_cargo` — cargo in no database | 90.0% | 100% |
-| `compact` — small elements | 97.5% | 100% |
-| `shared_is` — several CTs on one 16-copy IS | 100% | 88.9% |
+| `compact` — small elements, one cargo gene | 97.5% | 100% |
+| `shared_is` — four elements on one 16-copy IS | 100% | 88.9% |
 | `cargo_is_diff` — a different IS inside the cargo | 95.0% | 74.5% |
 | `cargo_is_same` — flanking IS repeated in the cargo | 5.0% | 2.5% |
 | **All but `cargo_is_same`** | **95.0%** | **90.9%** |
@@ -351,11 +354,16 @@ detected and **none** clear the threshold.
 Two limits worth knowing before relying on the score:
 
 - **`cargo_is_same` is not solved.** When the flanking IS also occurs inside the
-  cargo, the element usually never becomes a candidate cycle at all — the loss
-  is in detection, not scoring, and no threshold recovers it.
-- **The IS gate did not discriminate on this benchmark.** Every one of the 1272
-  candidates carried an IS hit, so the gate rejected nothing. It is kept because
-  it is definitionally required, not because it was shown to filter.
+  cargo, only 2 of 40 elements are covered by any candidate cycle at all. The
+  loss is in detection, not scoring, so no threshold recovers it.
+- **The IS gate did not discriminate here.** All 1272 candidate cycles carried
+  an IS hit, so the gate rejected nothing. It is kept because it is
+  definitionally required, not because it was shown to filter.
+
+Detection deliberately casts wide — about 23 candidates per genome to find 4
+elements, a precision of 17% — and scoring takes that to 90.9% while keeping 95%
+of the elements. A stricter search would have to discard the very cycles that
+carry `shared_is` and `cargo_is_diff`.
 
 ---
 
