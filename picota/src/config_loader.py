@@ -61,6 +61,16 @@ class PathsConfig:
     path_to_TNs: str
     find_all_path: bool
     path_limit: int
+    # Cap SPAdes' allocator (-m, in GB) and its wall clock. Both default to
+    # None, which is SPAdes' own behaviour: assume 250 GB and run unbounded.
+    # On a machine with less RAM than that an over-covered run does not fail,
+    # it swaps -- so leaving these unset trades a recorded error for a hang.
+    spades_memory_gb: int = None
+    spades_timeout_s: int = None
+    # Second-attempt cap, used only after the first attempt fails. Sized for the
+    # whole machine rather than for one of several workers, because the retry
+    # runs on its own -- see run_phase.py. Leave unset for a single attempt.
+    spades_memory_gb_retry: int = None
 
 # -------------------------
 # Options config

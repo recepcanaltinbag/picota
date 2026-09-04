@@ -18,7 +18,11 @@ class DownloadProgressBar(tqdm):
 
 
 def download_url(url, output_path):
-    with DownloadProgressBar(unit='B', unit_scale=True,
+    # disable=None is tqdm's "only when attached to a terminal". Run by hand the
+    # bar still shows; run under a batch driver whose output is a log file it
+    # writes nothing, instead of a few hundred KB of carriage-returned progress
+    # per accession -- which over a thousand accessions is most of the log.
+    with DownloadProgressBar(unit='B', unit_scale=True, disable=None,
                              miniters=1, desc=url.split('/')[-1]) as t:
         urllib.request.urlretrieve(url, filename=output_path, reporthook=t.update_to)
 

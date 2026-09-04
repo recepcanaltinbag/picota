@@ -51,8 +51,19 @@ def raw_read_filtering(raw_file: List[str], out_folder: str, fastp_path: str, qu
 #k_mer_list = '39,59,79,99'
 def _run_spades_assembly(spades_path: str, file_path: List[str], out_folder: str, 
                         gfa_folder: str, gfa_name: str, threads: int, k_mer: str, 
-                        quiet_mode: bool, assembly_keep_temp_files: bool) -> None:
-    """Helper function to run SPAdes assembly (reduces code duplication)"""
+                        quiet_mode: bool, assembly_keep_temp_files: bool,
+                        memory_gb: int = None, timeout_s: int = None,
+                        delete_inputs: bool = True) -> None:
+    """Helper function to run SPAdes assembly (reduces code duplication)
+
+    memory_gb caps SPAdes' own allocator via -m. Without it SPAdes assumes
+    250 GB, so on a smaller machine a high-coverage run does not fail -- it
+    swaps, and the sample stops making progress instead of stopping. Capping
+    below physical RAM turns that hang into an error the caller can record.
+
+    timeout_s bounds the wall clock the same way: a sample that would run for
+    days is killed and reported rather than blocking the queue behind it.
+    """
     from pathlib import Path
     
     # Input validation
@@ -62,6 +73,8 @@ def _run_spades_assembly(spades_path: str, file_path: List[str], out_folder: str
     
     # Build SPAdes command using list (prevents shell injection)
     cmd = [spades_path, '-o', out_folder, '-t', str(threads), '-k', k_mer]
+    if memory_gb:
+        cmd.extend(['-m', str(int(memory_gb))])
     
     if len(file_path) == 1:
         cmd.extend(['-1', file_path[0]])
@@ -72,7 +85,27 @@ def _run_spades_assembly(spades_path: str, file_path: List[str], out_folder: str
     
     # Run assembly
     logger.info(f"Running SPAdes: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True, capture_output=quiet_mode, text=True)
+    try:
+        subprocess.run(cmd, check=True, capture_output=quiet_mode, text=True, timeout=timeout_s)
+    except subprocess.CalledProcessError as exc:
+        # quiet_mode sends SPAdes' own diagnosis into the exception rather than
+        # the terminal, and the caller sees only an exit status. Put the tail of
+        # what SPAdes said into the message and the log, or a batch run records
+        # a thousand identical "non-zero exit status" lines and no reason.
+        tail = ""
+        for stream in (exc.stderr, exc.stdout):
+            if stream:
+                tail = "\n".join(str(stream).strip().splitlines()[-15:])
+                if tail:
+                    break
+        spades_log = os.path.join(out_folder, "spades.log")
+        if not tail and os.path.exists(spades_log):
+            with open(spades_log) as fh:
+                tail = "\n".join(fh.read().splitlines()[-15:])
+        logger.error(f"SPAdes exit {exc.returncode}. Last output:\n{tail}")
+        raise RuntimeError(
+            f"SPAdes exit {exc.returncode}: {tail.strip().splitlines()[-1] if tail.strip() else 'no output captured'}"
+        ) from exc
     
     # Find and copy GFA file
     gfa_files = glob.glob(os.path.join(out_folder, '*.gfa'))
@@ -83,18 +116,23 @@ def _run_spades_assembly(spades_path: str, file_path: List[str], out_folder: str
     shutil.copy(gfa_files[0], os.path.join(gfa_folder, gfa_name))
     logger.info(f'GFA file copied to {os.path.join(gfa_folder, gfa_name)}')
     
-    # Cleanup temporary files if requested
+    # Cleanup temporary files if requested. The SPAdes work directory is this
+    # k's alone and always goes; the input reads are shared by every k in
+    # assembly_k_mer_list, so only the last pass may remove them.
     if not assembly_keep_temp_files:
         shutil.rmtree(out_folder)
-        for file_pt in file_path:
-            if Path(file_pt).exists():
-                Path(file_pt).unlink()
+        if delete_inputs:
+            for file_pt in file_path:
+                if Path(file_pt).exists():
+                    Path(file_pt).unlink()
         logger.info('Temporary files deleted. Use --keep_temp_files to preserve.')
 
 
-def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_name, threads, k_mer, quiet_mode, assembly_keep_temp_files):
+def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_name, threads, k_mer, quiet_mode, assembly_keep_temp_files,
+                           memory_gb=None, timeout_s=None, delete_inputs=True):
     """Main SPAdes driver - calls helper function"""
-    _run_spades_assembly(spades_path, file_path, out_folder, gfa_folder, gfa_name, threads, k_mer, quiet_mode, assembly_keep_temp_files)
+    _run_spades_assembly(spades_path, file_path, out_folder, gfa_folder, gfa_name, threads, k_mer, quiet_mode, assembly_keep_temp_files,
+                         memory_gb=memory_gb, timeout_s=timeout_s, delete_inputs=delete_inputs)
 
 
 
@@ -102,7 +140,8 @@ def assembly_driver_spades(spades_path, file_path, out_folder, gfa_folder, gfa_n
 def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_threads, assembly_k_mer_list,
         assembly_quiet, assembly_keep_temp_files,
         assembly_path_of_spades, assembly_path_of_fastp, assembly_skip_filtering, 
-        assembler_type="spades", assembly_path_of_megahit=None, gfa_tools_path="gfatools", path_of_bandage="bandage", logger_name="picota_analysis"):
+        assembler_type="spades", assembly_path_of_megahit=None, gfa_tools_path="gfatools", path_of_bandage="bandage", logger_name="picota_analysis",
+        spades_memory_gb=None, spades_timeout_s=None):
 
     global logger
     logger = logging.getLogger(logger_name)
@@ -154,7 +193,8 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
         return best_gfa
     else:
         gfa_files = []
-        for k_mer_l in assembly_k_mer_list.split(','):
+        k_list = [k.strip() for k in assembly_k_mer_list.split(',') if k.strip()]
+        for k_index, k_mer_l in enumerate(k_list):
             gfa_name = k_mer_l + '.gfa'
             out_assembly = os.path.join(out_assembly_main, name_for_assembly + '_' + k_mer_l)
             if not os.path.exists(out_assembly):
@@ -165,7 +205,9 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
                 os.remove(gfa_folder + '/' + gfa_name)
 
             assembly_driver_spades(assembly_path_of_spades, the_final_file_list, out_assembly, gfa_folder, \
-                gfa_name, assembly_threads, k_mer_l, assembly_quiet, assembly_keep_temp_files)
+                gfa_name, assembly_threads, k_mer_l, assembly_quiet, assembly_keep_temp_files,
+                memory_gb=spades_memory_gb, timeout_s=spades_timeout_s,
+                delete_inputs=(k_index == len(k_list) - 1))
 
         best_gfa = process_gfa_files(gfa_files, path_of_bandage)
         if best_gfa:
