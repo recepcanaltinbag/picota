@@ -89,6 +89,13 @@ options:
   path_of_makeblastdb: "makeblastdb"
   path_of_blastx: "blastx"
   path_of_blastp: "blastp"
+  # One BLAST search per database over every cycle at once instead of one per
+  # cycle per database. BLAST's per-invocation setup does not amortise over a
+  # query of five proteins: measured on 20 real cycles against the four bundled
+  # databases the searches take 23.5 s across 80 invocations and 13.1 s across
+  # 4, and picota_final_tab comes out byte-identical either way. Set false to
+  # fall back to the per-cycle searches.
+  blast_batch: true
 
 
 

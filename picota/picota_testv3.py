@@ -186,7 +186,8 @@ def run_scoring(acc, cycle_file, out_folder, cfg: Config):
         cfg.options.path_of_makeblastdb,
         cfg.options.path_of_blastx,
         cfg.options.path_of_blastp,
-        cfg.logging.logger_name
+        cfg.logging.logger_name,
+        cfg.options.blast_batch
     )
     return picota_final_tab
 

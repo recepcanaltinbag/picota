@@ -95,6 +95,10 @@ class OptionsConfig:
     # Estimated nucleotide identity (%) above which two same-sized candidates
     # count as the same sequence. Used by dedup_mode 'strict' only.
     dedup_min_ani: float = 99.0
+    # One BLAST search per database over every cycle at once, rather than one
+    # per cycle per database. Same hits either way -- see blast_driver_batch in
+    # src.scoringv4ProtBlast for the measurement. Set False to fall back.
+    blast_batch: bool = True
 
 
 

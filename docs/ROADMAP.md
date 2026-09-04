@@ -277,7 +277,57 @@ scoring work rather than here.
 
 ---
 
-## 10. Immediate next steps
+## 10. Scoring cost
+
+The scoring stage searched one cycle at a time: for every cycle, one BLAST
+invocation per reference database. BLAST's per-invocation setup — opening the
+database and walking its index — does not amortise over a query of five
+predicted proteins, so a run paid that cost once per cycle per database.
+
+Batching the queries, one search per database over every cycle at once, is
+`blast_batch` (default true). Measured on twenty real cycles from SRR20032745
+against the four bundled databases, BLAST at four threads and the databases
+already built:
+
+| search | per cycle | batched |
+|---|---|---|
+| blastn, ISes | 1.96 s | 0.20 s |
+| blastn, CompTns | 1.81 s | 0.20 s |
+| blastp, CARD | 3.74 s | 1.52 s |
+| blastp, xenobiotics | 14.01 s | 10.24 s |
+| **total** | **23.5 s** (80 invocations) | **13.1 s** (4) |
+
+`picota_final_tab` is byte-identical, checked on 4 and on 40 cycles. It has to
+be: an E-value depends on the database and on the individual query, not on what
+else shares the query file, and the score this pipeline computes from a hit uses
+neither. The one thing that genuinely changed is that the transposon parser's
+"best hit" is now resolved per cycle rather than per result file — file-wide, a
+batched run would have handed the strongest cycle's call to every cycle.
+
+**What batching does not fix, in the order the time is now spent:**
+
+1. The xenobiotics search is about 80% of what remains and gains only 1.4×,
+   because at 82,164 sequences it is dominated by real alignment work rather
+   than by setup. Fewer invocations cannot help there; a faster aligner can.
+   `diamond_driver` already exists in `src.scoringv4ProtBlast`, unused. It would
+   change which hits are found, so it needs the benchmark rather than a
+   changelog line, and belongs behind its own flag.
+2. `run_blast` skips the search when its output file already exists. The
+   per-cycle path therefore trusts a result file left behind by a crashed run,
+   and re-running into an existing output folder reuses the previous run's hits.
+   The batched path deletes its output first; the per-cycle path still has this.
+3. `make_blast_db` caches by the database's *basename*, so two reference files
+   sharing a name resolve to one cached database. `DBs/ISes/` and
+   `DBs/CompTns/` both contain a `tncentral_integrall_isfinder.fa`; they are
+   byte-identical today, which is the only reason this is latent rather than a
+   bug.
+4. The `evalue < 1e10` filter in the parsers admits every hit. It reads like a
+   `1e-10` that lost its sign.
+5. Prodigal still runs once per cycle: 40 invocations account for about 7% of a
+   batched run. `-p meta` uses precomputed models, so one call over the merged
+   FASTA would predict the same genes.
+
+## 11. Immediate next steps
 
 1. **Phase 0.5 stage 2** — run `scripts/select_benchmark_strains.py`, then
    annotate IS elements on the shortlisted genomes (ISEScan) and build the

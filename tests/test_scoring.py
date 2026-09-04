@@ -7,6 +7,8 @@ Tested fonksiyonlar:
   - calculate_total_score()
   - merge_intervals()
   - parsing_blast_file()
+  - parsing_blast_file_grouped() / parsing_blast_file_merged_grouped()
+  - concat_fasta()
 """
 
 import sys
@@ -23,6 +25,9 @@ from src.scoringv4ProtBlast import (
     calculate_total_score,
     merge_intervals,
     parsing_blast_file,
+    parsing_blast_file_grouped,
+    parsing_blast_file_merged_grouped,
+    concat_fasta,
 )
 
 
@@ -333,3 +338,108 @@ class TestParsingBlastFile:
         os.unlink(blast_file)
         assert len(result) == 1
         assert result[0].fullname == "NoPipeFullName"
+
+
+# ─────────────────────────────────────────────
+# Batched BLAST: grouping and concatenation
+# ─────────────────────────────────────────────
+
+class TestGroupedParsing:
+    """
+    Batched searching puts every cycle's queries in one result file, so the
+    parsers have to attribute each hit back to its cycle. The unbatched
+    functions are thin wrappers over these, which is what keeps the two paths
+    from drifting apart.
+    """
+
+    def test_hits_go_to_the_cycle_their_query_came_from(self):
+        rows = [
+            ("cycA_1", "db|product|geneA", 90.0, 270, 0, 0, 1, 90, 1, 90, 1e-5, 200, 300, 270),
+            ("cycB_1", "db|product|geneB", 95.0, 280, 0, 0, 1, 93, 1, 93, 1e-5, 200, 300, 280),
+        ]
+        blast_file = _write_blast_file(rows)
+        info_prod_dict = {"cycA_1": (0, 1), "cycB_1": (0, 1)}
+        owner = {"cycA_1": "cycA", "cycB_1": "cycB"}
+        grouped = parsing_blast_file_grouped(
+            blast_file, 'Antibiotics', 50.0, info_prod_dict, owner)
+        os.unlink(blast_file)
+
+        assert set(grouped) == {"cycA", "cycB"}
+        assert grouped["cycA"][0].fullname == "db|product|geneA"
+        assert grouped["cycB"][0].fullname == "db|product|geneB"
+
+    def test_grouped_without_owner_matches_the_unbatched_parser(self):
+        rows = [
+            ("q1_1", "db|product|gene", 90.0, 270, 0, 0, 1, 90, 1, 90, 1e-5, 200, 300, 270),
+            ("q1_2", "db|other|gene2", 85.0, 250, 0, 0, 1, 83, 1, 83, 1e-5, 180, 280, 250),
+        ]
+        blast_file = _write_blast_file(rows)
+        info_prod_dict = {"q1_1": (0, 1), "q1_2": (0, 1)}
+        flat = parsing_blast_file(blast_file, 'Antibiotics', 50.0, info_prod_dict)
+        grouped = parsing_blast_file_grouped(
+            blast_file, 'Antibiotics', 50.0, info_prod_dict)
+        os.unlink(blast_file)
+
+        assert [r.fullname for r in grouped[None]] == [r.fullname for r in flat]
+
+    def test_best_transposon_is_chosen_per_cycle_not_per_file(self):
+        """
+        The merged parser keeps one hit only. Resolved file-wide, as it was when
+        a file held one cycle, the strongest cycle's transposon call would be
+        handed to every cycle in a batched run and the rest would lose theirs.
+        """
+        rows = [
+            # cycA: a strong Tn5 hit
+            ("cycA", "Tn5", 99.0, 900, 0, 0, 1, 900, 1, 900, 1e-50, 900, 900, 5000),
+            # cycB: a weaker but still reportable Tn3 hit -- (850/900)*95 = 89.7
+            ("cycB", "Tn3", 95.0, 850, 0, 0, 1, 850, 1, 850, 1e-40, 800, 900, 5000),
+        ]
+        blast_file = _write_blast_file(rows)
+        grouped = parsing_blast_file_merged_grouped(
+            blast_file, 'CompTNs', 80.0, {}, {"cycA": "cycA", "cycB": "cycB"})
+        os.unlink(blast_file)
+
+        assert set(grouped) == {"cycA", "cycB"}
+        assert grouped["cycA"][0].fullname == "Tn5"
+        assert grouped["cycB"][0].fullname == "Tn3"
+
+    def test_merged_keeps_the_single_best_subject_within_one_cycle(self):
+        rows = [
+            ("cycA", "Tn5", 99.0, 900, 0, 0, 1, 900, 1, 900, 1e-50, 900, 900, 5000),
+            ("cycA", "Tn3", 95.0, 850, 0, 0, 1, 850, 1, 850, 1e-40, 800, 900, 5000),
+        ]
+        blast_file = _write_blast_file(rows)
+        grouped = parsing_blast_file_merged_grouped(
+            blast_file, 'CompTNs', 80.0, {}, {"cycA": "cycA"})
+        os.unlink(blast_file)
+
+        assert len(grouped["cycA"]) == 1
+        assert grouped["cycA"][0].fullname == "Tn5"
+
+
+class TestConcatFasta:
+    def test_missing_trailing_newline_does_not_fuse_records(self, tmp_path):
+        """split_fasta writes its records without a trailing newline."""
+        a = tmp_path / "a.fa"
+        b = tmp_path / "b.fa"
+        a.write_text(">cycA\nACGTACGT")
+        b.write_text(">cycB\nTTTTGGGG")
+        merged = tmp_path / "merged" / "all.fa"
+
+        written = concat_fasta([str(a), str(b)], str(merged))
+
+        assert written == 2
+        assert merged.read_text() == ">cycA\nACGTACGT\n>cycB\nTTTTGGGG\n"
+
+    def test_empty_and_missing_files_are_skipped(self, tmp_path):
+        present = tmp_path / "a.fa"
+        present.write_text(">cycA\nACGT\n")
+        empty = tmp_path / "empty.fa"
+        empty.write_text("")
+        merged = tmp_path / "all.fa"
+
+        written = concat_fasta(
+            [str(present), str(empty), str(tmp_path / "gone.fa")], str(merged))
+
+        assert written == 1
+        assert merged.read_text() == ">cycA\nACGT\n"
