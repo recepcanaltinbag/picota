@@ -509,6 +509,44 @@ def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, 
         return parsing_blast_file(result_path, r_type, threshold_blast, info_prod_dict)
 
 
+def xenobiotic_names(fullname):
+    """
+    (product, gene) for a xenobiotics hit, from whichever header format the
+    reference set uses.
+
+    The KEGG-built set names a sequence
+    `acc|KO:K16045|EC:1.1.1.145|PATH:map00984|description|organism`, and the
+    function is the description -- an accession alone says nothing about what
+    was found. The KO and EC ride along in the product because a result table
+    carries one field per hit, and "which pathway" is the question asked of a
+    xenobiotic hit more often than "which UniProt entry".
+
+    The older classified set has no such structure, so its name is passed
+    through as before. Sniffing the format rather than switching on a flag
+    keeps a run reproducible from its output: the header says how it was read.
+    """
+    try:
+        fields = fullname.split('|')
+    except AttributeError:
+        return fullname, fullname
+
+    if len(fields) >= 5 and any(f.startswith('KO:') for f in fields):
+        ko = next((f[3:] for f in fields if f.startswith('KO:')), '')
+        ec = next((f[3:] for f in fields if f.startswith('EC:')), '')
+        description = fields[4] or fields[0]
+        product = description
+        if ko:
+            product += f'|KO:{ko}'
+        if ec:
+            product += f'|EC:{ec}'
+        return product, ko or fields[0]
+
+    first_field = fields[0] if fields else fullname
+    colon_parts = first_field.split(':')
+    return (colon_parts[0] if colon_parts else fullname,
+            colon_parts[1] if len(colon_parts) >= 2 else fullname)
+
+
 def blast_driver_batch(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, blast_query,
                        r_type, info_prod_dict, db_out_path, threshold_blast, owner, tag,
                        db_type="nucl"):
@@ -815,11 +853,7 @@ def scoring_main(cycle_folder, picota_out_folder,
                 elif the_cds.r_type == 'Xenobiotics':
                     lst_xe.append(the_cds.score)
                     try:
-                        xeno_parts = the_cds.fullname.split('|')
-                        first_field = xeno_parts[0] if xeno_parts else the_cds.fullname
-                        colon_parts = first_field.split(':')
-                        the_cds.product = colon_parts[0] if len(colon_parts) >= 1 else the_cds.fullname
-                        the_cds.gene = colon_parts[1] if len(colon_parts) >= 2 else the_cds.fullname
+                        the_cds.product, the_cds.gene = xenobiotic_names(the_cds.fullname)
                     except (IndexError, AttributeError):
                         the_cds.product = the_cds.fullname
                         the_cds.gene = the_cds.fullname

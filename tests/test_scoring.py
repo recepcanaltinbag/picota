@@ -9,6 +9,7 @@ Tested fonksiyonlar:
   - parsing_blast_file()
   - parsing_blast_file_grouped() / parsing_blast_file_merged_grouped()
   - concat_fasta()
+  - xenobiotic_names()
 """
 
 import sys
@@ -28,6 +29,7 @@ from src.scoringv4ProtBlast import (
     parsing_blast_file_grouped,
     parsing_blast_file_merged_grouped,
     concat_fasta,
+    xenobiotic_names,
 )
 
 
@@ -443,3 +445,52 @@ class TestConcatFasta:
 
         assert written == 1
         assert merged.read_text() == ">cycA\nACGT\n"
+
+
+# ─────────────────────────────────────────────
+# Xenobiotics hit names
+# ─────────────────────────────────────────────
+
+class TestXenobioticNames:
+    """
+    The KEGG-built reference set names a sequence with its KO, EC and pathway.
+    The classified set that preceded it has no structure at all, and both have
+    to keep working, so the format is read off the name rather than configured.
+    """
+
+    KEGG = ("P9WQP7|KO:K16045|EC:1.1.1.145|PATH:map00984|"
+            "3_beta-hydroxysteroid_dehydrogenase|Mycobacterium_tuberculosis")
+    CLASSIFIED = ("QIH10984.1_aromatic_ring-hydroxylating_dioxygenase_"
+                  "subunit_alpha_[Pseudomonas_sp._BIOMIG1BAC]")
+
+    def test_kegg_product_carries_the_function_not_the_accession(self):
+        """
+        Regression: the accession alone was all that reached the result table.
+        BLAST cuts sseqid at the first space, so the first build's descriptions
+        -- written with spaces -- were truncated mid-word in all 16,539 headers
+        and 'P9WQP7' was reported as the product.
+        """
+        product, gene = xenobiotic_names(self.KEGG)
+        assert product.startswith("3_beta-hydroxysteroid_dehydrogenase")
+        assert "KO:K16045" in product
+        assert "EC:1.1.1.145" in product
+        assert gene == "K16045"
+
+    def test_classified_names_pass_through_unchanged(self):
+        product, gene = xenobiotic_names(self.CLASSIFIED)
+        assert product == self.CLASSIFIED
+        assert gene == self.CLASSIFIED
+
+    def test_kegg_entry_without_an_ec_still_names_the_function(self):
+        name = "Q1234|KO:K00001|EC:|PATH:map00361|haloalkane_dehalogenase|Xanthobacter"
+        product, gene = xenobiotic_names(name)
+        assert product == "haloalkane_dehalogenase|KO:K00001"
+        assert gene == "K00001"
+
+    def test_a_name_with_no_fields_is_returned_as_is(self):
+        product, gene = xenobiotic_names("bare_name")
+        assert product == "bare_name"
+        assert gene == "bare_name"
+
+    def test_none_does_not_raise(self):
+        assert xenobiotic_names(None) == (None, None)

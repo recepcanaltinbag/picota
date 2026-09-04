@@ -320,8 +320,15 @@ def stage_seqs(ko_tsv, out_fasta, max_unreviewed):
                     # pathway. The old headers were raw NCBI descriptions, so a
                     # reader could not tell benzoate degradation from ubiquinone
                     # biosynthesis.
+                    # No spaces anywhere in the header. BLAST's sseqid is the
+                    # header up to its first space, so a description written
+                    # with spaces is cut mid-word and the KO/EC provenance this
+                    # header exists to carry never reaches a result table. All
+                    # 16,539 headers of the first build were truncated that way.
+                    description = prot.replace('|', '/').replace(' ', '_')
+                    organism = org.replace('|', '/').replace(' ', '_')
                     out.write(f">{acc}|KO:{ko_ids}|EC:{ec}|PATH:{paths}|"
-                              f"{prot.replace('|', '/')}|{org}\n{seq}\n")
+                              f"{description}|{organism}\n{seq}\n")
                     written += 1
                     stats["reviewed" if reviewed == "true" else "unreviewed"] += 1
                 time.sleep(0.3)
