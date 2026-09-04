@@ -270,11 +270,19 @@ PICOTA requires curated databases for scoring:
    - Format: FASTA
    - Includes: Composite transposon sequences, cargo genes
 
-### Optional Databases
+4. **Xenobiotic degradation genes** (KEGG-derived)
+   - Built by `picota/src/build_xenobiotic_db.py` from KEGG KO identifiers
+     resolved to UniProt sequences, then clustered
+   - Format: FASTA (proteins), 16,539 sequences
+   - Header: `accession|KO:K16045|EC:1.1.1.145|PATH:map00984|description|organism`
 
-4. **KEGG** (Xenobiotics)
-   - Via NCBI Entrez or local installation
-   - Metabolic pathway genes
+   **Headers must not contain spaces.** BLAST's `sseqid` is the header up to its
+   first space, so a description written with spaces is cut mid-word and the
+   KO/EC provenance never reaches a result table — which is what happened to all
+   16,539 headers of the first build. The builder writes descriptions and
+   organism names with underscores for that reason. A custom set can use any
+   header; PICOTA reads the KEGG fields when they are present and otherwise
+   passes the name through unchanged.
 
 ---
 
@@ -320,6 +328,64 @@ pytest tests/ --cov=picota --cov-report=html
 | String caching | 2-3x | Reduce split() calls |
 | Streaming decompression | -70% memory | Large file handling |
 | Shell→subprocess list | 🔒 Security | Eliminates injection risk |
+
+### The scoring stage
+
+Scoring used to search a cycle at a time: for every cycle, one BLAST invocation
+per reference database. BLAST's per-invocation setup — opening the database and
+walking its index — does not amortise over a query of five predicted proteins,
+so the cost was paid once per cycle per database. `blast_batch` (default true)
+sends every cycle in one query instead.
+
+Measured on 20 real cycles against the four bundled databases, BLAST at four
+threads and the databases already built:
+
+| search | per cycle | batched |
+|---|---|---|
+| blastn, IS elements | 1.96 s | 0.20 s |
+| blastn, known transposons | 1.81 s | 0.20 s |
+| blastp, CARD | 3.74 s | 1.52 s |
+| blastp, xenobiotics | 14.01 s | 10.24 s |
+| **total** | **23.5 s** (80 invocations) | **13.1 s** (4) |
+
+`picota_final_tab` is byte-identical either way, checked on 4 and on 40 cycles.
+An E-value depends on the database and on the individual query, not on what else
+shares the query file, and the score is computed from alignment length, subject
+length and identity — none of which the batching touches.
+
+Threads follow from that: one large search parallelises where 160 tiny ones did
+not. On the batched query of 40 cycles against the 82k-sequence xenobiotic set,
+62.0 s at one thread, 15.4 s at four, 9.7 s at eight, 9.1 s at sixteen, 8.5 s at
+twenty-four. The default is **8**, where the curve flattens and there is still
+room for an assembler running beside it. `PICOTA_BLAST_THREADS` overrides it for
+callers that score several samples at once.
+
+The remaining cost is the xenobiotic search, which gains only 1.4× from batching
+because it is dominated by real alignment work rather than by setup. A faster
+aligner, not fewer invocations, is what would pay there.
+
+### Re-running
+
+Work is skipped when its output already exists, which is what makes a long run
+resumable. Existence alone is the wrong test: an interrupted search leaves a
+truncated table, and re-running after a database is rebuilt or the scoring code
+changes would report the previous answer.
+
+So each output carries a sidecar naming the inputs it came from:
+
+```
+Blast_Out/blast_files/SRR123_Xenobiotics.batch.out
+Blast_Out/blast_files/SRR123_Xenobiotics.batch.out.picota-sig.json
+```
+
+The sidecar is written only after the work succeeds, so an interrupted run
+leaves an output without one and the next run redoes it. Inputs are hashed
+rather than stat'ed, so a checkout or an rsync that moves mtime without changing
+a byte does not force a recomputation. Re-running 40 cycles with unchanged
+inputs takes 5.8 s against 16.8 s for the first pass.
+
+Nothing has to be deleted to pick up a rebuilt database or new code — the
+signature no longer matches and the work is redone.
 
 ---
 
@@ -565,10 +631,10 @@ output/
 | Column | Description |
 |--------|-------------|
 | `CycleID` | Cycle identifier: `Cycle_N-lenXXXX-compY-` |
-| `score0/1/2` | Three scoring strategies (see Scoring section) |
+| `score0/1/2/3` | Four scoring strategies, all always written (see Scoring section) |
 | `NumIS` / `ISproducts` / `IScoords` | IS element count, names, coordinates |
 | `NumAnt` / `Antproducts` / `Antcoords` | AMR gene count, names, coordinates |
-| `NumXeno` / `Xenoproducts` / `Xenocoords` | Xenobiotic gene count, names, coordinates |
+| `NumXeno` / `Xenoproducts` / `Xenocoords` | Xenobiotic gene count, names, coordinates. With the KEGG-derived set a name reads `description\|KO:K16045\|EC:1.1.1.145` |
 | `NumCompTN` / `CompTN` | Known composite transposon matches |
 
 ### Enriched output (`picota_enriched.csv`)
@@ -584,7 +650,7 @@ multiple antibiotic classes it is expanded to one row per class.
 | `CycleID` | Original cycle identifier |
 | `SRA_ID` | Source sample accession |
 | `CT_Length_bp` | Total cycle length in base pairs |
-| `Score` | Primary score (score0) |
+| `Score` | score0 — **not** the score the gate uses. `total_score_type` ships as 3, but the enriched CSV reads score0 and does not carry score3 at all. Read score3 from `picota_final_tab` until this is reconciled |
 | `NumIS` | Number of IS elements detected |
 | `IS_Group` | IS superfamily group (e.g., `IS6`, `IS3`) |
 | `IS_Family` | IS family name (e.g., `IS26`, `ISEcp`) |
@@ -764,21 +830,29 @@ Validates cycle detection against `test_data/cyclesOut.fasta`.
 
 Key parameters in `config.yaml`:
 
+Every default below is the one in the shipped `config.yaml`.
+
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `min_size_of_cycle` | 1000 | Minimum cycle length (bp) |
+| `min_size_of_cycle` | 1000 | Minimum cycle length (bp). The graph cycle is IS + cargo, not IS + cargo + IS, so a compact element yields a shorter cycle than itself — see [ROADMAP §9](docs/ROADMAP.md) |
 | `max_size_of_cycle` | 40000 | Maximum cycle length (bp) |
 | `min_component_number` | 1 | Minimum contigs in cycle |
 | `max_component_number` | 25 | Maximum contigs in cycle |
-| `k_mer_sim` | 200 | K-mer size for similarity filtering |
-| `threshold_sim` | 99 | K-mer similarity threshold (%) |
-| `find_all_path` | false | Enumerate all paths (exponential — use with caution) |
-| `path_limit` | 15 | Max path length when `find_all_path=true` |
+| `k_mer_sim` | 80 | K-mer size for similarity filtering |
+| `threshold_sim` | 80 | K-mer similarity threshold (%) |
+| `find_all_path` | true | Enumerate all paths (exponential — use with caution) |
+| `path_limit` | 25 | Maximum nodes in one enumerated path. Searches that hit it are cut short and counted; the run warns that the enumeration is not exhaustive |
+| `dedup_mode` | legacy | `legacy` reproduces the historical deduplication; `strict` never discards a candidate for merely sharing a repeat node — see [ROADMAP §2](docs/ROADMAP.md) |
+| `dedup_min_ani` | 99.0 | Identity (%) above which two same-sized candidates are one sequence. `strict` only |
 | `mean_of_CompTns` | 5850 | Mean composite transposon length (bp) |
 | `std_of_CompTns` | 2586 | Standard deviation of composite transposon length |
-| `total_score_type` | 0 | Scoring formula (0-3); **3 is recommended** — see [Scoring](#scoring) |
+| `max_z` | 20 | Length z-score at which the length term reaches zero |
+| `dist_type` | 1 | Length-fit distribution |
+| `total_score_type` | 3 | Which score the threshold applies to (0-3). All four are always written — see [Scoring](#scoring) |
 | `threshold_final_score` | 50 | Minimum score to report a cycle |
-| `assembler_type` | megahit | Assembly tool (`megahit` or `spades`) |
+| `split_min_score` | 92 | Minimum score for boundary annotation |
+| `assembler_type` | spades | Assembly tool (`spades` or `megahit`). SPAdes by measurement: 40/40 implanted elements recovered against 19/40 from the MEGAHIT graph of the same reads — see [ROADMAP §6](docs/ROADMAP.md) |
+| `blast_batch` | true | One BLAST search per database over every cycle at once, rather than one per cycle per database. Same hits either way — see [Performance](#performance--optimizations) |
 
 ---
 
