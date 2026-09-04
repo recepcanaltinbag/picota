@@ -50,6 +50,7 @@ import tempfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
+from compare_contig_recovery import longest_contiguous_hit  # noqa: E402
 from score_picota_benchmark import (  # noqa: E402
     covered_positions,
     read_ground_truth,
@@ -116,8 +117,47 @@ def composite_only(sequences, out_path):
     return kept
 
 
-def recovered(predictions, ground_truth_fasta, ground_truth, min_coverage,
-              blastn, makeblastdb):
+def recovered_linear(predictions, ground_truth_fasta, ground_truth,
+                     min_coverage, blastn, makeblastdb):
+    """
+    Elements a prediction spans in ONE alignment.
+
+    The right test for a tool that emits the element as a linear sequence, which
+    is what MobileElementFinder does -- its cn_ records are the full
+    IS-cargo-IS stretch cut out of the input, so a real recovery aligns to the
+    element in one piece.
+
+    Unioning alignment positions instead credited six MEGAHIT predictions whose
+    longest single alignment covered 64-81% of the element: the prediction
+    matched the element in two separate places, once at each flanking IS, and
+    the union made that look complete. The contig route has always used this
+    stricter rule for the same reason.
+    """
+    if not os.path.exists(predictions) or os.path.getsize(predictions) == 0:
+        return set()
+    best = longest_contiguous_hit(predictions, ground_truth_fasta, 95.0,
+                                  blastn, makeblastdb)
+    return {ct for ct, record in ground_truth.items()
+            if best.get(ct, 0) / int(record["CT_Length"]) >= min_coverage}
+
+
+def recovered_collapsed(predictions, ground_truth_fasta, ground_truth,
+                        min_coverage, blastn, makeblastdb):
+    """
+    Elements a prediction covers once its alignments are taken together.
+
+    The right test for PICOTA, and only because of what a cycle is. The two
+    flanking IS copies collapse into one graph node, so a cycle carries one copy
+    of the IS, not two, and cannot align to the whole element in a single piece
+    however complete it is. Measured across 240 elements the longest single
+    alignment has a median of 75%, against 73% predicted for exactly "the
+    element minus one IS copy", and 205 of 240 sit within two points of that
+    prediction -- the shortfall is the collapse, not missing sequence.
+
+    Applying the linear rule here would score PICOTA against a representation it
+    never claims to emit; applying this rule to a linear tool would credit
+    fragments. Hence two functions rather than one flag.
+    """
     if not os.path.exists(predictions) or os.path.getsize(predictions) == 0:
         return set()
     coverage = covered_positions(
@@ -134,8 +174,8 @@ def picota_recovered(case, ground_truth, min_coverage, blastn, makeblastdb):
     cycles = os.path.join(case, "cycles_spades.fasta")
     if not os.path.exists(cycles):
         return None
-    return recovered(cycles, os.path.join(case, "ground_truth_cts.fasta"),
-                     ground_truth, min_coverage, blastn, makeblastdb)
+    return recovered_collapsed(cycles, os.path.join(case, "ground_truth_cts.fasta"),
+                               ground_truth, min_coverage, blastn, makeblastdb)
 
 
 def run_case(case, args):
@@ -158,8 +198,8 @@ def run_case(case, args):
             continue
         composite = os.path.join(case, "mefinder_%s" % which, "composite.fna")
         predicted = composite_only(sequences, composite)
-        found = recovered(composite, ground_truth_fasta, ground_truth,
-                          args.min_coverage, args.blastn, args.makeblastdb)
+        found = recovered_linear(composite, ground_truth_fasta, ground_truth,
+                                 args.min_coverage, args.blastn, args.makeblastdb)
         row["counts"]["mef_" + which] = len(found)
         row["predicted"]["mef_" + which] = predicted
 

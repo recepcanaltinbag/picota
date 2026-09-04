@@ -186,6 +186,15 @@ def main(argv=None):
                            "Cycle", 1, 25, 80, 80, dedup_mode="strict")
             if assembler == "spades":
                 shutil.copyfile(cycles, os.path.join(case, "cycles.fasta"))
+                # The depth sidecar has to travel with the FASTA it describes.
+                # Scoring looks for <cycles>.depths.tsv beside the file it was
+                # handed, so copying only the FASTA left every case without
+                # depth: depth_ratio came back None and score3's multi-copy term
+                # sat at its unknown-depth default of 0.5 for every candidate,
+                # silently contributing nothing to any ranking.
+                depths = os.path.splitext(cycles)[0] + ".depths.tsv"
+                if os.path.exists(depths):
+                    shutil.copyfile(depths, os.path.join(case, "cycles.depths.tsv"))
             print("       %s s%d / %s: %d cycles" % (name, seed, assembler, sum(
                 1 for line in open(cycles) if line.startswith(">"))),
                 file=sys.stderr, flush=True)
