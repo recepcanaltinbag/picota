@@ -54,6 +54,13 @@ python3 "$HERE/score_scenarios.py" \
     | tee "$OUT/table_scenarios.txt"
 
 echo
+echo "==> where elements are lost, and sensitivity/PPV"
+python3 "$HERE/funnel_analysis.py" \
+    --scenarios "$BENCH/scenarios_v2" \
+    --threshold "$THRESHOLD" --score-type "$SCORE_TYPE" \
+    | tee "$OUT/table_funnel.txt"
+
+echo
 echo "==> copy-number sweep (detection only, ${MIN_COVERAGE} coverage)"
 python3 "$HERE/score_copy_sweep.py" \
     --sweep "$BENCH/copysweep" --min-coverage "$MIN_COVERAGE" \
