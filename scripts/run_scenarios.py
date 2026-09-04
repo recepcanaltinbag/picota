@@ -104,6 +104,12 @@ def build_parser():
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--backbone", help="Host genome; omit for random filler.")
     parser.add_argument("--backbone-length", type=int, default=500000)
+    parser.add_argument("--is-copies-per-element", type=int, default=0,
+                        help="Extra free-standing copies of each element's own "
+                             "IS, so a scenario can be run at a copy number "
+                             "other than the two its flanks provide. The "
+                             "structural scenarios are otherwise all two-copy, "
+                             "which is the easiest case for a contig method.")
     parser.add_argument("--n-cts", type=int, default=4,
                         help="Elements per genome. Kept small deliberately: "
                              "forty elements add eighty IS copies on top of the "
@@ -161,6 +167,7 @@ def main(argv=None):
 
         cmd = [sys.executable, os.path.join(SCRIPT_DIR, "simulate_ct_genome.py"),
                "--out-dir", case, "--n-cts", str(args.n_cts),
+               "--is-copies-per-element", str(args.is_copies_per_element),
                "--is-divergence", "0.5", "--spacing", "20000",
                "--seed", str(seed)]
         if args.backbone:
@@ -200,6 +207,7 @@ def main(argv=None):
                 file=sys.stderr, flush=True)
 
         write_run_parameters(case, {
+            "is_copies_per_element": args.is_copies_per_element,
             "min_cycle_size": args.min_cycle_size,
             "coverage": args.coverage,
             "assemblers": list(args.assembler),

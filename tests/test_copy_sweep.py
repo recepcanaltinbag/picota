@@ -139,3 +139,32 @@ def _find_min_size(node):
             if found is not None:
                 return found
     return None
+
+
+class TestScenarioCopyNumber:
+    """--is-copies-per-element has to reach the simulator from run_scenarios.py.
+
+    Copy number could previously only be varied on the baseline architecture,
+    because run_copy_sweep.py owned that axis and assumed it. Every structural
+    scenario was therefore measured at two IS copies -- the easiest case a
+    contig method can face, and the one where contig recovery peaks at 78%.
+    Running compact at three copies dropped that to 7.5%, which is the same
+    factor baseline loses, so the reading that small elements survive in contigs
+    does not hold. That comparison is only possible if the flag is wired through.
+    """
+
+    def test_run_scenarios_passes_the_flag_to_the_simulator(self):
+        source = open(os.path.join(os.path.dirname(__file__), "..", "scripts",
+                                   "run_scenarios.py")).read()
+        assert "--is-copies-per-element" in source
+        # forwarded to the simulator, not merely accepted and dropped
+        forwarded = source.split("simulate_ct_genome.py")[-1]
+        assert "is_copies_per_element" in forwarded
+
+    def test_the_value_is_recorded_with_the_case(self):
+        # A case whose copy number is not written down cannot be pooled later,
+        # which is how the compact rows would silently merge with baseline.
+        source = open(os.path.join(os.path.dirname(__file__), "..", "scripts",
+                                   "run_scenarios.py")).read()
+        params = source.split("write_run_parameters")[-1]
+        assert "is_copies_per_element" in params
