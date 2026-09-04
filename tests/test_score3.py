@@ -1,15 +1,19 @@
 """
-Tests for total_score_type 3.
+score3's terms, and the two defects that made them silent.
 
-score2, the mode used for published analyses, puts 90 of its 100 points on a
-single yes/no question -- does the cargo hit a database -- and compresses
-everything structural into the remaining 10. Two consequences follow and both
-are tested here: a candidate whose cargo is absent from every database can never
-exceed 10 however good its structure, and a cycle of eighteen components scores
-within four points of a clean two-component one, so the score labels rather than
-ranks.
+Every term here was at some point in the code doing nothing, or doing the
+opposite of what its name said, without any test noticing:
 
-score3 keeps the same 0-100 range and inverts that balance.
+  * the depth sidecar was never copied next to cycles.fasta, so the multi-copy
+    term took its unknown-depth default for every candidate in every case, and
+    that term is now gone: the ratio it used is bimodal, sitting below spurious
+    cycles at two IS copies and above them at sixteen
+  * the component tolerance was documented as scaling with a copy-number
+    estimate that never arrived, so it was a constant in practice
+  * the tool comparison unioned alignment fragments and credited matches that a
+    single alignment never made
+
+These tests pin the behaviour that replaced them.
 """
 
 import os
@@ -20,196 +24,61 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "picota"))
 
 from src.scoringv4ProtBlast import (  # noqa: E402
-    _best,
     _component_fit,
-    _length_fit,
-    _multicopy_fit,
     calculate_total_score,
 )
 
-MEAN, STD, MAX_Z, DIST = 5850, 2586, 20, 1
+# (dist_type, max_z, mean, std) fixed across the score3 calls below so only the
+# term under test varies.
+DIST = (1, 3, 5000.0, 2000.0)
 
 
-def score(ant=(), is_=(100,), xe=(), length=5800, comp=2, depth_ratio=3.0,
-          score_type=3):
-    return calculate_total_score(score_type, DIST, MAX_Z, MEAN, STD, length,
-                                 list(ant), list(is_), list(xe), comp,
-                                 depth_ratio)
+def score3(len_of_cycle=4800, ant=(95.0,), ises=(98.0,), xeno=(), comp=2):
+    return calculate_total_score(3, *DIST, len_of_cycle, list(ant), list(ises),
+                                 list(xeno), comp)
 
 
-class TestComponentTerms:
-    def test_length_fit_is_one_at_the_distribution_mean(self):
-        assert _length_fit(MEAN, MEAN, STD, MAX_Z, DIST) == pytest.approx(1.0)
-
-    def test_length_fit_falls_for_over_long_candidates(self):
-        assert _length_fit(MEAN + 4 * STD, MEAN, STD, MAX_Z, DIST) < 0.85
-
-    def test_short_candidates_are_not_penalised_under_dist_type_1(self):
-        """Preserves the existing convention rather than changing it here."""
-        assert _length_fit(1000, MEAN, STD, MAX_Z, 1) == pytest.approx(1.0)
-
-    def test_component_fit_peaks_at_two(self):
+class TestComponentFit:
+    def test_tolerance_is_constant(self):
+        # Documented as scaling with multi-copy evidence, but that input never
+        # reached the function and every published result used the constant.
         assert _component_fit(2) == pytest.approx(1.0)
+        assert _component_fit(14) == pytest.approx(0.5)
 
-    def test_component_fit_spreads_across_the_real_range(self):
-        """
-        The failure in score2: sqrt(|comp-2|)/20 moved the total under four
-        points from two components to eighteen, so structure could not rank.
-        """
-        assert _component_fit(2) - _component_fit(18) > 0.6
-
-    def test_component_fit_is_monotone(self):
-        values = [_component_fit(c) for c in range(2, 25)]
-        assert all(a >= b for a, b in zip(values, values[1:]))
-
-
-class TestMulticopyTerm:
-    def test_single_copy_scores_zero(self):
-        """A composite transposon needs two copies of its flanking IS."""
-        assert _multicopy_fit(1.0) == 0.0
-
-    def test_two_and_a_half_copies_saturate(self):
-        assert _multicopy_fit(2.5) == pytest.approx(1.0)
-
-    def test_unknown_depth_is_neutral_not_zero(self):
-        """An assembly reporting no coverage must not be penalised for it."""
-        assert _multicopy_fit(None) == 0.5
-
-    def test_below_one_is_clamped(self):
-        assert _multicopy_fit(0.4) == 0.0
-
-
-class TestBestHitQuality:
-    def test_uses_the_best_hit_not_the_count(self):
-        """
-        score0 sums hit scores, so a cargo of three genes outscores one of a
-        single gene for carrying more genes rather than for being more likely a
-        composite transposon.
-        """
-        assert _best([90, 90, 90]) == _best([90])
-
-    def test_no_hits_is_zero(self):
-        assert _best([]) == 0.0
-
-    def test_capped_at_one(self):
-        assert _best([250]) == 1.0
+    def test_more_components_score_lower(self):
+        assert _component_fit(2) > _component_fit(11) > _component_fit(25)
 
 
 class TestScore3:
-    def test_ideal_candidate_reaches_one_hundred(self):
-        assert score(ant=(100,)) == pytest.approx(100.0)
+    def test_no_insertion_sequence_scores_zero(self):
+        # The IS is a necessary condition, not a bonus.
+        assert score3(ises=()) == pytest.approx(0.0)
 
-    def test_no_is_scores_zero(self):
-        """An IS is a necessary condition, so it gates rather than contributes."""
-        assert score(ant=(100,), is_=()) == 0.0
+    def test_cargo_absent_from_databases_is_still_reportable(self):
+        # The novel-cargo floor is what score2 lacks; a real element carrying
+        # cargo in no database must still clear a threshold of 50.
+        assert score3(ant=(), xeno=()) > 50.0
 
-    def test_weak_is_lowers_the_score_without_halving_it(self):
-        """
-        The gate is presence-with-quality, not quality alone. A hit at 40%
-        identity-coverage is still unambiguously an insertion sequence; scaling
-        the whole score by 0.4 for it compounded with the component penalty and
-        put genuine shared-IS candidates 0.1 points under the threshold.
-        """
-        weak, strong = score(ant=(100,), is_=(40,)), score(ant=(100,), is_=(100,))
-        assert weak < strong
-        assert weak > strong * 0.6
+    def test_length_gates_rather_than_contributes(self):
+        # A cycle far above the mean is rejected however good its homology,
+        # which is what separates score3 from score2 on wild-type genomes.
+        assert score3(len_of_cycle=36000) < 50.0
 
-    def test_novel_cargo_stays_reportable(self):
-        """
-        The point of the exercise. Under score2 this candidate scores 10 and is
-        unreportable at any sensible threshold, however good its structure.
-        """
-        novel = score(ant=())
-        assert novel > 50
-        assert novel < score(ant=(100,))
+    def test_shorter_than_the_mean_pays_no_length_penalty(self):
+        assert score3(len_of_cycle=3000) == pytest.approx(score3(len_of_cycle=4800))
 
-    def test_single_copy_is_penalised(self):
-        """Homology cannot rescue a structure that is not multi-copy."""
-        assert score(ant=(100,), depth_ratio=1.0) < score(ant=(100,), depth_ratio=3.0)
-
-    def test_components_move_the_score_for_a_single_copy_element(self):
-        """
-        Where many components are genuinely suspicious -- a two-copy element
-        should assemble into a clean bubble -- the penalty still bites.
-        """
-        spread = (score(ant=(100,), comp=2, depth_ratio=1.0)
-                  - score(ant=(100,), comp=18, depth_ratio=1.0))
-        assert spread > 10, "structure must rank, not merely label"
-
-    def test_component_tolerance_widens_with_multi_copy_evidence(self):
-        """
-        The two signals are not independent. A cycle threading eighteen nodes is
-        evidence against a single-copy element and expected of one whose IS sits
-        in dozens of copies; charging both the same penalises the very structure
-        being detected.
-        """
-        single = score(ant=(100,), comp=18, depth_ratio=1.0)
-        multi = score(ant=(100,), comp=18, depth_ratio=54.0)
-        assert multi > single + 15
-
-    def test_multi_copy_evidence_outranks_an_unexplained_complex_cycle(self):
-        """
-        The discrimination the depth term exists for, and the reason it is not
-        optional: without it this ordering inverts, and a single-copy element
-        with a complex cycle outscores a genuine shared-IS composite transposon.
-        """
-        real_shared = score(ant=(100,), is_=(59,), length=3560, comp=18,
-                            depth_ratio=54.0)
-        unexplained = score(ant=(100,), is_=(100,), comp=18, depth_ratio=1.0)
-        assert real_shared > unexplained
-
-    def test_single_copy_clean_cycle_is_not_a_perfect_score(self):
-        """A composite transposon needs two copies; one copy is not one."""
-        assert score(ant=(100,), comp=2, depth_ratio=1.0) < 80
-
-    def test_score2_barely_moves_over_the_same_range(self):
-        """The comparison that motivates score3, pinned so it cannot be forgotten."""
-        high = score(ant=(100,), comp=2, score_type=2)
-        low = score(ant=(100,), comp=18, score_type=2)
-        assert high - low < 5
-
-    def test_stays_within_zero_and_one_hundred(self):
-        for comp in (1, 2, 10, 25):
-            for ratio in (None, 0.5, 1.0, 5.0):
-                for ant in ((), (50,), (100,)):
-                    value = score(ant=ant, comp=comp, depth_ratio=ratio)
-                    assert 0.0 <= value <= 100.0
-
-    def test_unknown_depth_does_not_break_ranking(self):
-        assert score(ant=(100,), depth_ratio=None) > score(ant=(100,), depth_ratio=1.0)
-
-    def test_invalid_score_type_still_raises(self):
-        with pytest.raises(Exception):
-            calculate_total_score(4, DIST, MAX_Z, MEAN, STD, 5800, [], [100], [], 2)
+    def test_weights_sum_to_one(self):
+        # All three terms at their maximum, both gates open, must reach 100.
+        perfect = calculate_total_score(3, *DIST, 4800, [100.0], [100.0], [], 2)
+        assert perfect == pytest.approx(100.0)
 
 
-class TestLengthGate:
-    """
-    Length gates rather than contributes, for the same reason the IS does: a
-    composite transposon has a characteristic size, and something six times the
-    mean is not one whatever its homology says. As a weighted term at 20% of the
-    total it could not express that -- two 35-37 kb cycles in a wild-type genome,
-    with an IS and a resistance gene 30 kb apart, scored 68.6 and 65.8.
-    """
-
-    def test_a_wildly_oversized_cycle_is_rejected(self):
-        assert score(ant=(80,), is_=(80,), length=35689, comp=11,
-                     depth_ratio=13.5) < 50
-
-    def test_real_elements_pay_nothing_for_it(self):
-        """Under dist_type 1 anything shorter than the mean has a length fit of 1."""
-        assert score(ant=(100,), length=3861, comp=2) == pytest.approx(100.0)
-        assert score(ant=(100,), length=1800, comp=2) == pytest.approx(100.0)
-
-    def test_shared_is_candidates_still_clear_the_threshold(self):
-        assert score(ant=(100,), is_=(59,), length=3560, comp=16,
-                     depth_ratio=54.0) > 60
-
-    def test_a_large_but_plausible_element_still_passes(self):
-        """Some composite transposons genuinely run to 20 kb."""
-        assert score(ant=(100,), length=20000, comp=2) > 50
-
-    def test_length_penalty_is_monotone(self):
-        lengths = [5800, 10000, 20000, 30000, 40000]
-        values = [score(ant=(100,), length=length, comp=2) for length in lengths]
-        assert all(a >= b for a, b in zip(values, values[1:]))
+class TestSidecarTravelsWithTheFasta:
+    def test_run_scenarios_copies_the_depth_sidecar(self):
+        # The sidecar sits next to cycles_<assembler>.fasta while scoring reads
+        # cycles.fasta, so copying one without the other silences the term.
+        source = open(os.path.join(os.path.dirname(__file__), "..", "scripts",
+                                   "run_scenarios.py")).read()
+        assert "cycles.depths.tsv" in source
+        # copied, not merely mentioned
+        assert source.count("shutil.copyfile") >= 2

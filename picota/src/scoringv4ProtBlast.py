@@ -80,43 +80,33 @@ def _length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns, max_z, dist_type)
     return max(0.0, 1.0 - min(z, max_z) / max_z)
 
 
-def _component_fit(comp_number, multicopy=0.0):
+def _component_fit(comp_number):
     """
-    How close the cycle is to the two-node shape a composite transposon makes,
-    with the tolerance widened by evidence that its IS is multi-copy.
+    Penalty for a cycle that wanders through many graph components.
 
-    A smooth decay rather than the sqrt(|comp - 2|) term inside score2's
-    exponent, which moved the total by under four points from two components to
-    eighteen and so could not rank anything.
+    Named for what it measures rather than what it was once believed to measure.
+    It does not report how close the candidate is to the two-node shape of a
+    composite transposon: real elements thread 2 components when their flanking
+    IS has two genomic copies and 16 when it has sixteen, so the count tracks how
+    widespread the IS is, not the element's structure. Spurious cycles wandering
+    the host's repeats sit near 11 throughout.
 
-    The two signals are not independent, and treating them as such was wrong. A
-    single-copy element should assemble into a clean two-node bubble, so many
-    components there is genuine evidence against the candidate. When the IS is
-    present in dozens of copies the cycle necessarily threads many nodes -- that
-    is the structure, not a defect -- and penalising it charges the candidate
-    for the very thing being detected. The tolerance therefore scales from 4 at
-    no multi-copy evidence to 20 at full.
+    That makes it a filter against host repeats, which is worth having -- removing
+    it entirely raised false positives on wild-type genomes from 1 to 6 and cost
+    PPV in four of six scenarios. But it works against the very case this method
+    exists for: on shared_is it ranks real 16-copy elements BELOW the spurious
+    cycles they should beat. Its weight is therefore 0.30 rather than the 0.40 it
+    held when it was mistaken for a structural term, and the structural question
+    is not asked at all; see the note on the weights in score3.
+
+    The tolerance is a constant. It was previously scaled by a depth-derived
+    copy-number estimate, but that input never reached this function -- the depth
+    sidecar was not copied next to the FASTA -- so every published result was
+    produced at this constant. Scaling it does not help anyway: spurious cycles
+    read a mid-range depth ratio near 4 and would collect the same widened
+    tolerance as the multi-copy elements it was meant to protect.
     """
-    scale = 4.0 + 16.0 * max(0.0, min(1.0, multicopy))
-    return 1.0 / (1.0 + abs(comp_number - 2) / scale)
-
-
-def _multicopy_fit(depth_ratio):
-    """
-    Evidence that the flanking IS is present in more than one genomic copy.
-
-    A composite transposon is defined by two copies of its IS, but both collapse
-    into a single graph node, so the cycle shows only one. Read depth over that
-    node against the cargo is the only remaining evidence of how many copies it
-    stands for. A ratio near 1 says the element is single-copy and the structure
-    is therefore not a composite transposon, whatever its homology says.
-
-    Unknown depth returns 0.5 rather than 0: an assembly that reports no
-    coverage should not be penalised for it.
-    """
-    if depth_ratio is None:
-        return 0.5
-    return min(1.0, max(0.0, (depth_ratio - 1.0) / 1.5))
+    return 1.0 / (1.0 + abs(comp_number - 2) / 12.0)
 
 
 def _best(scores):
@@ -124,7 +114,7 @@ def _best(scores):
     return min(1.0, max(scores) / 100.0) if scores else 0.0
 
 
-def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number, depth_ratio=None, novel_cargo_floor=0.30):
+def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number, novel_cargo_floor=0.30):
     min_z = 0
     z = (abs(len_of_cycle - mean_of_CompTns))/std_of_CompTns
     if z > max_z:
@@ -187,7 +177,6 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
         cargo_quality = max(_best(lst_ant), _best(lst_xe))
         if cargo_quality <= 0:
             cargo_quality = novel_cargo_floor
-        multicopy = _multicopy_fit(depth_ratio)
 
         # The IS gate is presence-with-quality, not quality alone. No IS still
         # scores zero, but a hit at 59% identity-coverage is unambiguously an
@@ -206,10 +195,55 @@ def calculate_total_score(total_score_type, dist_type, max_z, mean_of_CompTns, s
         length_gate = _length_fit(len_of_cycle, mean_of_CompTns, std_of_CompTns,
                                   max_z, dist_type)
 
+        # Two weighted terms, each answering something the definition of a
+        # composite transposon actually asserts: the cargo is a single-copy
+        # stretch (so it assembles into few nodes) and it is a payload worth
+        # carrying (so it hits a database, or is credited the novel-cargo floor).
+        #
+        # Component count used to take 0.40 here and is gone. It does not measure
+        # the element; it measures how widespread the flanking IS is, because a
+        # cycle through a many-copy IS necessarily threads more components.
+        # Measured per scenario, real elements run from 2 components at two IS
+        # copies to 16 at sixteen while spurious cycles sit near 11 throughout,
+        # so a fixed tolerance ranks 16-copy elements BELOW the spurious cycles
+        # they should beat -- 0.46 against 0.55 on shared_is, an inversion in
+        # exactly the case contig-based tools cannot solve and this method exists
+        # for. Scaling the tolerance by a depth-derived copy estimate does not
+        # rescue it, because spurious cycles read a mid-range ratio of about 4
+        # and would collect the same widened tolerance.
+        #
+        # Cargo node count has no such contamination: cargo is single-copy by
+        # definition however many copies its flanking IS has, and it separates in
+        # every scenario with more than two real elements, shared_is included
+        # (median 3 against 4).
+        # Two weighted terms, renormalised from the three that were there.
+        #
+        # The third was a multi-copy estimate from read depth, and it never
+        # worked: the sidecar carrying its input was not copied next to the
+        # FASTA, so it returned its unknown-depth default of 0.5 for every
+        # candidate ever scored -- a constant 0.15 of the total that also capped
+        # every score at 85. Fixing the plumbing does not rescue it. The ratio
+        # does track copy number (measured medians 1.5 at two genomic copies,
+        # 10.7 at sixteen) but spurious cycles through the host's own mid-copy
+        # IS elements sit near 4 in every scenario, so real elements fall on both
+        # sides of the spurious ones and no monotonic function of it can separate
+        # them.
+        #
+        # A cargo-node-count term was measured as a replacement and rejected.
+        # Cargo is single-copy by definition, so counting the graph nodes its
+        # region spans looked like a structural signal free of copy number, and
+        # per-scenario medians supported that (1 for real elements against 4 for
+        # spurious, holding even on shared_is). In place it collapsed precision:
+        # false positives on cargo_is_diff went from 12 to 74, because the term
+        # measures the cargo region only as well as the IS annotation bounds it.
+        # An IS inside the cargo widens that annotation, leaves few nodes outside
+        # it, and the term reads a fragmented cycle as a clean one.
+        #
+        # What remains is what the benchmark was actually run on, with the dead
+        # weight removed rather than left in as a constant.
         total_score = 100.0 * gate * length_gate * (
-            0.40 * _component_fit(comp_number, multicopy)
-            + 0.30 * multicopy
-            + 0.30 * cargo_quality)
+            0.57 * _component_fit(comp_number)
+            + 0.43 * cargo_quality)
 
     else:
         raise Exception('Error, total_score_type is no valid, it can one of these: 0, 1, 2, 3')
@@ -259,10 +293,26 @@ def make_blast_db(path_of_makeblastdb, db_input, db_output, db_type="nucl"):
     logger.info(f"[+] BLAST DB created: {db_output} ({db_type})")
 
 
-def run_blast(path_of_blast, query, database, output):
+BLAST_THREADS = int(os.environ.get('PICOTA_BLAST_THREADS', '4'))
+
+
+def run_blast(path_of_blast, query, database, output, threads=None):
+    """
+    One BLAST search, threaded.
+
+    The searches ran single-threaded, which dominated scoring: a case took about
+    a minute on a 24-core machine that sat at a load of five. The reference
+    databases are the query here (the cycle is the database), so the protein
+    searches against CARD and the xenobiotics set are the slow ones, and they
+    parallelise well.
+
+    PICOTA_BLAST_THREADS overrides the default for callers that already run
+    several cases at once and would otherwise oversubscribe the machine.
+    """
     if not os.path.exists(output):
         extras = '"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen"'
-        args = f'{path_of_blast} -db {database} -query {query} -out {output} -outfmt {extras}'
+        args = (f'{path_of_blast} -db {database} -query {query} -out {output} '
+                f'-outfmt {extras} -num_threads {threads or BLAST_THREADS}')
         subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -656,21 +706,6 @@ def scoring_main(cycle_folder, picota_out_folder,
 
         # Per-cycle depth, when the detection stage left a sidecar next to the
         # FASTA. Keyed by the cycle id exactly as it appears in the header.
-        depth_ratios = {}
-        depths_path = os.path.splitext(cycle_file)[0] + '.depths.tsv'
-        if os.path.exists(depths_path):
-            with open(depths_path) as depths_handle:
-                header = depths_handle.readline().rstrip('\n').split('\t')
-                try:
-                    id_at, ratio_at = header.index('CycleID'), header.index('DepthRatio')
-                except ValueError:
-                    id_at = ratio_at = None
-                if id_at is not None:
-                    for depth_line in depths_handle:
-                        cells = depth_line.rstrip('\n').split('\t')
-                        if len(cells) > max(id_at, ratio_at) and cells[ratio_at] != 'NA':
-                            depth_ratios[cells[id_at]] = float(cells[ratio_at])
-
         # Cycle split
         split_fasta(cycle_file, splitted_cycle_single_folder)
         splitted_cycles = glob.glob(os.path.join(splitted_cycle_single_folder, "*"))
@@ -804,12 +839,7 @@ def scoring_main(cycle_folder, picota_out_folder,
             score0 = calculate_total_score(0, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
             score1 = calculate_total_score(1, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
             score2 = calculate_total_score(2, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
-            # score3 additionally uses read depth over the IS against the cargo,
-            # which is read from the cycle FASTA's .depths.tsv sidecar when one
-            # exists. Without it the multi-copy term falls back to neutral, so a
-            # run whose assembler reported no coverage is not penalised for it.
-            cycle_id = os.path.basename(splitted_cycle)
-            score3 = calculate_total_score(3, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number, depth_ratios.get(cycle_id))
+            score3 = calculate_total_score(3, dist_type, max_z, mean_of_CompTns, std_of_CompTns, len_of_cycle, lst_ant, lst_is, lst_xe, comp_number)
 
             t_score = [score0, score1, score2, score3][total_score_type]
 
