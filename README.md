@@ -1,274 +1,188 @@
-# PICOTA
-
 <p align="center">
-<img src="logo/picota_logo.png" alt="PICOTA Logo" width="200" style="max-width: 100%; height: auto;">
+  <img src="logo/picota_logo.png" alt="PICOTA" width="180">
 </p>
 
-<div align="center">
+<h1 align="center">PICOTA</h1>
 
-**Pipeline for Identification of Composite Transposons from Assembly graphs**
-
-[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Bioinformatics](https://img.shields.io/badge/Bioinformatics-Mobile%20Elements-brightgreen)]()
-[![Tests Passing](https://img.shields.io/badge/tests-177%20passing-success)]()
-[![Code Quality](https://img.shields.io/badge/code%20quality-production--ready-brightgreen)]()
-
-</div>
+<p align="center">
+  <b>Pipeline for Identification of Composite Transposons from Assembly graphs</b><br>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python 3.8+"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT"></a>
+  <a href="https://doi.org/10.5281/zenodo.21769753"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21769753-blue" alt="DOI"></a>
+</p>
 
 ---
 
-## Overview
+A composite transposon is cargo — antibiotic resistance genes, a degradation
+pathway — flanked by two copies of the same insertion sequence. Short-read
+assemblers collapse those two copies into one contig, so the element is rarely
+present as a contiguous sequence to be found. What survives is its shape: the
+collapsed IS and its cargo close a **cycle in the assembly graph**.
 
-PICOTA is a **production-ready bioinformatics pipeline** for detecting **composite transposons** in bacterial genomes assembled from short-read sequencing data. It operates directly on assembly graphs (GFA format), enabling the identification of mobile genetic elements—including antibiotic resistance genes and xenobiotic metabolism clusters—**even in incomplete draft genomes**.
-
-### Why PICOTA?
-
-Short-read assemblers (SPAdes, MEGAHIT) typically **fail to resolve repetitive transposon structures** into contiguous sequences. PICOTA exploits the **cyclic topology** that composite transposons form in assembly graphs to:
-- ✅ Detect transposons even in fragmented assemblies  
-- ✅ Identify antibiotic resistance genes and xenobiotic clusters
-- ✅ Validate findings with long-read sequencing (optional)
-- ✅ Score candidates by homology to curated databases
-
----
-
-## Scientific Background
-
-### Composite Transposons
-
-Composite transposons are mobile genetic elements formed when **cargo sequences** (e.g., antibiotic resistance genes, metabolic clusters) are flanked by two **insertion sequences (IS elements)**:
+PICOTA enumerates those cycles and scores them, so composite transposons can be
+recovered from draft assemblies that never resolved them into contigs.
 
 ```
- ┌──────────────────────────────────────────────────────────┐
- │  [ IS element ] ──── [ cargo genes ] ──── [ IS element ] │
- │                                                             │
- │  Example: [ IS26 ] ─── [aadA1] (streptomycin) ─── [ IS26] │
- └──────────────────────────────────────────────────────────┘
-         ↓
-      Inverted repeat creates CYCLE in assembly graph
-         ↓
-      Detected by graph traversal → Scored by BLAST
+     [ IS ] ──── [ cargo ] ──── [ IS ]          in the genome
+                    ↓
+     both IS copies collapse into one node       in the assembly graph
+                    ↓
+              ┌── IS ──┐
+              │        │                          a cycle: IS + cargo,
+              └─ cargo ┘                          shorter than the element
 ```
 
-These structures can be transferred between organisms via **horizontal gene transfer**, making them critical for understanding antibiotic resistance spread and bacterial evolution.
+Measured on 480 implanted elements across 120 simulated genomes: **95.0%
+sensitivity at 90.9% precision across five of six scenarios**, and on ten
+wild-type genomes with nothing implanted, none of the 180 candidate cycles clear
+the threshold. The sixth scenario — where the flanking IS also occurs inside the
+cargo — recovers 5%, and the loss is in detection rather than scoring. Per
+scenario numbers are in [Scoring](#scoring).
 
 ---
 
-## Key Features
+## Pipeline
 
-- 🔍 **Assembly-graph-aware**: Detects transposon-associated cycles directly from GFA graphs  
-- 🗄️ **Multi-database scoring**: CARD (antibiotics), IS-finder/TnCentral (IS elements), KEGG (xenobiotics)
-- 📖 **Long-read validation**: Optional Oxford Nanopore mapping for circular read evidence
-- 🧬 **Strand-aware deduplication**: Removes reverse-complement duplicates automatically
-- ⚙️ **Flexible assembly**: Supports SPAdes & MEGAHIT with configurable k-mer ranges
-- 🔒 **Production-ready**: Type hints, comprehensive tests, professional documentation
-- ⚡ **High performance**: 2-10x optimization vs. earlier versions
+| | Stage | Tool | Produces |
+|---|---|---|---|
+| 1 | Read filtering | fastp | trimmed FASTQ |
+| 2 | Assembly | SPAdes (or MEGAHIT) | GFA graph |
+| 3 | Cycle detection | DFS over the graph | candidate FASTA |
+| 4 | Gene prediction | Prodigal (`-p meta`) | ORFs |
+| 5 | Homology search | BLAST against four reference sets | hits |
+| 6 | Scoring | length, structure, cargo quality | ranked table |
+| 7 | Boundary annotation | IS/cargo split | GenBank |
+| 8 | Long-read validation *(optional)* | minimap2 | circular-read evidence |
 
----
-
-## Pipeline Overview
-
-```
-Raw reads (FASTQ)
-      │
-      ├─→ [1] Quality filtering        fastp
-      │         │
-      ├─→ [2] Genome assembly         SPAdes / MEGAHIT  →  GFA
-      │         │
-      ├─→ [3] Cycle detection         DFS traversal  →  FASTA candidates
-      │         │
-      ├─→ [4] Gene prediction         Prodigal (meta)  →  ORFs
-      │         │
-      ├─→ [5] Database search         BLAST (multi-db)  →  matches
-      │         │
-      ├─→ [6] Composite scoring       Z-score + homology  →  ranked list
-      │         │
-      ├─→ [7] Boundary annotation     IS/cargo regions  →  GenBank
-      │         │
-      └─→ [8] Long-read validation    minimap2 (optional)  →  evidence
-      
-Result: Annotated transposon sequences (FASTA/GenBank)
-```
+Stages 3–7 can be run alone on an existing GFA.
 
 ---
 
-## Quick Start
-
-### 1. Installation via Conda (Recommended)
+## Installation
 
 ```bash
-# Clone repository
 git clone https://github.com/recepcanaltinbag/picota.git
 cd picota
 
-# Create environment with all dependencies
 conda create -n picota -c bioconda -c conda-forge \
-    python=3.9 prodigal blast megahit spades fastp \
+    python=3.9 prodigal blast spades megahit fastp \
     minimap2 samtools biopython pandas pyyaml tqdm
-
 conda activate picota
-
-# Install PICOTA
 pip install -r requirements.txt
 ```
 
-### 2. Download Reference Databases
+The pipeline runs from the source directory; there is nothing further to install.
+
+### Requirements
+
+| | Tool | Version | Needed for |
+|---|---|---|---|
+| required | BLAST+ | ≥ 2.12 | scoring |
+| required | Prodigal | ≥ 2.6 | gene prediction |
+| required | SPAdes | ≥ 3.13 | assembly |
+| optional | MEGAHIT | ≥ 1.2 | alternative assembler |
+| optional | fastp | — | read filtering |
+| optional | minimap2, samtools | — | long-read validation |
+
+Linux, Python ≥ 3.8, ≥ 8 GB RAM (16 GB for large genomes), and disk for the
+reference sets. macOS and Windows are untested.
+
+---
+
+## Quick start
+
+### From a GFA you already have
 
 ```bash
-mkdir -p databases
-cd databases
-
-# CARD (Antibiotic Resistance Gene Database)
-wget https://card.mcmaster.ca/download/5.2.0/broadstreet-v5.2.0.tar.bz2
-tar -xjf broadstreet-v5.2.0.tar.bz2
-
-# IS-finder
-wget https://www-archbac.u-psud.fr/archbac/Bank/Isfinder/Insertion_sequences.fasta
-
-# TnCentral (Transposon sequences)
-wget https://www.ficarre.u-psud.fr/TnCentral/TnCentral_complete.fasta
-
-# KEGG Xenobiotics (if using local installation)
-# [Custom download or API access]
-
-cd ..
+cd picota/
+conda run -n picota python3 test_complete_pipeline.py --gfa_mode
 ```
 
-### 3. Run on Test Data
+Runs detection, scoring and annotation over the bundled *P. nitroreducens*
+graph (`picota/test_data/testNitro.gfa`) — no download, no assembly. Results
+land in `picota_results/`.
+
+### From SRA accessions
+
+**1. Configure** `picota/config.yaml`:
+
+```yaml
+paths:
+  outdir: "/path/to/output"
+  sra_id_file: "picota/sra_ids.csv"
+  path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
+  path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_kegg.fasta"
+  path_to_ises: "picota/DBs/ISes/_tncentral_nointegrall_isfinder-TNs.fasta"
+  path_to_TNs: "picota/DBs/CompTns/Known_Tns.fasta"
+  assembler_type: "spades"
+
+options:
+  min_size_of_cycle: 1000
+  total_score_type: 3          # bounded 0-100 score; see Scoring
+  threshold_final_score: 50
+```
+
+**2. List the samples** in `picota/sra_ids.csv`:
+
+```csv
+sra_short_id,sra_long_id
+SRR12345678,SRR98765432
+SRR11111111,-
+```
+
+`sra_long_id` is an ONT accession for optional validation; use `-` when there
+is none.
+
+**3. Run:**
 
 ```bash
-# Download example assembly graph
-wget https://example.com/test_assembly.gfa
+cd picota/
+python3 picota/picota_testv3.py -c picota/config.yaml
+```
 
-# Run PICOTA
-python picota/picota.py --all \
-    --gfa test_assembly.gfa \
-    --output results/ \
-    --config picota/config.yaml
+### Individual stages
 
-# View results
-ls -la results/picota_final_tab/
+`picota/picota.py` exposes the stages separately:
+
+```bash
+python picota/picota.py sra_download --sra SRR11362851 --output data/
+python picota/picota.py assembly     --fastq reads.fq  --output assembly/
+python picota/picota.py analysis     --gfa assembly.gfa --output results/
+python picota/picota.py scoring      --cycle_folder cycles/ --output results/
+python picota/picota.py all          --sra SRR11362851 --output results/
+```
+
+### Cycle detection as a library
+
+```python
+from src.cycle_finderv2 import cycle_analysis
+
+cycle_analysis(
+    "assembly.gfa", "cycles.fasta",
+    find_all_path=True, path_limit=25,
+    min_size_of_cycle=1000, max_size_of_cycle=40000,
+    name_prefix_cycle="Cycle",
+    min_component_number=1, max_component_number=25,
+    k_mer_sim=80, threshold_sim=80,
+)
 ```
 
 ---
 
-## Usage
+## Reference databases
 
-PICOTA supports both **individual modules** and **all-in-one pipeline**:
+Four reference sets are searched, configured by path in `config.yaml`.
 
-### Command Structure
+1. **CARD** — antibiotic resistance genes.
+   [card.mcmaster.ca](https://card.mcmaster.ca/), protein FASTA
+   (`protein_fasta_protein_homolog_model.fasta`).
 
-```bash
-python picota/picota.py [COMMAND] [OPTIONS]
-```
+2. **Insertion sequences** — ISfinder and TnCentral merged, nucleotide FASTA
+   (`_tncentral_nointegrall_isfinder-TNs.fasta`). Finding one is a necessary
+   condition for a candidate to score at all.
 
-### Available Commands
-
-| Command | Purpose | Input | Output |
-|---------|---------|-------|--------|
-| `sra_download` | Download from NCBI SRA | SRR ID | FASTQ files |
-| `assembly` | Assemble reads → GFA | FASTQ | GFA graph |
-| `analysis` | Detect & score cycles | GFA | Annotated FASTA |
-| `db` | Download reference DBs | - | Local databases |
-| `scoring` | Score candidates | Cycles + DBs | Results table |
-| `all` | Complete pipeline | FASTQ/SRA | Final results |
-
-### Examples
-
-**End-to-end from SRA accession:**
-```bash
-python picota/picota.py all \
-    --sra SRR11362851 \
-    --output results/ \
-    --threads 8
-```
-
-**From local assembly:**
-```bash
-python picota/picota.py analysis \
-    --gfa assembly.gfa \
-    --cycle_folder cycles/ \
-    --output results/ \
-    --scoring_threshold 50
-```
-
-**Module-by-module:**
-```bash
-# 1. Assembly
-python picota/picota.py assembly --fastq reads.fq --output assembly_out/
-
-# 2. Cycle detection
-python picota/picota.py analysis --gfa assembly_out/assembly.gfa --output cycles/
-
-# 3. Scoring (requires downloaded databases)
-python picota/picota.py scoring --cycle_folder cycles/ --output final_results/
-```
-
----
-
-## Requirements
-
-### System Requirements
-- **OS**: Linux (macOS/Windows not fully tested)
-- **Python**: 3.8 or later
-- **RAM**: ≥8 GB recommended (16+ for large genomes)
-- **Disk**: ≥50 GB for databases
-
-### Python Dependencies
-
-Install via `requirements.txt`:
-```
-biopython >= 1.79
-pandas >= 1.3
-pyyaml >= 6.0
-tqdm >= 4.0
-requests >= 2.27
-```
-
-### External Tools (Required)
-
-| Tool | Version | Purpose | Installation |
-|------|---------|---------|--------------|
-| **BLAST+** | ≥2.12 | Sequence search | conda/bioconda |
-| **Prodigal** | ≥2.6 | Gene prediction | conda/bioconda |
-| **SPAdes** | ≥3.13 | Assembly | conda/bioconda |
-| **MEGAHIT** | ≥1.2 | Assembly (alternative) | conda/bioconda |
-
-### External Tools (Optional)
-
-| Tool | Purpose | Installation |
-|------|---------|--------------|
-| **fastp** | Read QC/filtering | conda/bioconda |
-| **minimap2** | Long-read mapping | conda/bioconda |
-| **samtools** | BAM/SAM processing | conda/bioconda |
-
-All tools are available via conda:
-```bash
-conda install -c bioconda prodigal blast megahit spades fastp minimap2 samtools
-```
-
----
-
-## Reference Databases
-
-PICOTA requires curated databases for scoring:
-
-### Required Databases
-
-1. **CARD** (Comprehensive Antibiotic Resistance Database)
-   - Source: https://card.mcmaster.ca/
-   - Format: FASTA (proteins)
-   - Update frequency: Monthly
-
-2. **IS-finder** (Insertion Sequences)
-   - Source: https://www-archbac.u-psud.fr/archbac/Bank/Isfinder/
-   - Format: FASTA (nucleotides)
-   - Includes: IS sequences, classification, organization
-
-3. **TnCentral** (Transposon Database)
-   - Source: https://www.ficarre.u-psud.fr/TnCentral/
-   - Format: FASTA
-   - Includes: Composite transposon sequences, cargo genes
+3. **Known composite transposons** — nucleotide FASTA (`Known_Tns.fasta`). A
+   cycle matching one is reported as `Known` rather than `Novel`.
 
 4. **Xenobiotic degradation genes** (KEGG-derived)
    - Built by `picota/src/build_xenobiotic_db.py` from KEGG KO identifiers
@@ -286,344 +200,19 @@ PICOTA requires curated databases for scoring:
 
 ---
 
-## Testing
-
-PICOTA includes a comprehensive test suite:
-
-```bash
-# Install test dependencies
-pip install pytest pytest-cov
-
-# Run all tests
-pytest tests/ -v
-
-# Run specific test module
-pytest tests/test_scoring.py -v
-
-# Generate coverage report
-pytest tests/ --cov=picota --cov-report=html
-```
-
-**Test Results:**
-```
-======================== 177 passed, 3 skipped in 5.88s ========================
-✅ Module imports & configuration
-✅ GFA parsing & graph generation
-✅ Cycle detection & deduplication  
-✅ BLAST integration
-✅ Scoring functions
-✅ Long-read mapping
-```
-
----
-
-## Performance & Optimizations
-
-### v1.0.0-rc1 Improvements
-
-| Optimization | Speedup | Details |
-|--------------|---------|---------|
-| `sum()` vs loops | 2-3x | Scoring calculations |
-| File I/O optimization | 5x | Read only needed lines |
-| String caching | 2-3x | Reduce split() calls |
-| Streaming decompression | -70% memory | Large file handling |
-| Shell→subprocess list | 🔒 Security | Eliminates injection risk |
-
-### The scoring stage
-
-Scoring used to search a cycle at a time: for every cycle, one BLAST invocation
-per reference database. BLAST's per-invocation setup — opening the database and
-walking its index — does not amortise over a query of five predicted proteins,
-so the cost was paid once per cycle per database. `blast_batch` (default true)
-sends every cycle in one query instead.
-
-Measured on 20 real cycles against the four bundled databases, BLAST at four
-threads and the databases already built:
-
-| search | per cycle | batched |
-|---|---|---|
-| blastn, IS elements | 1.96 s | 0.20 s |
-| blastn, known transposons | 1.81 s | 0.20 s |
-| blastp, CARD | 3.74 s | 1.52 s |
-| blastp, xenobiotics | 14.01 s | 10.24 s |
-| **total** | **23.5 s** (80 invocations) | **13.1 s** (4) |
-
-`picota_final_tab` is byte-identical either way, checked on 4 and on 40 cycles.
-An E-value depends on the database and on the individual query, not on what else
-shares the query file, and the score is computed from alignment length, subject
-length and identity — none of which the batching touches.
-
-Threads follow from that: one large search parallelises where 160 tiny ones did
-not. On the batched query of 40 cycles against the 82k-sequence xenobiotic set,
-62.0 s at one thread, 15.4 s at four, 9.7 s at eight, 9.1 s at sixteen, 8.5 s at
-twenty-four. The default is **8**, where the curve flattens and there is still
-room for an assembler running beside it. `PICOTA_BLAST_THREADS` overrides it for
-callers that score several samples at once.
-
-The remaining cost is the xenobiotic search, which gains only 1.4× from batching
-because it is dominated by real alignment work rather than by setup. A faster
-aligner, not fewer invocations, is what would pay there.
-
-### Re-running
-
-Work is skipped when its output already exists, which is what makes a long run
-resumable. Existence alone is the wrong test: an interrupted search leaves a
-truncated table, and re-running after a database is rebuilt or the scoring code
-changes would report the previous answer.
-
-So each output carries a sidecar naming the inputs it came from:
-
-```
-Blast_Out/blast_files/SRR123_Xenobiotics.batch.out
-Blast_Out/blast_files/SRR123_Xenobiotics.batch.out.picota-sig.json
-```
-
-The sidecar is written only after the work succeeds, so an interrupted run
-leaves an output without one and the next run redoes it. Inputs are hashed
-rather than stat'ed, so a checkout or an rsync that moves mtime without changing
-a byte does not force a recomputation. Re-running 40 cycles with unchanged
-inputs takes 5.8 s against 16.8 s for the first pass.
-
-Nothing has to be deleted to pick up a rebuilt database or new code — the
-signature no longer matches and the work is redone.
-
----
-
-## Output Format
-
-PICOTA generates annotated GenBank and FASTA files:
-
-### Output Files
-
-```
-results/
-├── picota_final_tab/                    # Summary table
-│   └── transposon_candidates.tsv        # Tab-separated results
-├── Cycle_X_split/
-│   ├── Cycle_X.fasta                    # Nucleotide sequence
-│   ├── Cycle_X.gbk                      # GenBank annotation
-│   └── Cycle_X.gff                      # GFF3 features
-└── mapping/ (if long-reads provided)
-    ├── minimap2_results.bam
-    └── coverage_analysis.txt
-```
-
-### TSV Format
-
-```
-CycleID                  SRAID    kmer  score0  score1  score2  score3  NumIS  ISproducts    NumAnt  Antproducts
-Cycle_16-len3774-comp2-  SRR123   77      412.7   380.1    91.2    78.4      1  ISAzvi11           2  OXA-384;PDC-193
-
-All four scores are always written; `total_score_type` only decides which one
-the threshold is applied to. score3 is the 0-100 one.
-```
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue: `prodigal: command not found`**
-```bash
-# Solution: Install prodigal
-conda install -c bioconda prodigal
-```
-
-**Issue: `No GFA files generated`**
-```bash
-# Check SPAdes output
-ls -la assembly_output/
-cat assembly_output/spades.log  # Check for errors
-
-# Verify FASTQ format
-file reads.fastq
-```
-
-**Issue: Low cycle detection rate**
-```bash
-# Potential causes:
-# 1. Complex repeats → try different k-mer values
-# 2. Shallow coverage → increase minimum k-mer
-# 3. Small transposons → may not form clear cycles
-
-# Solution: Tune config
-python picota/picota.py analysis --gfa assembly.gfa \
-    --kmer_sim 0.85 \  # Lower threshold for similar cycles
-    --path_limit 20    # Allow longer paths
-```
-
----
-
-
----
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for:
-- Development setup
-- Code style guidelines
-- Testing requirements
-- Pull request process
-
-### Report Issues
-
-Found a bug? Please open an [issue](https://github.com/recepcanaltinbag/picota/issues) with:
-- Python version & OS
-- Minimal reproducible example
-- Error message & traceback
-- Tool versions (SPAdes, BLAST+, etc.)
-
----
-
-## License
-
-PICOTA is licensed under the [MIT License](./LICENSE) - see LICENSE file for details.
-
----
-
-## FAQ
-
-**Q: Can PICOTA work on Windows/macOS?**  
-A: Currently optimized for Linux. Other OSes may require adjustments to external tool paths.
-
-**Q: What assembly graph formats are supported?**  
-A: Currently GFA 1.0 format. GFA 2.0 support planned.
-
-**Q: Can I use PICOTA with my own databases?**  
-A: Yes! Edit `config.yaml` to specify custom database paths.
-
-**Q: How long does analysis take?**  
-A: Depends on genome size:
-  - Small genomes (< 5 Mb): 30 min - 1 hour
-  - Large genomes (5-10 Mb): 2-4 hours
-  - Very large (> 10 Mb): 4+ hours
-  - Runtime: O(n) in cycle count
-
-**Q: Are long reads required?**  
-A: No, optional. Improves confidence but not required.
-
----
-
-## Acknowledgments
-
-PICOTA builds on excellent open-source tools:
-- **SPAdes/MEGAHIT**: Genome assembly
-- **Prodigal**: Gene prediction
-- **BLAST+**: Sequence homology search
-- **BioPython**: Sequence processing
-
-Special thanks to:
-- CARD database maintainers
-- IS-finder and TnCentral communities
-- NCBI/KEGG for curated data
-
----
-
-## Contact & Support
-
-- 📧 Email: [Add contact email]
-- 💬 GitHub Discussions: [Link to discussions]
-- 🐛 Bug Reports: [GitHub Issues](https://github.com/recepcanaltinbag/picota/issues)
-- 📖 Documentation: [See wiki](https://github.com/recepcanaltinbag/picota/wiki)
-
----
-
-**Last Updated**: April 2, 2024 | **Version**: 1.0.0-rc1
-
-## Installation
-
-```bash
-git clone https://github.com/<your-org>/picota.git
-cd picota
-conda activate picota
-```
-
-No additional installation is required. The pipeline is run directly from the source directory.
-
----
-
-## Quick Start
-
-### 1. Configure
-
-Edit `picota/config.yaml` to set paths and parameters:
-
-```yaml
-paths:
-  outdir: "/path/to/output"
-  sra_id_file: "picota/sra_ids.csv"
-  path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
-  path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_classified.fasta"
-  path_to_ises: "picota/DBs/ISes/_tncentral_nointegrall_isfinder-TNs.fasta"
-  path_to_TNs: "picota/DBs/CompTns/Known_Tns.fasta"
-  assembler_type: "megahit"   # or "spades"
-
-options:
-  min_size_of_cycle: 1000
-  max_size_of_cycle: 40000
-  total_score_type: 3        # bounded 0-100 score; see Scoring
-  threshold_final_score: 50
-```
-
-### 2. Prepare sample list
-
-`picota/sra_ids.csv` format:
-
-```csv
-sra_short_id,sra_long_id
-SRR12345678,SRR98765432
-SRR11111111,-
-```
-
-- `sra_short_id`: Illumina short-read accession
-- `sra_long_id`: ONT long-read accession for validation (use `-` if unavailable)
-
-### 3. Run
-
-```bash
-cd picota/
-conda activate picota
-python3 picota/picota_testv3.py -c picota/config.yaml
-```
-
-### 4. Run from a GFA file (skip assembly)
-
-If you already have an assembly graph:
-
-```python
-from picota.src.cycle_finderv2 import cycle_analysis
-
-cycle_analysis(
-    path_to_data="assembly.gfa",
-    out_cycle_file="cycles.fasta",
-    find_all_path=False,
-    path_limit=15,
-    min_size_of_cycle=1000,
-    max_size_of_cycle=40000,
-    name_prefix_cycle="Cycle",
-    min_component_number=1,
-    max_component_number=25,
-    k_mer_sim=200,
-    threshold_sim=99
-)
-```
-
----
-
 ## Output
 
 ```
 output/
-├── assembly/<accession>/        GFA assembly graphs
-├── cycles/                      Candidate cycle sequences (FASTA)
+├── assembly/<accession>/     GFA assembly graphs
+├── cycles/                   Candidate cycle sequences (FASTA)
 ├── scoring/<accession>/
-│   ├── picota_final_tab         Tab-delimited raw results
-│   ├── picota_enriched.csv      Enriched CT-tagged results (see below)
-│   ├── genbank/                 GenBank-format annotations
-│   └── Pico_Temp/               Intermediate BLAST / Prodigal files
-├── annot/<accession>/           Split transposon/cargo FASTA files
-└── mapping/<accession>/         BAM files and long-read analysis
+│   ├── picota_final_tab      Tab-delimited raw results
+│   ├── picota_enriched.csv   Enriched CT-tagged results
+│   ├── genbank/              GenBank annotations
+│   └── Pico_Temp/            Intermediate BLAST / Prodigal files
+├── annot/<accession>/        Split transposon/cargo FASTA
+└── mapping/<accession>/      BAM files and long-read analysis
 ```
 
 ### Raw results table (`picota_final_tab`)
@@ -750,63 +339,69 @@ Two limits worth knowing before relying on the score:
 
 ---
 
-## Testing
+## Performance
 
-### Quick E2E test (recommended first run)
+### BLAST
 
-Uses the bundled *P. nitroreducens* GFA — no SRA download or assembly needed:
+Scoring used to search a cycle at a time: for every cycle, one BLAST invocation
+per reference database. BLAST's per-invocation setup — opening the database and
+walking its index — does not amortise over a query of five predicted proteins,
+so the cost was paid once per cycle per database. `blast_batch` (default true)
+sends every cycle in one query instead.
 
-```bash
-cd picota/
-conda run -n evobiomig python3 test_complete_pipeline.py --gfa_mode
+Measured on 20 real cycles against the four bundled databases, BLAST at four
+threads and the databases already built:
+
+| search | per cycle | batched |
+|---|---|---|
+| blastn, IS elements | 1.96 s | 0.20 s |
+| blastn, known transposons | 1.81 s | 0.20 s |
+| blastp, CARD | 3.74 s | 1.52 s |
+| blastp, xenobiotics | 14.01 s | 10.24 s |
+| **total** | **23.5 s** (80 invocations) | **13.1 s** (4) |
+
+`picota_final_tab` is byte-identical either way, checked on 4 and on 40 cycles.
+An E-value depends on the database and on the individual query, not on what else
+shares the query file, and the score is computed from alignment length, subject
+length and identity — none of which the batching touches.
+
+Threads follow from that: one large search parallelises where 160 tiny ones did
+not. On the batched query of 40 cycles against the 82k-sequence xenobiotic set,
+62.0 s at one thread, 15.4 s at four, 9.7 s at eight, 9.1 s at sixteen, 8.5 s at
+twenty-four. The default is **8**, where the curve flattens and there is still
+room for an assembler running beside it. `PICOTA_BLAST_THREADS` overrides it for
+callers that score several samples at once.
+
+The remaining cost is the xenobiotic search, which gains only 1.4× from batching
+because it is dominated by real alignment work rather than by setup. A faster
+aligner, not fewer invocations, is what would pay there.
+
+### Re-running
+
+Work is skipped when its output already exists, which is what makes a long run
+resumable. Existence alone is the wrong test: an interrupted search leaves a
+truncated table, and re-running after a database is rebuilt or the scoring code
+changes would report the previous answer.
+
+So each output carries a sidecar naming the inputs it came from:
+
+```
+Blast_Out/blast_files/SRR123_Xenobiotics.batch.out
+Blast_Out/blast_files/SRR123_Xenobiotics.batch.out.picota-sig.json
 ```
 
-Output is written to `picota_results/`, including `picota_enriched_combined.csv`
-with real BLAST results and CT tags.
+The sidecar is written only after the work succeeds, so an interrupted run
+leaves an output without one and the next run redoes it. Inputs are hashed
+rather than stat'ed, so a checkout or an rsync that moves mtime without changing
+a byte does not force a recomputation. Re-running 40 cycles with unchanged
+inputs takes 5.8 s against 16.8 s for the first pass.
 
-### Smoke tests (pipeline health check)
-
-Verifies every pipeline module without a full BLAST run:
-
-```bash
-cd picota/
-conda run -n evobiomig python3 -m pytest tests/test_smoke.py -v
-```
-
-Expected (with `evobiomig` environment): **45 passed, 1 skipped**
-(samtools skipped only if `libncurses.so.5` is missing on the system).
-
-### E2E integration tests
-
-```bash
-cd picota/
-conda run -n evobiomig python3 -m pytest tests/test_e2e_gfa.py -v
-```
-
-Runs the full post-assembly pipeline (cycle detection → BLAST scoring → enriched CSV)
-on `test_data/testNitro.gfa` and validates all output files and column formats.
-
-### Unit tests
-
-```bash
-python3 -m pytest tests/ -v
-```
-
-Covers: cycle detection, k-mer filtering, scoring functions, GFA parsing,
-BLAST output parsing, interval merging, IS-family inference, antibiotic-class
-inference, and enriched CSV generation (~150 tests).
-
-### Integration test with bundled data
-
-```bash
-python3 -m pytest tests/test_integration_gfa.py -v
-```
-
-Validates cycle detection against `test_data/cyclesOut.fasta`.
+Nothing has to be deleted to pick up a rebuilt database or new code — the
+signature no longer matches and the work is redone.
 
 ---
 
-## Algorithm Details
+## Algorithm details
 
 ### Cycle detection
 
@@ -826,9 +421,7 @@ Validates cycle detection against `test_data/cyclesOut.fasta`.
 
 ---
 
-## Configuration Reference
-
-Key parameters in `config.yaml`:
+## Configuration reference
 
 Every default below is the one in the shipped `config.yaml`.
 
@@ -852,22 +445,53 @@ Every default below is the one in the shipped `config.yaml`.
 | `threshold_final_score` | 50 | Minimum score to report a cycle |
 | `split_min_score` | 92 | Minimum score for boundary annotation |
 | `assembler_type` | spades | Assembly tool (`spades` or `megahit`). SPAdes by measurement: 40/40 implanted elements recovered against 19/40 from the MEGAHIT graph of the same reads — see [ROADMAP §6](docs/ROADMAP.md) |
-| `blast_batch` | true | One BLAST search per database over every cycle at once, rather than one per cycle per database. Same hits either way — see [Performance](#performance--optimizations) |
+| `blast_batch` | true | One BLAST search per database over every cycle at once, rather than one per cycle per database. Same hits either way — see [Performance](#performance) |
+
+---
+
+## Testing
+
+```bash
+conda run -n picota python3 -m pytest tests/ -q          # everything
+conda run -n picota python3 -m pytest tests/test_smoke.py -q   # module health
+conda run -n picota python3 -m pytest tests/test_e2e_gfa.py -q # full post-assembly run
+```
+
+`tests/test_e2e_gfa.py` runs detection through scoring to enriched CSV over the
+bundled graph and checks every output file and column. `tests/test_known_defects.py`
+holds characterisation tests for the open defects in
+[docs/ROADMAP.md](docs/ROADMAP.md), marked `xfail(strict=True)` so a fix turns
+them into failures and forces the marker to be removed.
+
+One test asserts a wall-clock budget for the k-mer filter and will fail on a
+loaded machine without anything being wrong.
+
+
+---
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Open defects, phase plan, and what each measurement settled |
+| [docs/VALIDATION.md](docs/VALIDATION.md) | Benchmark design and ground truth |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup and pull request process |
+
+Bug reports: [GitHub issues](https://github.com/recepcanaltinbag/picota/issues).
+Please include the Python version, OS, tool versions and a minimal example.
 
 ---
 
 ## Citation
 
-If you use PICOTA in your research, please cite:
-10.5281/zenodo.21769753
+> *A de novo computational pipeline for discovery and analysis of composite
+> transposons from assembly graphs reveals hidden antibiotic resistance gene
+> mobilization networks.* Manuscript in preparation.
 
-" A de novo computational pipeline for discovery and
-analysis of composite transposons from assembly graphs reveals hidden antibiotic
-resistance gene mobilization networks. "
-> [Manuscript in preparation]
+[10.5281/zenodo.21769753](https://doi.org/10.5281/zenodo.21769753)
 
 ---
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).
