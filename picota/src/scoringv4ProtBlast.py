@@ -661,7 +661,7 @@ def diamond_driver(diamond_path, query_file, db_fasta, r_type, info_prod_dict, t
 def scoring_main(cycle_folder, picota_out_folder,
                  path_to_antibiotics, path_to_xenobiotics, path_to_ises, path_to_TNs, db_out_path, 
                  mean_of_CompTns=5850, std_of_CompTns=2586,
-                 total_score_type=0, threshold_final_score=50,
+                 total_score_type=3, threshold_final_score=50,
                  max_z=20, dist_type=1,
                  path_of_prodigal="prodigal",
                  path_of_blastn="blastn",

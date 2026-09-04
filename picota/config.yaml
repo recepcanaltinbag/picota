@@ -80,7 +80,11 @@ options:
 # new parameters
   mean_of_CompTns: 5850
   std_of_CompTns: 2586
-  total_score_type: 0
+  # 3 is the bounded 0-100 score; see README "Scoring". Modes 0-2 are kept for
+  # continuity with published results but are unbounded, so their thresholds are
+  # not comparable between runs. All four are always written to the output table;
+  # this setting only chooses which one threshold_final_score applies to.
+  total_score_type: 3
   threshold_final_score: 50
   max_z: 20
   dist_type: 1
