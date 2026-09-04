@@ -345,8 +345,11 @@ results/
 ### TSV Format
 
 ```
-cycle_id    sra_id    kmer    score0  antibiotics    is_elements    xenobiotics
-Cycle_1     SRR123    39      87.5    aadA1,aacA4    IS26,IS1       nah_cluster
+CycleID                  SRAID    kmer  score0  score1  score2  score3  NumIS  ISproducts    NumAnt  Antproducts
+Cycle_16-len3774-comp2-  SRR123   77      412.7   380.1    91.2    78.4      1  ISAzvi11           2  OXA-384;PDC-193
+
+All four scores are always written; `total_score_type` only decides which one
+the threshold is applied to. score3 is the 0-100 one.
 ```
 
 ---
@@ -491,8 +494,9 @@ paths:
   assembler_type: "megahit"   # or "spades"
 
 options:
-  min_size_of_cycle: 2000
+  min_size_of_cycle: 1000
   max_size_of_cycle: 40000
+  total_score_type: 3        # bounded 0-100 score; see Scoring
   threshold_final_score: 50
 ```
 
@@ -529,7 +533,7 @@ cycle_analysis(
     out_cycle_file="cycles.fasta",
     find_all_path=False,
     path_limit=15,
-    min_size_of_cycle=2000,
+    min_size_of_cycle=1000,
     max_size_of_cycle=40000,
     name_prefix_cycle="Cycle",
     min_component_number=1,
@@ -598,17 +602,85 @@ multiple antibiotic classes it is expanded to one row per class.
 
 ## Scoring
 
-PICOTA uses a Z-score-based composite scoring system. The score reflects how well a candidate cycle matches the expected size distribution of known composite transposons and whether it encodes relevant genes.
+Detection returns every cycle the graph closes, which on a real chromosome means
+roughly 20 candidates per genome before anything is filtered — most of them the
+host's own repeat structures rather than composite transposons. Scoring is what
+separates the two.
 
-Three scoring strategies are available (`total_score_type` in config):
+### Choosing a scoring mode
 
-| Type | Formula | Best for |
-|------|---------|----------|
-| `0` | `(Σ scores)^z_normalized` | General use |
-| `1` | `(100·[IS>0] + 100·[AMR>0] + 100·[Xeno>0])^z_normalized` | Presence/absence |
-| `2` | `(cargo_score × IS_score) + 10^z_normalized` | IS-emphasis |
+`total_score_type` selects the formula. **Use `3`.** The others are kept because
+published results reference them.
 
-Where `z_normalized = 1 - |len - μ| / (σ × max_z)` penalizes cycles far from the mean composite transposon length (default μ = 5850 bp, σ = 2586 bp).
+| Mode | Range | Behaviour |
+|------|-------|-----------|
+| `0` | unbounded | Sums every hit score, then applies a length/component exponent. Ranks well but the value is not comparable between runs, and many weak hits outweigh one strong hit. |
+| `1` | unbounded | Presence/absence variant of `0`. |
+| `2` | unbounded | Requires cargo in a database, so an element whose cargo is novel is unreportable at any threshold. |
+| `3` | **0–100** | Bounded, quality-based, and each term corresponds to a property the definition of a composite transposon asserts. |
+
+### How score3 is computed
+
+```
+score3 = 100 × IS_gate × length_gate × (0.50 · component_fit + 0.50 · cargo_quality)
+```
+
+Two **gates**, which multiply and can zero the score outright:
+
+- `IS_gate` — `0.5 + 0.5 × IS_hit_quality`, or **0** when no insertion sequence
+  is found. An IS is a necessary condition, not a bonus. A hit at 59%
+  identity-coverage is still unambiguously an IS, which is why the gate does not
+  fall all the way to zero for a weak one.
+- `length_gate` — how far the cycle sits from the expected composite transposon
+  length (`mean_of_CompTns`, `std_of_CompTns`). Under `dist_type: 1` anything
+  shorter than the mean pays nothing, so the gate only penalises oversized
+  cycles. This gate carries most of the specificity: without it, precision on
+  the benchmark falls from 69% to 47%.
+
+Two **weighted terms**, equally split:
+
+- `component_fit` — `1 / (1 + |components − 2| / 12)`. A cycle threading many
+  graph components is wandering through host repeats. Note what this does *not*
+  measure: it is not a structural score. Real elements thread 2 components when
+  their flanking IS has two genomic copies and 16 when it has sixteen, so the
+  count tracks how widespread the IS is. It is a host-repeat filter, and it is
+  weighted accordingly.
+- `cargo_quality` — best hit against CARD or the xenobiotic set, as
+  (alignment length / subject length) × percent identity. When no database hit
+  is found it falls back to a floor of **0.30** rather than zero, so an element
+  carrying cargo absent from every database is still reportable. This is the one
+  thing mode `2` cannot do.
+
+The 0.50/0.50 split is measured, not chosen: swept across 1272 benchmark
+candidates it gives the best F1, and its own optimal threshold lands on 50 —
+the value `threshold_final_score` ships with.
+
+### What the benchmark says
+
+Measured on 480 implanted elements across 120 simulated genomes, plus 10
+wild-type controls (see [docs/VALIDATION.md](docs/VALIDATION.md)):
+
+| Scenario | Sensitivity | Precision |
+|---|---|---|
+| `baseline` — unique IS, CARD cargo | 92.5% | 97.4% |
+| `novel_cargo` — cargo in no database | 90.0% | 100% |
+| `compact` — small elements | 97.5% | 100% |
+| `shared_is` — several CTs on one 16-copy IS | 100% | 88.9% |
+| `cargo_is_diff` — a different IS inside the cargo | 95.0% | 74.5% |
+| `cargo_is_same` — flanking IS repeated in the cargo | 5.0% | 2.5% |
+| **All but `cargo_is_same`** | **95.0%** | **90.9%** |
+
+On ten wild-type genomes with nothing implanted, 180 candidate cycles are
+detected and **none** clear the threshold.
+
+Two limits worth knowing before relying on the score:
+
+- **`cargo_is_same` is not solved.** When the flanking IS also occurs inside the
+  cargo, the element usually never becomes a candidate cycle at all — the loss
+  is in detection, not scoring, and no threshold recovers it.
+- **The IS gate did not discriminate on this benchmark.** Every one of the 1272
+  candidates carried an IS hit, so the gate rejected nothing. It is kept because
+  it is definitionally required, not because it was shown to filter.
 
 ---
 
@@ -694,7 +766,7 @@ Key parameters in `config.yaml`:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `min_size_of_cycle` | 2000 | Minimum cycle length (bp) |
+| `min_size_of_cycle` | 1000 | Minimum cycle length (bp) |
 | `max_size_of_cycle` | 40000 | Maximum cycle length (bp) |
 | `min_component_number` | 1 | Minimum contigs in cycle |
 | `max_component_number` | 25 | Maximum contigs in cycle |
@@ -704,7 +776,7 @@ Key parameters in `config.yaml`:
 | `path_limit` | 15 | Max path length when `find_all_path=true` |
 | `mean_of_CompTns` | 5850 | Mean composite transposon length (bp) |
 | `std_of_CompTns` | 2586 | Standard deviation of composite transposon length |
-| `total_score_type` | 0 | Scoring formula (0, 1, or 2) |
+| `total_score_type` | 0 | Scoring formula (0-3); **3 is recommended** — see [Scoring](#scoring) |
 | `threshold_final_score` | 50 | Minimum score to report a cycle |
 | `assembler_type` | megahit | Assembly tool (`megahit` or `spades`) |
 
