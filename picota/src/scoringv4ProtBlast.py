@@ -832,6 +832,11 @@ def scoring_main(cycle_folder, picota_out_folder,
 
         for db_path, path_of_tool, r_type, db_type, threshold in blast_jobs:
             if not os.path.exists(db_path):
+                # Silently skipping this made a mistyped path indistinguishable
+                # from a genuine absence of hits, and for the IS set the two are
+                # very different: no IS hit zeroes the gate, so every candidate
+                # scores zero and the run reports nothing at all.
+                logger.warning(f"{r_type} database not found, skipping: {db_path}")
                 continue
 
             if blast_batch:

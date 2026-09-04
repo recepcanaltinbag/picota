@@ -497,6 +497,53 @@ loaded machine without anything being wrong.
 
 ---
 
+## Troubleshooting
+
+**Nothing is reported, or every score is 0.**
+Check the four database paths in `config.yaml`. A path that does not resolve is
+skipped with a warning in the log rather than failing the run, and for the IS
+set that is fatal to the output: no IS hit means `IS_gate` is 0, so every
+candidate scores 0 and the table comes back empty. `Found Cycle Files` in the
+log confirms detection ran; an empty result under a populated `cycles/` points
+at the databases, not at the graph.
+
+**`prodigal: command not found`**
+```bash
+conda install -c bioconda prodigal
+```
+Or set `path_of_prodigal` in `config.yaml` to the binary. The same applies to
+`path_of_blastn`, `path_of_blastp` and `path_of_makeblastdb`.
+
+**`WARNING: N path search(es) hit path_limit=25 and were cut short`**
+The enumeration was not exhaustive. It does not prove candidates were lost — a
+truncated branch may have dead-ended anyway — so settle it by re-running with a
+higher `path_limit` and comparing the candidate count. On the bundled graph,
+raising 25 to 50 truncates nothing and returns the same 35 paths.
+
+**Fewer candidates than expected on a genome that should carry elements.**
+Two defaults account for most of this:
+- `min_size_of_cycle` — the cycle is IS + cargo, not IS + cargo + IS, so a
+  compact element yields a cycle shorter than itself. At 2000 the benchmark
+  recovers 8 of 12 implanted elements; at 1000, all 12.
+- `dedup_mode` — `legacy` collapses candidates that share a repeat node, which
+  deletes real composite transposons that share an IS but carry different cargo.
+  `strict` keeps them. See [ROADMAP §2](docs/ROADMAP.md).
+
+**`Xenoproducts` shows bare accessions instead of gene functions.**
+The xenobiotic FASTA has spaces in its headers. BLAST cuts `sseqid` at the first
+space; see [Reference databases](#reference-databases).
+
+**A test is skipped with a `samtools` message.**
+`libncurses.so.5` is missing on the system. It affects that test only, not the
+pipeline.
+
+**No GFA produced by assembly.**
+Check the assembler log under `assembly/<accession>/`. With MEGAHIT the graph is
+converted from FASTG, so `gfa_tools_path` in `config.yaml` must point at a
+working `fastg2gfa`.
+
+---
+
 ## Documentation
 
 | | |
@@ -507,6 +554,15 @@ loaded machine without anything being wrong.
 
 Bug reports: [GitHub issues](https://github.com/recepcanaltinbag/picota/issues).
 Please include the Python version, OS, tool versions and a minimal example.
+
+---
+
+## Acknowledgments
+
+PICOTA is built on SPAdes, MEGAHIT, Prodigal, BLAST+, minimap2, samtools and
+Biopython, and scores against data curated by the CARD, ISfinder, TnCentral,
+KEGG and UniProt projects. The method depends on that curation as much as on its
+own code.
 
 ---
 
