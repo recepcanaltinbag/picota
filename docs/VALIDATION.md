@@ -6,8 +6,15 @@ Status: 2026-09-01. Companion document: [ROADMAP.md](ROADMAP.md).
 
 ## 1. What has actually been validated
 
-- **Unit and smoke tests** — 125 tests over parsing, cycle construction,
+- **Unit and smoke tests** — 530 tests over parsing, cycle construction,
   deduplication helpers, scoring and output formatting.
+- **Simulated benchmark with exact ground truth** — 520 composite transposons
+  implanted into 130 simulated genomes across six architectures and seven IS
+  copy levels, plus ten wild-type controls. Sensitivity 95.0% and precision
+  90.9% excluding the one architecture the method cannot solve; zero false
+  positives on the wild-type controls (§3.5–3.7).
+- **Head-to-head against MobileElementFinder** on the same genomes and the same
+  matching criterion (§3.9).
 - **End-to-end tests** on the bundled `test_data/testNitro.gfa`, checking that the
   pipeline runs and that output files and columns are well formed.
 - **Long-read evidence, per candidate** — optional minimap2 mapping of Oxford
@@ -23,11 +30,21 @@ one run** (SRR20032745, *Enterococcus faecium*).
 
 ## 2. What has not been validated
 
-**PICOTA has never been benchmarked against a closed reference genome.** There is
-no ground-truth CT catalogue, no recall or precision figure, and no comparison
-against a completed assembly anywhere in this repository. Any statement of the
-form "strain X carries N composite transposons and PICOTA recovered M of them"
-would be unsupported today.
+**PICOTA has never been benchmarked against a real closed genome.** The figures
+in §3.5–3.7 come from simulated chromosomes, where ground truth is exact by
+construction. That is the right design for comparing detection methods — on a
+real isolate a missed element and a mis-annotated reference are
+indistinguishable — but it does not establish performance on real data. Any
+statement of the form "strain X carries N composite transposons and PICOTA
+recovered M of them" would still be unsupported today.
+
+**One host genome.** Every simulated case is built on *E. coli* K-12 MG1655.
+Generalisation across species and GC content is untested; the pipeline accepts
+any backbone, so this is a run that has not happened rather than a design limit.
+
+**Inverted flanks and diverged flanks.** Every implanted element is in direct
+orientation with 0.5% divergence between its flanking copies. Neither axis has
+been varied.
 
 ### A clarification worth recording
 
@@ -210,88 +227,182 @@ structural property while holding everything else fixed, so a drop between rows
 is attributable to the structure rather than to chance. Scored under score3 at a
 threshold of 50.
 
-The first two columns count **cycles**; the rest count **elements** out of the
-twelve implanted. Keeping them apart matters: `cargo_is_same` produces 22
-candidate cycles and recovers none of the twelve elements.
+Counts below are **elements**, forty per scenario: four implanted into each of
+ten independently simulated genomes. Ten genomes rather than one crowded genome
+matters — elements sharing a chromosome share its assembly and its read set, so
+they are not independent measurements, and forty elements in one genome makes it
+several times more repetitive than any real one.
 
-| scenario | structure | cycles | scored | in graph | recovered | lost detecting | lost scoring | FP | score |
-|---|---|---|---|---|---|---|---|---|---|
-| baseline | unique IS, CARD cargo | 12 | 12 | 12/12 | **12/12** | 0 | 0 | 0 | 79–94 |
-| novel_cargo | cargo in no database | 12 | 12 | 12/12 | **12/12** | 0 | 0 | 0 | 58–73 |
-| cargo_is_diff | a different IS inside the cargo | 15 | 14 | 12/12 | **12/12** | 0 | 0 | 1 | 80–91 |
-| compact | cycle below `min_size_of_cycle` | 8 | 7 | 8/12 | 7/12 | 4 | 1 | 0 | 68–96 |
-| shared_is | twelve elements on one 48-copy IS | 27 | 6 | 4/12 | 4/12 | 8 | 0 | 2 | 63–66 |
-| cargo_is_same | flanking IS also inside the cargo | 22 | 22 | 0/12 | 0/12 | 12 | 0 | 22 | — |
-| **total** | | 96 | 73 | **48/72** | **47/72** | **24** | **1** | **25** | 58–96 |
+Scored under score3 at a threshold of 50.
 
-Three things this table is meant to show, including the ones that do not
+| scenario | structure | in graph | reported | lost detecting | lost scoring | FP | sensitivity | PPV |
+|---|---|---|---|---|---|---|---|---|
+| baseline | unique IS, CARD cargo | 40/40 | **37** | 0 | 3 | 1 | 92.5% | 97.4% |
+| novel_cargo | cargo in no database | 40/40 | **36** | 0 | 4 | 0 | 90.0% | 100% |
+| compact | small elements, one cargo gene | 40/40 | **39** | 0 | 1 | 0 | 97.5% | 100% |
+| cargo_is_diff | a different IS inside the cargo | 38/40 | **38** | 2 | 0 | 13 | 95.0% | 74.5% |
+| shared_is | four elements per genome on one 16-copy IS | 40/40 | **40** | 0 | 0 | 5 | 100% | 88.9% |
+| cargo_is_same | flanking IS also inside the cargo | 2/40 | 2 | 38 | 0 | 77 | 5.0% | 2.5% |
+| **all six** | | 200/240 | **192** | 40 | 8 | 96 | 80.0% | 66.7% |
+| **excluding cargo_is_same** | | 198/200 | **190** | 2 | 8 | 19 | **95.0%** | **90.9%** |
+
+"In graph" counts elements covered at ≥95% by some candidate cycle before any
+scoring, so the two loss columns separate what detection lost from what scoring
+lost. Four things this table is meant to show, including the ones that do not
 flatter the tool:
 
-**Scoring is not the bottleneck anywhere.** Across all six scenarios and 72
-elements, 48 reach the graph as a recoverable cycle and 47 survive scoring — the
-scoring stage loses exactly one. Every other loss happens
-earlier — at assembly, at graph traversal, or at the size filter. `shared_is`
-reports 4 of 12 not because scoring rejects the other eight but because only
-four survive the graph as recoverable cycles; all three scoring modes return the
-same four.
+**Scoring is not the bottleneck.** Of 240 implanted elements, scoring loses
+**eight**. The other 40 losses happen before scoring sees them, and 38 of those
+are the single `cargo_is_same` architecture. Outside it, detection loses 2 of
+200 and scoring loses 8 of 198. Tuning the score would move eight elements; the
+larger constraint is upstream, in what the assembly graph preserves.
 
-**novel_cargo is the case score2 cannot do at all.** Twelve elements whose cargo
-matches nothing in CARD or the xenobiotic set are all recovered at 58–73. Under
-score2 every one of them scores 10 against a threshold of 50.
+**novel_cargo is the case score2 cannot do at all.** Cargo matching nothing in
+CARD or the xenobiotic set is still recovered at 90%, because score3 applies a
+floor of 0.30 when no database hit is found rather than zeroing the term. Under
+score2 these elements score in single digits against a threshold of 50 and are
+unreportable at any threshold.
 
-**cargo_is_same is a genuine failure, not a scoring artefact.** When the
-flanking IS also occurs inside the cargo, the cycle that PICOTA reports is a
-sub-element, and none of the twelve implanted elements is recovered whole. This
-is a limit of reading cycles out of the graph and is not addressed by any
-scoring change.
+**shared_is is now fully recovered.** Four elements per genome built on one
+insertion sequence present in sixteen genomic copies: 40 of 40, at 100%
+sensitivity. This is the case a contig-based method loses first — SPAdes contigs
+recover none of these forty (§3.7).
+
+**cargo_is_same is a genuine failure, and it is a detection failure.** When the
+flanking IS also occurs inside the cargo, only 2 of 40 elements are covered by
+any candidate cycle at all. The 77 false positives are unrelated cycles the
+scorer accepted; no scoring change recovers an element detection never proposed.
+PICOTA should not be trusted on elements whose flanking IS recurs within their
+own cargo.
 
 ### 3.6 Negative control
 
-Wild-type *E. coli* K-12 MG1655 with nothing implanted, run through the same
-reads, assembly and pipeline: 17 cycles detected in the graph, **0 reported
-under score0, 2 under score2 and 0 under score3**.
+Ten wild-type *E. coli* K-12 MG1655 genomes with nothing implanted, one per
+seed, through identical reads, assembly and pipeline.
 
-Read as a false-positive rate this would be misleading, because MG1655 is not a
+| stage | count |
+|---|---|
+| candidate cycles detected | 12–22 per genome, median 19 (180 total) |
+| reported under score3 at threshold 50 | **0 of 180** |
+
+Running ten genomes rather than one mattered: the single genome originally used
+yielded 22 cycles, which turns out to be the top of the range rather than
+typical.
+
+Read as a false-positive rate this would mislead, because MG1655 is not a
 composite-transposon-free genome — it carries dozens of native IS elements and
-some may genuinely flank cargo. The two surviving candidates are most likely its
-*ampC*-family genes, which CARD recognises. What the control establishes is
-narrower and still worth having: the pipeline does not manufacture composite
-transposons where none were placed.
+some may genuinely flank cargo. What the control establishes is narrower and
+still worth having: the pipeline does not manufacture composite transposons
+where none were placed.
 
-Both are 35–38 kb cycles whose IS and CARD hit sit some 30 kb apart — an IS and
-a resistance gene in one chromosomal neighbourhood, not an element bounded by
-two copies of one IS. score3 scores them 31.1 and 26.6, because length gates
-there rather than contributing 20% of the total; this is the case that motivated
-that change (ROADMAP §7).
+The candidates are the same native repeat structures that make the unmatched
+cycle rate in the implanted runs unremarkable — a genome with no implants at all
+still closes 12–22 cycles, so those unmatched candidates are overwhelmingly the
+host's, not artefacts of the implants.
+
+Most of the rejection is done by the length gate. MG1655's native repeats close
+large cycles, a median of 21 kb against 3.9 kb for implanted elements, and
+score3 gates on length rather than weighting it, so an oversized candidate is
+rejected outright however good its homology. Removing that gate drops precision
+on the implanted benchmark from 91% to 47%.
 
 ### 3.7 Does the assembly already answer the question?
 
 If the elements can be read off the contigs, neither the assembly graph nor
-PICOTA is needed. Measured on the same assemblies, counting an element as
-recovered only when a *single* contig carries at least 95% of it in one
+PICOTA is needed. Measured on the same assemblies, across 520 implanted elements
+spanning six architectures and seven copy levels, counting an element as
+recovered only when a *single* contig or cycle carries at least 95% of it in one
 contiguous alignment:
 
-| route | intact | on a 14-copy IS | on a 2-copy IS |
+| route | recovered | missed | |
 |---|---|---|---|
-| SPAdes contigs | 3/8 | 0/4 | 3/4 |
-| MEGAHIT contigs | 0/8 | 0/4 | 0/4 |
-| PICOTA, SPAdes graph | **8/8** | **4/4** | **4/4** |
+| MEGAHIT contigs | 0/520 | 520 | 0% |
+| SPAdes contigs | 94/520 | 426 | 18% |
+| PICOTA, MEGAHIT graph | 188/520 | 332 | 36% |
+| PICOTA, SPAdes graph | **480/520** | 40 | **92%** |
 
-Across the eight-run sweep, 26 of 80 elements are intact in a SPAdes contig.
-Assembly fails exactly where the IS is multi-copy: two copies leave two possible
-pairings that paired-end links usually settle, fourteen do not. The one two-copy
-element SPAdes could not resolve has the longest IS of the four, 1,828 bp against
-1,304, 1,449 and 1,602 — consistent with repeat length as a second limit, on
-four cases.
+The gap is not uniform, and the conditions under which it opens are the point:
+
+| architecture | IS copies | SPAdes contigs | SPAdes graph |
+|---|---|---|---|
+| baseline | 2 | 52% | 100% |
+| baseline | 3 | 5% | 100% |
+| baseline | 8 | 0% | 100% |
+| compact | 2 | **78%** | 100% |
+| compact | 3 | 7.5% | 100% |
+| cargo_is_diff | 2 | 0% | 95% |
+| shared_is | 16 | 0% | 100% |
+
+**Copy number decides, not element size.** `compact` implants the smallest
+elements in the benchmark — a 700–900 bp IS around one cargo gene — which is the
+easiest thing a contig can carry whole, and at two copies it gives the best
+contig recovery anywhere at 78%. One additional genomic copy of the flanking IS
+takes it to 7.5%, the same factor `baseline` loses going from 52% to 5%.
+
+**An internal repeat is fatal on its own.** `cargo_is_diff` carries a two-copy
+flanking IS, the easy case, but a second different IS inside its cargo. Contig
+recovery is zero.
+
+Two copies is therefore close to the ceiling for a contig-based method, not a
+typical case: insertion sequences in real genomes are rarely present in only two
+copies. A contig-based tool run on real data should be expected to perform below
+these figures rather than at them.
 
 Summing several alignments from one contig would not do: a contig holding only
 IS+cargo aligns twice to an IS-cargo-IS element, once at each flanking copy, and
 appears complete while missing an entire IS.
 
-### 3.8 Predicted baseline
+### 3.8 Deduplication, measured rather than predicted
 
-Copy-distinctness recall is expected to be poor before phases 2 and 3 land. On
-synthetic graphs the current deduplication caps output at two candidates
-irrespective of ground truth (2/3, 2/4, 2/5 — defect D2 in
-[ROADMAP.md](ROADMAP.md)). The benchmark exists to measure that on real data and
-to demonstrate the improvement afterwards.
+An earlier version of this section predicted that copy-distinctness recall would
+be poor, because deduplication capped output at two candidates irrespective of
+ground truth (defect D2). That prediction is superseded: under `dedup_mode:
+strict` the benchmark recovers four distinct elements per genome in every
+scenario except `cargo_is_same`, including `shared_is`, where four elements
+share one insertion sequence present in sixteen genomic copies and all four are
+returned (§3.5). The cap no longer applies.
+
+### 3.9 Against MobileElementFinder
+
+MobileElementFinder 1.1.2 (Johansson et al. 2021) predicts composite transposons
+from assembled sequence, so both tools can be scored against one ground truth
+without a format translation favouring either. Run on the same genomes, with the
+same 95% coverage and identity criterion, across 240 elements at six copy levels:
+
+| route | 2 copies | 3 | 4 | 8 |
+|---|---|---|---|---|
+| PICOTA, SPAdes graph | **100%** | **100%** | **100%** | **100%** |
+| MEF on the true chromosome | 98% | 98% | 98% | 98% |
+| MEF on SPAdes contigs | 52% | 5% | 10% | 0% |
+| MEF on MEGAHIT contigs | 0% | 0% | 0% | 0% |
+
+The second row is what makes the comparison fair rather than flattering. Run on
+the true chromosome — a perfect assembly — MobileElementFinder recovers 98% at
+every copy level. Copy number does not degrade the tool; it degrades the assembly
+the tool has to read. Without that row, "the tool missed these" could not be
+separated from "the assembly lost these".
+
+Its detection reads assembled contigs — fastq input only annotates depth in its
+GFF output — so it inherits whatever the assembler collapsed. The claim
+generalises past this one tool to any contig-based detector.
+
+Two findings from this comparison are worth recording separately:
+
+**Matching rule.** An earlier version of this table credited MobileElementFinder
+with six recoveries from MEGAHIT contigs. Those were an artefact of unioning
+alignment positions: each prediction matched the element in two separate places,
+once at each flanking IS, and the union made a fragment look complete. Their
+longest single alignments cover 64–81% of the element. MobileElementFinder emits
+the element as a linear sequence, so it is scored by the single-alignment rule.
+PICOTA is scored on the union, and only because a cycle is the collapsed form —
+it carries one copy of the flanking IS where the element has two, so it cannot
+align to the whole element in one piece. Measured over 240 elements its longest
+single alignment spans a median 75% against 73% predicted for exactly "element
+minus one IS copy", with 205 of 240 within two points.
+
+**Database coverage bounds both tools, asymmetrically.** PICOTA's single
+`compact` miss is an element whose flanking ISHne6 is absent from its IS
+reference; MobileElementFinder's consistent 39/40 on perfect genomes is ISVa13,
+which PICOTA's reference does contain and which PICOTA recovers. Neither is an
+algorithmic failure and neither is fixed by better traversal or scoring.
+

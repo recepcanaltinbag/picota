@@ -25,6 +25,7 @@ import argparse
 import collections
 import csv
 import glob
+import hashlib
 import json
 import os
 import statistics
@@ -61,12 +62,36 @@ def axis_of(case_dir, params):
 
 
 def read_cases(roots):
+    """
+    Cases across every run directory, skipping genomes catalogued twice.
+
+    Two run directories can hold the identical genome: the scenario sweep's
+    baseline and the copy sweep's two-copy level are generated from the same
+    seed with the same parameters, so their FASTA files are byte-identical and
+    their elements are the same elements. Counting both inflated the catalogue
+    from 520 elements to 560 and double-weighted their IS families in every
+    distribution below.
+
+    Identity is decided on the genome's checksum rather than on the directory
+    name, because the names carry no indication that the two coincide.
+    """
+    seen = {}
     for root in roots:
         source = os.path.basename(os.path.normpath(root))
         for case in sorted(glob.glob(os.path.join(root, "*"))):
             tsv = os.path.join(case, "ground_truth.tsv")
             if not os.path.isfile(tsv):
                 continue
+            genome = os.path.join(case, "genome.fasta")
+            if os.path.exists(genome):
+                with open(genome, "rb") as handle:
+                    digest = hashlib.md5(handle.read()).hexdigest()
+                if digest in seen:
+                    print("[skip] %s/%s: same genome as %s"
+                          % (source, os.path.basename(case), seen[digest]),
+                          file=sys.stderr)
+                    continue
+                seen[digest] = "%s/%s" % (source, os.path.basename(case))
             params = {}
             payload_path = os.path.join(case, "ground_truth.json")
             if os.path.exists(payload_path):

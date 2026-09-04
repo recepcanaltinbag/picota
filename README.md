@@ -315,6 +315,26 @@ the value `threshold_final_score` ships with.
 Measured on 480 implanted elements across 120 simulated genomes, plus 10
 wild-type controls (see [docs/VALIDATION.md](docs/VALIDATION.md)):
 
+520 composite transposons implanted into 130 simulated genomes, six
+architectures and seven IS copy levels, plus ten wild-type controls.
+
+**What assembly alone leaves behind**, counting an element as recovered only
+when a single contig or cycle carries ≥95% of it in one alignment:
+
+| Route | Found | Missed | |
+|---|---|---|---|
+| MEGAHIT contigs | 0/520 | 520 | 0% |
+| SPAdes contigs | 94/520 | 426 | 18% |
+| PICOTA on the MEGAHIT graph | 188/520 | 332 | 36% |
+| **PICOTA on the SPAdes graph** | **480/520** | 40 | **92%** |
+
+The gap depends on the structure. Where nothing repeats inside the element and
+the flanking IS has two genomic copies, SPAdes contigs reach 52–78%. One extra
+copy of that IS takes them to 5–7.5%; a repeat inside the element takes them to
+zero. The graph holds 95–100% throughout.
+
+**After scoring**, per architecture:
+
 | Scenario | Sensitivity | Precision |
 |---|---|---|
 | `baseline` — unique IS, CARD cargo | 92.5% | 97.4% |
