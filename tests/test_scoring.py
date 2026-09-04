@@ -10,6 +10,7 @@ Tested fonksiyonlar:
   - parsing_blast_file_grouped() / parsing_blast_file_merged_grouped()
   - concat_fasta()
   - xenobiotic_names()
+  - src.stale_output
 """
 
 import sys
@@ -31,6 +32,7 @@ from src.scoringv4ProtBlast import (
     concat_fasta,
     xenobiotic_names,
 )
+from src import stale_output
 
 
 # ─────────────────────────────────────────────
@@ -494,3 +496,95 @@ class TestXenobioticNames:
 
     def test_none_does_not_raise(self):
         assert xenobiotic_names(None) == (None, None)
+
+
+# ─────────────────────────────────────────────
+# Reusing a previous run's output
+# ─────────────────────────────────────────────
+
+class TestStaleOutput:
+    """
+    The pipeline skips work whose output exists, which is what makes a long run
+    resumable and also how a result outlives its inputs. These fix the second
+    without giving up the first.
+    """
+
+    def test_output_without_a_sidecar_is_never_current(self, tmp_path):
+        """An interrupted run leaves a truncated table and no sidecar."""
+        out = tmp_path / "blast.out"
+        out.write_text("half a table\n")
+        src = tmp_path / "query.faa"
+        src.write_text(">q\nMKV\n")
+
+        sig = stale_output.signature(inputs=[str(src)])
+
+        assert stale_output.is_current(str(out), sig) is False
+
+    def test_recorded_output_is_reused(self, tmp_path):
+        out = tmp_path / "blast.out"
+        out.write_text("a table\n")
+        src = tmp_path / "query.faa"
+        src.write_text(">q\nMKV\n")
+
+        sig = stale_output.signature(inputs=[str(src)])
+        stale_output.record(str(out), sig)
+
+        assert stale_output.is_current(str(out), sig) is True
+
+    def test_a_changed_input_invalidates_the_output(self, tmp_path):
+        out = tmp_path / "blast.out"
+        out.write_text("a table\n")
+        db = tmp_path / "refs.fasta"
+        db.write_text(">ref\nMKV\n")
+        stale_output.record(str(out), stale_output.signature(inputs=[str(db)]))
+
+        db.write_text(">ref\nMKVQQ\n")   # database rebuilt
+
+        assert stale_output.is_current(
+            str(out), stale_output.signature(inputs=[str(db)])) is False
+
+    def test_touching_a_file_without_changing_it_keeps_the_output(self, tmp_path):
+        """
+        A checkout, a copy or an rsync moves mtime without changing a byte.
+        Redoing a whole phase for that is its own wrong answer.
+        """
+        out = tmp_path / "blast.out"
+        out.write_text("a table\n")
+        db = tmp_path / "refs.fasta"
+        db.write_text(">ref\nMKV\n")
+        stale_output.record(str(out), stale_output.signature(inputs=[str(db)]))
+
+        os.utime(str(db), (0, 0))
+
+        assert stale_output.is_current(
+            str(out), stale_output.signature(inputs=[str(db)])) is True
+
+    def test_a_changed_scalar_invalidates_the_output(self, tmp_path):
+        out = tmp_path / "blast.out"
+        out.write_text("a table\n")
+        stale_output.record(str(out), stale_output.signature(extra={"outfmt": "6 qseqid"}))
+
+        assert stale_output.is_current(
+            str(out), stale_output.signature(extra={"outfmt": "6 qseqid stitle"})) is False
+
+    def test_a_missing_input_is_part_of_the_signature(self, tmp_path):
+        """A search run while a database was absent must not survive its arrival."""
+        out = tmp_path / "blast.out"
+        out.write_text("empty\n")
+        db = tmp_path / "refs.fasta"
+        stale_output.record(str(out), stale_output.signature(inputs=[str(db)]))
+
+        db.write_text(">ref\nMKV\n")
+
+        assert stale_output.is_current(
+            str(out), stale_output.signature(inputs=[str(db)])) is False
+
+    def test_discard_removes_the_sidecar_too(self, tmp_path):
+        out = tmp_path / "blast.out"
+        out.write_text("a table\n")
+        stale_output.record(str(out), stale_output.signature())
+
+        stale_output.discard(str(out))
+
+        assert not out.exists()
+        assert not os.path.exists(stale_output.signature_path(str(out)))

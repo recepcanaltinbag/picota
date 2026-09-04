@@ -301,28 +301,53 @@ def make_blast_db(path_of_makeblastdb, db_input, db_output, db_type="nucl"):
     logger.info(f"[+] BLAST DB created: {db_output} ({db_type})")
 
 
-BLAST_THREADS = int(os.environ.get('PICOTA_BLAST_THREADS', '4'))
+try:
+    from src import stale_output
+except ImportError:  # direct execution with src/ on the path
+    import stale_output
 
 
-def run_blast(path_of_blast, query, database, output, threads=None):
+BLAST_THREADS = int(os.environ.get('PICOTA_BLAST_THREADS', '8'))
+
+BLAST_OUTFMT = ('6 qseqid sseqid pident length mismatch gapopen qstart qend '
+                'sstart send evalue bitscore slen qlen')
+
+
+def run_blast(path_of_blast, query, database, output, threads=None, db_source=None):
     """
-    One BLAST search, threaded.
+    One BLAST search, threaded, reused only when its inputs have not moved.
 
     The searches ran single-threaded, which dominated scoring: a case took about
-    a minute on a 24-core machine that sat at a load of five. The reference
-    databases are the query here (the cycle is the database), so the protein
-    searches against CARD and the xenobiotics set are the slow ones, and they
-    parallelise well.
+    a minute on a 24-core machine that sat at a load of five. Eight threads,
+    measured on the batched query of forty real cycles against the 82k-sequence
+    xenobiotic set: 62.0 s at one thread, 15.4 s at four, 9.7 s at eight, 9.1 s
+    at sixteen and 8.5 s at twenty-four. Eight is where the curve flattens, and
+    two workers at eight threads leave room on a 24-core machine for the
+    assembler running beside them. Hits are identical at every thread count.
+    PICOTA_BLAST_THREADS overrides it for callers that run several cases at once
+    and would otherwise oversubscribe the machine.
 
-    PICOTA_BLAST_THREADS overrides the default for callers that already run
-    several cases at once and would otherwise oversubscribe the machine.
+    Reuse is decided by src.stale_output rather than by whether the output file
+    exists: an interrupted search leaves a truncated table, and its existence
+    was previously enough to make every later run accept it. `db_source` is the
+    reference FASTA behind `database`, which is only a BLAST index prefix and so
+    cannot be hashed itself.
     """
-    if not os.path.exists(output):
-        extras = '"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore slen qlen"'
-        args = (f'{path_of_blast} -db {database} -query {query} -out {output} '
-                f'-outfmt {extras} -num_threads {threads or BLAST_THREADS}')
-        subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    sig = stale_output.signature(
+        inputs=[path for path in (query, db_source) if path],
+        extra={'program': os.path.basename(path_of_blast),
+               'outfmt': BLAST_OUTFMT,
+               'database': os.path.basename(database)},
+    )
+    if stale_output.is_current(output, sig):
+        return
+
+    stale_output.discard(output)
+    args = (f'{path_of_blast} -db {database} -query {query} -out {output} '
+            f'-outfmt "{BLAST_OUTFMT}" -num_threads {threads or BLAST_THREADS}')
+    subprocess.run(args, shell=True, executable='/bin/bash', text=True, check=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    stale_output.record(output, sig)
 
 
 def _load_blast_table(blast_result_file):
@@ -500,7 +525,7 @@ def blast_driver(path_of_makeblastdb, path_of_blast, out_blast_folder, db_path, 
 
     try:
         make_blast_db(path_of_makeblastdb, db_input, db_output, db_type=db_type)
-        run_blast(path_of_blast, blast_query, db_output, result_path)
+        run_blast(path_of_blast, blast_query, db_output, result_path, db_source=db_path)
     except Exception as e:
         raise UserWarning('Blast Error') from e
     if r_type == "CompTNs":
@@ -573,10 +598,10 @@ def blast_driver_batch(path_of_makeblastdb, path_of_blast, out_blast_folder, db_
     must now be resolved per cycle rather than per file, which is what the
     grouped parsers exist for.
 
-    Unlike blast_driver this never reuses an existing result file. The per-cycle
-    path could get away with it because its output name carried the cycle id;
-    a batch file is named for the run, and silently reusing one from a previous
-    run would score the wrong sequences.
+    A batch result file is named for the run rather than for a cycle, so reusing
+    one blindly would score the wrong sequences. run_blast decides that from the
+    signature of the query and the reference set, which also gives a batched run
+    a real resume: unchanged cycles hash the same and the search is skipped.
     """
     db_dir = os.path.join(db_out_path, "blast_temp")
     db_output = os.path.join(db_dir, os.path.basename(db_path))
@@ -591,9 +616,7 @@ def blast_driver_batch(path_of_makeblastdb, path_of_blast, out_blast_folder, db_
 
     try:
         make_blast_db(path_of_makeblastdb, db_path, db_output, db_type=db_type)
-        if os.path.exists(result_path):
-            os.remove(result_path)
-        run_blast(path_of_blast, blast_query, db_output, result_path)
+        run_blast(path_of_blast, blast_query, db_output, result_path, db_source=db_path)
     except Exception as e:
         raise UserWarning('Blast Error') from e
 
