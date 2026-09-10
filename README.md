@@ -23,13 +23,13 @@ PICOTA enumerates those cycles and scores them, so composite transposons can be
 recovered from draft assemblies that never resolved them into contigs.
 
 ```
-     [ IS ] ──── [ cargo ] ──── [ IS ]          in the genome
-                    ↓
-     both IS copies collapse into one node       in the assembly graph
-                    ↓
-              ┌── IS ──┐
-              │        │                          a cycle: IS + cargo,
-              └─ cargo ┘                          shorter than the element
+  in the genome        [ IS ]───[ cargo ]───[ IS ]
+                                    │
+                                    │  the assembler cannot tell the two
+                                    ▼  IS copies apart and collapses them
+                                ┌──[IS]──┐
+  in the graph                  │        │   a cycle of IS + cargo,
+                                └─[cargo]┘   shorter than the element itself
 ```
 
 Measured on 520 implanted elements across 130 simulated genomes: **95.0%
@@ -39,9 +39,44 @@ the threshold. The sixth scenario — where the flanking IS also occurs inside t
 cargo — recovers 5%, and the loss is in detection rather than scoring. Per
 scenario numbers are in [Scoring](#scoring).
 
+### Contents
+
+| | |
+|---|---|
+| [Pipeline](#pipeline) · [Why not just read the contigs?](#why-not-just-read-the-contigs) | What it does and why the graph |
+| [Installation](#installation) · [Quick start](#quick-start) | Getting it running |
+| [Reference databases](#reference-databases) · [Configuration reference](#configuration-reference) | What it searches, and every knob |
+| [Output](#output) · [Scoring](#scoring) | What comes back, and what the numbers mean |
+| [Performance](#performance) · [Algorithm details](#algorithm-details) | How it spends its time, and how it works |
+| [Testing](#testing) · [Troubleshooting](#troubleshooting) | When something is wrong |
+
 ---
 
 ## Pipeline
+
+```mermaid
+flowchart LR
+    R([Reads]) --> A[Assembly]
+    A --> G[(Assembly graph)]
+    G --> C[Cycle detection]
+    C --> P[Gene prediction]
+    P --> B[Homology search]
+    C --> B
+    B --> S[Scoring]
+    S --> O([Ranked transposons])
+    L([Long reads]) -.-> O
+
+    %% explicit text colour: the fills are light, and GitHub's dark theme would
+    %% otherwise draw light labels on them
+    style G fill:#e8f0fe,stroke:#4285f4,color:#202124
+    style O fill:#e6f4ea,stroke:#34a853,color:#202124
+    style L stroke-dasharray: 4 4
+```
+
+<details>
+<summary><b>Tools and outputs, stage by stage</b></summary>
+
+<br>
 
 | | Stage | Tool | Produces |
 |---|---|---|---|
@@ -53,6 +88,8 @@ scenario numbers are in [Scoring](#scoring).
 | 6 | Scoring | length, structure, cargo quality | ranked table |
 | 7 | Boundary annotation | IS/cargo split | GenBank |
 | 8 | Long-read validation *(optional)* | minimap2 | circular-read evidence |
+
+</details>
 
 Stages 3–7 can be run alone on an existing GFA.
 
@@ -213,13 +250,14 @@ Four reference sets are searched, configured by path in `config.yaml`.
    - Format: FASTA (proteins), 16,539 sequences
    - Header: `accession|KO:K16045|EC:1.1.1.145|PATH:map00984|description|organism`
 
-   **Headers must not contain spaces.** BLAST's `sseqid` is the header up to its
-   first space, so a description written with spaces is cut mid-word and the
-   KO/EC provenance never reaches a result table — which is what happened to all
-   16,539 headers of the first build. The builder writes descriptions and
-   organism names with underscores for that reason. A custom set can use any
-   header; PICOTA reads the KEGG fields when they are present and otherwise
-   passes the name through unchanged.
+> [!IMPORTANT]
+> **Headers must not contain spaces.** BLAST's `sseqid` is the header up to its
+> first space, so a description written with spaces is cut mid-word and the
+> KO/EC provenance never reaches a result table — which is what happened to all
+> 16,539 headers of the first build. The builder writes descriptions and organism
+> names with underscores for that reason. A custom set can use any header; PICOTA
+> reads the KEGG fields when they are present and otherwise passes the name
+> through unchanged.
 
 ---
 
@@ -255,6 +293,16 @@ A tidy, analysis-ready CSV automatically generated alongside `picota_final_tab`.
 Each CT gets a unique tag (`CT001`, `CT002`, …). When a CT carries genes from
 multiple antibiotic classes it is expanded to one row per class.
 
+> [!WARNING]
+> `Score` in this file is **score0**, not the score the gate uses. `total_score_type`
+> ships as 3, but the enriched CSV reads score0 and does not carry score3 at all.
+> Read score3 from `picota_final_tab` until the two are reconciled.
+
+<details>
+<summary><b>Columns</b></summary>
+
+<br>
+
 | Column | Description |
 |--------|-------------|
 | `CT_Tag` | Unique composite transposon tag (`CT001`, …) |
@@ -262,7 +310,7 @@ multiple antibiotic classes it is expanded to one row per class.
 | `CycleID` | Original cycle identifier |
 | `SRA_ID` | Source sample accession |
 | `CT_Length_bp` | Total cycle length in base pairs |
-| `Score` | score0 — **not** the score the gate uses. `total_score_type` ships as 3, but the enriched CSV reads score0 and does not carry score3 at all. Read score3 from `picota_final_tab` until this is reconciled |
+| `Score` | Primary score — see the warning above |
 | `NumIS` | Number of IS elements detected |
 | `IS_Group` | IS superfamily group (e.g., `IS6`, `IS3`) |
 | `IS_Family` | IS family name (e.g., `IS26`, `ISEcp`) |
@@ -276,6 +324,8 @@ multiple antibiotic classes it is expanded to one row per class.
 | `NumCompTN` | Number of known CompTn database matches |
 | `Known_CompTN` | Matched known composite transposon name(s) |
 
+</details>
+
 ---
 
 ## Scoring
@@ -287,8 +337,10 @@ separates the two.
 
 ### Choosing a scoring mode
 
-`total_score_type` selects the formula. **Use `3`.** The others are kept because
-published results reference them.
+> [!TIP]
+> `total_score_type` selects the formula. **Use `3`** — it is the only bounded one
+> and the only one that can report an element whose cargo is in no database. The
+> others are kept because published results reference them.
 
 | Mode | Range | Behaviour |
 |------|-------|-----------|
@@ -351,14 +403,15 @@ top of this README covers detection; this one covers what survives scoring.
 On ten wild-type genomes with nothing implanted, 180 candidate cycles are
 detected and **none** clear the threshold.
 
-Two limits worth knowing before relying on the score:
-
-- **`cargo_is_same` is not solved.** When the flanking IS also occurs inside the
-  cargo, only 2 of 40 elements are covered by any candidate cycle at all. The
-  loss is in detection, not scoring, so no threshold recovers it.
-- **The IS gate did not discriminate here.** All 1272 candidate cycles carried
-  an IS hit, so the gate rejected nothing. It is kept because it is
-  definitionally required, not because it was shown to filter.
+> [!NOTE]
+> Two limits worth knowing before relying on the score:
+>
+> - **`cargo_is_same` is not solved.** When the flanking IS also occurs inside
+>   the cargo, only 2 of 40 elements are covered by any candidate cycle at all.
+>   The loss is in detection, not scoring, so no threshold recovers it.
+> - **The IS gate did not discriminate here.** All 1272 candidate cycles carried
+>   an IS hit, so the gate rejected nothing. It is kept because it is
+>   definitionally required, not because it was shown to filter.
 
 Detection deliberately casts wide — about 23 candidates per genome to find 4
 elements, a precision of 17% — and scoring takes that to 90.9% while keeping 95%
@@ -499,7 +552,9 @@ loaded machine without anything being wrong.
 
 ## Troubleshooting
 
-**Nothing is reported, or every score is 0.**
+<details>
+<summary><b>Nothing is reported, or every score is 0.</b></summary>
+
 Check the four database paths in `config.yaml`. A path that does not resolve is
 skipped with a warning in the log rather than failing the run, and for the IS
 set that is fatal to the output: no IS hit means `IS_gate` is 0, so every
@@ -507,20 +562,32 @@ candidate scores 0 and the table comes back empty. `Found Cycle Files` in the
 log confirms detection ran; an empty result under a populated `cycles/` points
 at the databases, not at the graph.
 
-**`prodigal: command not found`**
+</details>
+
+<details>
+<summary><b><code>prodigal: command not found</code></b></summary>
+
 ```bash
 conda install -c bioconda prodigal
 ```
 Or set `path_of_prodigal` in `config.yaml` to the binary. The same applies to
 `path_of_blastn`, `path_of_blastp` and `path_of_makeblastdb`.
 
-**`WARNING: N path search(es) hit path_limit=25 and were cut short`**
+</details>
+
+<details>
+<summary><b><code>WARNING: N path search(es) hit path_limit=25 and were cut short</code></b></summary>
+
 The enumeration was not exhaustive. It does not prove candidates were lost — a
 truncated branch may have dead-ended anyway — so settle it by re-running with a
 higher `path_limit` and comparing the candidate count. On the bundled graph,
 raising 25 to 50 truncates nothing and returns the same 35 paths.
 
-**Fewer candidates than expected on a genome that should carry elements.**
+</details>
+
+<details>
+<summary><b>Fewer candidates than expected on a genome that should carry elements.</b></summary>
+
 Two defaults account for most of this:
 - `min_size_of_cycle` — the cycle is IS + cargo, not IS + cargo + IS, so a
   compact element yields a cycle shorter than itself. At 2000 the benchmark
@@ -529,18 +596,32 @@ Two defaults account for most of this:
   deletes real composite transposons that share an IS but carry different cargo.
   `strict` keeps them. See [ROADMAP §2](docs/ROADMAP.md).
 
-**`Xenoproducts` shows bare accessions instead of gene functions.**
+</details>
+
+<details>
+<summary><b><code>Xenoproducts</code> shows bare accessions instead of gene functions.</b></summary>
+
 The xenobiotic FASTA has spaces in its headers. BLAST cuts `sseqid` at the first
 space; see [Reference databases](#reference-databases).
 
-**A test is skipped with a `samtools` message.**
+</details>
+
+<details>
+<summary><b>A test is skipped with a <code>samtools</code> message.</b></summary>
+
 `libncurses.so.5` is missing on the system. It affects that test only, not the
 pipeline.
 
-**No GFA produced by assembly.**
+</details>
+
+<details>
+<summary><b>No GFA produced by assembly.</b></summary>
+
 Check the assembler log under `assembly/<accession>/`. With MEGAHIT the graph is
 converted from FASTG, so `gfa_tools_path` in `config.yaml` must point at a
 working `fastg2gfa`.
+
+</details>
 
 ---
 
