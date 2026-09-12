@@ -98,6 +98,17 @@ class OptionsConfig:
     path_of_blastx: str
     path_of_blastp: str
     split_min_score: int
+    # Wall clock for cycle detection on one graph. Traversal with
+    # find_all_path enumerates paths depth-first, so a dense graph can run for
+    # hours while SPAdes -- which does have a cap -- finished in minutes. One
+    # such graph holds the whole queue. None keeps the previous unbounded
+    # behaviour.
+    cycle_timeout_s: int = None
+    # Deterministic bound on graph traversal: how many DFS expansions one path
+    # search may spend before it is abandoned. Preferred over cycle_timeout_s
+    # because the same graph gives the same answer on any machine. None keeps
+    # the previous unbounded behaviour.
+    max_path_expansions: int = None
     # 'legacy' reproduces the historical deduplication exactly; 'strict' uses
     # src.cycle_dedup, which never discards a candidate for merely sharing a
     # repeat node with an accepted one. See docs/ROADMAP.md phase 2.

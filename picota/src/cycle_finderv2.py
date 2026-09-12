@@ -84,6 +84,19 @@ class GraphWork:
         self.visited = set()
         self.find_all_path = False
         self.path_limit = 15
+        # A budget on work, not on depth. path_limit caps how long a path may
+        # be; it does not cap how many paths are tried, and the search below is
+        # exponential in the branching factor -- one 1,130-segment graph ran for
+        # more than six hours under path_limit 25. Counting expansions bounds
+        # that, and unlike a wall clock it is deterministic: the same graph
+        # yields the same output on any machine, which a published analysis
+        # needs. None keeps the previous unbounded behaviour.
+        self.max_expansions = None
+        self.expansions = 0
+        self.budget_exhausted = False
+        # Searches abandoned because the budget ran out, as distinct from
+        # searches cut at path_limit.
+        self.exhausted_searches = 0
         # How many searches stopped at path_limit. A non-zero count means the
         # enumeration was not exhaustive, so completeness cannot be claimed --
         # it does NOT prove candidates were lost, since a truncated branch may
@@ -210,7 +223,18 @@ class GraphWork:
 
     #Careful it is exponential time because it is NP Hard
     def findAllPosPaths(self, graph, src, dest, path, reverse):
-        
+
+        if self.budget_exhausted:
+            return
+        if self.max_expansions is not None:
+            self.expansions += 1
+            if self.expansions > self.max_expansions:
+                # Unwind the whole search rather than this branch: a budget
+                # spent unevenly across branches would make the result depend
+                # on adjacency order, which is not a property to report.
+                self.budget_exhausted = True
+                return
+
         self.visited.add(src)
         path.append(src)
 
@@ -232,12 +256,16 @@ class GraphWork:
     def capturePaths(self, graph, src, dest, reverse):
         path = []
         self.visited = set()
+        self.expansions = 0
+        self.budget_exhausted = False
         try:
             self.findAllPosPaths(graph, src, dest, path, reverse)
         except RecursionError:
             print('Recursion Error happened try with another settings, finding all paths can not be possible!')
         except Exception as e:
             print(e,'Unkown error happened, , finding all paths can not be possible!, try with simple path setting!')
+        if self.budget_exhausted:
+            self.exhausted_searches += 1
 
 
     def isReachable(self, graph, src, dest, discovered, path):
@@ -540,7 +568,7 @@ def cycle_match_based_on_contig_id(path, nodes_len, new_parts, threshold=70):
     return True
 
 
-def cycle_info_optimized(path, nodes, edges, cycle_info_list):
+def cycle_info_optimized(path, nodes, edges, cycle_info_list, seen_sequences=None):
     component_number = len(path)
     total_lem = 0
 
@@ -575,11 +603,26 @@ def cycle_info_optimized(path, nodes, edges, cycle_info_list):
     # Reverse complement calculation done only once
     reverse_final_seq = reverse_complement(the_final_seq)
 
-    # Check for exact match with existing cycles
-    for elm in cycle_info_list:
-        if (elm.sequence == the_final_seq or elm.sequence == reverse_final_seq):
+    # Check for exact match with existing cycles.
+    #
+    # The scan this replaces was linear in the cycles already accepted and
+    # compared whole assembled sequences, so the pass over one graph's
+    # candidates cost O(n^2) string comparisons of tens of kilobases each. On a
+    # 1,130-segment graph yielding 7,572 candidates that ran for hours while the
+    # rest of the pipeline waited. The test is exact equality either way round,
+    # which a set answers in one hash of a string that was just built anyway.
+    #
+    # seen_sequences defaults to None so existing callers keep the old
+    # behaviour; the caller that passes a set owns it across the loop.
+    if seen_sequences is not None:
+        if the_final_seq in seen_sequences or reverse_final_seq in seen_sequences:
             return 'Pass'
-    
+        seen_sequences.add(the_final_seq)
+    else:
+        for elm in cycle_info_list:
+            if (elm.sequence == the_final_seq or elm.sequence == reverse_final_seq):
+                return 'Pass'
+
     # Return a new Cycle object if no match is found
     node_depths = [nodes[node].get("Depth") for node in path]
     return Cycle('name', the_final_seq, len(the_final_seq), component_number, path,
@@ -671,7 +714,8 @@ def write_depth_report(out_cycle_file, cycles):
 
 
 def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_size_of_cycle, max_size_of_cycle, name_prefix_cycle, min_component_number, max_component_number, k_mer_sim, threshold_sim, dedup_mode='legacy', dedup_min_ani=99.0,
-                   dedup_min_jaccard=0.85, dedup_kmer_size=DEDUP_KMER_SIZE):
+                   dedup_min_jaccard=0.85, dedup_kmer_size=DEDUP_KMER_SIZE,
+                   max_expansions=None):
     """
     dedup_mode: 'legacy' reproduces the historical behaviour exactly.
     'strict' uses src.cycle_dedup, which never discards a candidate for merely
@@ -719,6 +763,10 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     GW = GraphWork()
     GW.find_all_path = find_all_path
     GW.path_limit = path_limit
+    # path_limit bounds path length; max_expansions bounds the search itself.
+    # Without it the traversal is exponential in the branching factor and a
+    # dense graph can run for hours -- see GraphWork.max_expansions.
+    GW.max_expansions = max_expansions
 
     print('Parsing the GFA File')
     node_dict, edge_dict = GW.parse_gfa(path_to_data)
@@ -745,6 +793,11 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
 
 
     print('Finding Paths from cycles...')
+    if GW.exhausted_searches:
+        print(f'WARNING: {GW.exhausted_searches} path search(es) hit '
+              f'max_expansions={max_expansions} and were abandoned. The '
+              f'enumeration is not exhaustive for this graph; raise the budget '
+              f'and compare to find out what, if anything, was missed.')
     if GW.truncated_searches:
         print(f'WARNING: {GW.truncated_searches} path search(es) hit path_limit='
               f'{path_limit} and were cut short, so this enumeration is not '
@@ -786,13 +839,15 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
                 new_paths.append(path)
     
 
+    seen_sequences = set()
     for path in new_paths:
         i_count += 1
 
         print_progress_bar(i_count, len(new_paths), prefix='Processing:', suffix='Complete')
 
         
-        cycle_inf_obj = cycle_info_optimized(path, node_dict, edge_dict, cycle_info_list)
+        cycle_inf_obj = cycle_info_optimized(path, node_dict, edge_dict, cycle_info_list,
+                                             seen_sequences)
         if cycle_inf_obj == None:
             print('An error occured')
             continue
@@ -811,12 +866,24 @@ def cycle_analysis(path_to_data, out_cycle_file, find_all_path, path_limit, min_
     print(cycle_info_list)
     print('\nReverse Paths reducing:')
     i_count_2 = 0
-    len_total_rev = len (GW.reverseallPaths) 
-    for path in GW.reverseallPaths:
+    # Deduplicate before assembling sequences, as the forward pass already does.
+    # Two reverse paths with the same canonical key build the same sequence and
+    # the second is discarded as an exact match anyway -- but only after paying
+    # for its assembly, and there were 21,759 of them on the graph that prompted
+    # this against 7,572 forward paths. Same output, less work.
+    reverse_paths = dedup_paths(GW.reverseallPaths)
+    print('Reverse Paths after dedup: ', len(reverse_paths))
+    len_total_rev = len(reverse_paths)
+    for path in reverse_paths:
         i_count += 1
         i_count_2 += 1
-        
-        cycle_inf_obj = cycle_info_optimized(path, node_dict, edge_dict, cycle_info_list)
+
+        # The same set as the forward pass, and for the same reason: this loop
+        # runs over every reverse path -- 21,759 of them on the graph that
+        # prompted this -- and without it each one rescans every cycle accepted
+        # so far, comparing whole sequences.
+        cycle_inf_obj = cycle_info_optimized(path, node_dict, edge_dict, cycle_info_list,
+                                             seen_sequences)
         if cycle_inf_obj == None:
             print('An error occured')
             continue
