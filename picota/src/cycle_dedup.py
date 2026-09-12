@@ -46,8 +46,17 @@ _COMPLEMENT = {"A": "T", "T": "A", "G": "C", "C": "G",
                "N": "N", "n": "n"}
 
 
+# A full translation table, so str.translate can do in C what a generator
+# expression over _COMPLEMENT did per base. Everything outside the table maps to
+# "N", which is what the dict lookup's default did. Profiling one dense graph:
+# reverse_complement was 9.4 million calls and 170 of 600 seconds, most of it in
+# the generator, the join, and one dict lookup per base.
+_RC_TABLE = {i: ord("N") for i in range(256)}
+_RC_TABLE.update({ord(b): ord(c) for b, c in _COMPLEMENT.items()})
+
+
 def reverse_complement(seq):
-    return "".join(_COMPLEMENT.get(base, "N") for base in reversed(seq))
+    return seq.translate(_RC_TABLE)[::-1]
 
 
 # ─── Path identity ───────────────────────────────────────────────────────────
@@ -131,10 +140,16 @@ def canonical_kmers(seq, k, circular=True):
         return Counter()
 
     window = seq + seq[:k - 1] if circular and len(seq) >= k else seq
+    # One reverse complement for the whole window instead of one per k-mer. The
+    # complement of window[i:i+k] is rc_window[L-i-k:L-i], so the slices are the
+    # same strings the loop built before -- a 40 kb cycle costs one call rather
+    # than forty thousand.
+    rc_window = reverse_complement(window)
+    length = len(window)
     counts = Counter()
-    for i in range(len(window) - k + 1):
+    for i in range(length - k + 1):
         kmer = window[i:i + k]
-        rc = reverse_complement(kmer)
+        rc = rc_window[length - i - k:length - i]
         counts[kmer if kmer <= rc else rc] += 1
     return counts
 
@@ -150,13 +165,22 @@ def multiset_jaccard(counts_a, counts_b):
     if not counts_a or not counts_b:
         return 0.0
 
+    # sum(max(a, b)) == sum(a) + sum(b) - sum(min(a, b)) for multisets, so the
+    # union needs no iteration of its own and only keys present in both can
+    # contribute to the intersection. Walking the smaller multiset with one
+    # lookup per key replaces building the union of both key sets and looking
+    # each key up twice: 442 million dict lookups in the profiled run.
+    total_a = sum(counts_a.values())
+    total_b = sum(counts_b.values())
+    if len(counts_a) > len(counts_b):
+        counts_a, counts_b = counts_b, counts_a
+    other = counts_b.get
     intersection = 0
-    union = 0
-    for kmer in counts_a.keys() | counts_b.keys():
-        a = counts_a.get(kmer, 0)
-        b = counts_b.get(kmer, 0)
-        intersection += min(a, b)
-        union += max(a, b)
+    for kmer, a in counts_a.items():
+        b = other(kmer)
+        if b:
+            intersection += a if a < b else b
+    union = total_a + total_b - intersection
     return intersection / union if union else 0.0
 
 
@@ -246,14 +270,25 @@ def filter_cycles_multiset(cycle_info_list, k_mer_sim, threshold_sim,
                 candidate_indices.update(kmer_index[kmer])
             for candidate in candidate_indices:
                 other_counts, other_length = accepted_counts[candidate]
+                # The three criteria are ANDed, so the cheapest decides first.
+                # Comparing two k-mer multisets of a 40 kb cycle costs tens of
+                # thousands of operations; the length ratio costs one division,
+                # and cycles from one graph differ in length far more often than
+                # they agree. Checking it first is the same predicate evaluated
+                # in a different order, not a different predicate -- and on a
+                # graph yielding some 3,400 cycles that all share nodes, it is
+                # the difference between a few million multiset comparisons and
+                # a few thousand.
+                if (min_ani is not None
+                        and length_ratio(cycle_el.length, other_length) < min_length_ratio):
+                    continue
                 jaccard = multiset_jaccard(counts, other_counts)
                 if min_ani is None:
                     if jaccard >= threshold:
                         is_duplicate = True
                         break
                 elif (jaccard >= min_jaccard
-                      and estimated_ani(jaccard, k_mer_sim) >= min_ani
-                      and length_ratio(cycle_el.length, other_length) >= min_length_ratio):
+                      and estimated_ani(jaccard, k_mer_sim) >= min_ani):
                     is_duplicate = True
                     break
 
