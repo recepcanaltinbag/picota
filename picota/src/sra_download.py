@@ -27,12 +27,27 @@ def download_url(url, output_path):
         urllib.request.urlretrieve(url, filename=output_path, reporthook=t.update_to)
 
 
-def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, the_force, logger_name):
+def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, the_force, logger_name,
+                 expected_files=2):
+    """Download an SRA run and dump it to FASTQ.
+
+    `expected_files` is how many FASTQ files a complete dump leaves behind: 2 for
+    a paired Illumina run, 1 for a single-end one. It defaults to 2, which is
+    what every existing caller means.
+
+    It has to be a parameter because --split-files writes one file per read in
+    the spot, and long-read platforms have one. Hardcoding 2 made every Oxford
+    Nanopore and PacBio run fail its own completeness check after downloading
+    successfully: in phase 3 of the re-analysis, 32 of 36 samples fetched their
+    long reads -- one of them 20.9 GB -- and then threw them away as
+    "Incomplete FASTQ files", which is the entire purpose of that phase.
+    """
     global logger
     logger = logging.getLogger(logger_name)
 
     def _fastq_paths():
-        return [os.path.join(out_path, f"{sra_acc}_{i}.fastq") for i in (1, 2)]
+        return [os.path.join(out_path, f"{sra_acc}_{i}.fastq")
+                for i in range(1, expected_files + 1)]
 
     def _valid_fastqs():
         return [f for f in _fastq_paths() if os.path.exists(f) and os.path.getsize(f) > 0]
@@ -57,11 +72,11 @@ def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, 
         os.mkdir(os.path.join(out_dir, sra_acc))
 
     current_fastqs = _valid_fastqs()
-    if len(current_fastqs) == 2 and not the_force:
+    if len(current_fastqs) == expected_files and not the_force:
         logger.info(f"FASTQ already present for {sra_acc}, skipping download")
         return True
 
-    if os.path.exists(os.path.join(out_dir, sra_acc)) and not the_force and len(current_fastqs) < 2:
+    if os.path.exists(os.path.join(out_dir, sra_acc)) and not the_force and len(current_fastqs) < expected_files:
         logger.warning("Folder Exist but FASTQ incomplete; will re-download with force")
         _clear_partial()
         the_force = True
@@ -137,8 +152,9 @@ def run_sra_down(sra_acc, out_path, out_dir, path_of_fastq_dump, keep_sra_file, 
     logger.info('End of Fastq Dump')
 
     current_fastqs = _valid_fastqs()
-    if len(current_fastqs) != 2:
-        logger.warning(f"FASTQ download incomplete for {sra_acc} after dump ({len(current_fastqs)}/2)")
+    if len(current_fastqs) != expected_files:
+        logger.warning(f"FASTQ download incomplete for {sra_acc} after dump "
+                       f"({len(current_fastqs)}/{expected_files})")
         raise Exception("Incomplete FASTQ files")
 
     if keep_sra_file == False:
