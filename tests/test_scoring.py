@@ -394,9 +394,9 @@ class TestGroupedParsing:
         """
         rows = [
             # cycA: a strong Tn5 hit
-            ("cycA", "Tn5", 99.0, 900, 0, 0, 1, 900, 1, 900, 1e-50, 900, 900, 5000),
+            ("cycA", "Tn5", 99.0, 900, 0, 0, 1, 900, 1, 900, 1e-50, 900, 900, 1000),
             # cycB: a weaker but still reportable Tn3 hit -- (850/900)*95 = 89.7
-            ("cycB", "Tn3", 95.0, 850, 0, 0, 1, 850, 1, 850, 1e-40, 800, 900, 5000),
+            ("cycB", "Tn3", 95.0, 850, 0, 0, 1, 850, 1, 850, 1e-40, 800, 900, 1000),
         ]
         blast_file = _write_blast_file(rows)
         grouped = parsing_blast_file_merged_grouped(
@@ -409,8 +409,8 @@ class TestGroupedParsing:
 
     def test_merged_keeps_the_single_best_subject_within_one_cycle(self):
         rows = [
-            ("cycA", "Tn5", 99.0, 900, 0, 0, 1, 900, 1, 900, 1e-50, 900, 900, 5000),
-            ("cycA", "Tn3", 95.0, 850, 0, 0, 1, 850, 1, 850, 1e-40, 800, 900, 5000),
+            ("cycA", "Tn5", 99.0, 900, 0, 0, 1, 900, 1, 900, 1e-50, 900, 900, 1000),
+            ("cycA", "Tn3", 95.0, 850, 0, 0, 1, 850, 1, 850, 1e-40, 800, 900, 1000),
         ]
         blast_file = _write_blast_file(rows)
         grouped = parsing_blast_file_merged_grouped(
@@ -419,6 +419,67 @@ class TestGroupedParsing:
 
         assert len(grouped["cycA"]) == 1
         assert grouped["cycA"][0].fullname == "Tn5"
+
+    def test_containment_is_not_a_transposon_call(self):
+        """A cycle that merely contains a known transposon is not that transposon.
+
+        The score constrains the reference side only -- here a 900 bp subject is
+        covered end to end at 99% identity, scoring 99 -- so without a query
+        coverage requirement a 30 kb candidate was reported as being Tn5. In the
+        phase-2 re-analysis that mislabelled 139 of 377 named candidates and took
+        them out of the novel set, which is what downstream work selects from.
+        """
+        rows = [
+            ("cycA", "Tn5", 99.0, 900, 0, 0, 5000, 5899, 1, 900, 1e-50, 900, 900, 30000),
+        ]
+        blast_file = _write_blast_file(rows)
+        strict = parsing_blast_file_merged_grouped(
+            blast_file, 'CompTNs', 80.0, {}, {"cycA": "cycA"})
+        permissive = parsing_blast_file_merged_grouped(
+            blast_file, 'CompTNs', 80.0, {}, {"cycA": "cycA"}, min_query_cov=0.0)
+        os.unlink(blast_file)
+
+        assert strict == {}
+        # The same hit under the old criterion, so the test pins the criterion
+        # rather than merely the outcome.
+        assert permissive["cycA"][0].fullname == "Tn5"
+
+    def test_a_fragment_of_a_transposon_is_not_that_transposon(self):
+        """The other direction: the candidate covers only part of the reference.
+
+        A 1.2 kb cycle matching 1.2 kb of a 5 kb Tn is a piece of it, not it.
+        The subject side was already constrained -- coverage of the reference
+        fed the old score -- but as a product with identity rather than as a
+        floor, so a long enough alignment at high identity could compensate for
+        missing reference. Both directions are now separate requirements.
+        """
+        rows = [
+            ("cycA", "Tn5", 99.0, 1200, 0, 0, 1, 1200, 1, 1200, 1e-50, 900, 5000, 1300),
+        ]
+        blast_file = _write_blast_file(rows)
+        grouped = parsing_blast_file_merged_grouped(
+            blast_file, 'CompTNs', 80.0, {}, {"cycA": "cycA"})
+        relaxed = parsing_blast_file_merged_grouped(
+            blast_file, 'CompTNs', 80.0, {}, {"cycA": "cycA"}, min_subject_cov=0.0)
+        os.unlink(blast_file)
+
+        assert grouped == {}                       # 1200/5000 of the reference
+        assert relaxed["cycA"][0].fullname == "Tn5"
+
+    def test_identity_below_the_species_line_is_not_the_same_element(self):
+        """>=95% identity is where ISfinder separates one element from another."""
+        rows = [
+            ("cycA", "Tn5", 91.0, 4800, 0, 0, 1, 4800, 1, 4800, 1e-50, 900, 5000, 5000),
+        ]
+        blast_file = _write_blast_file(rows)
+        grouped = parsing_blast_file_merged_grouped(
+            blast_file, 'CompTNs', 80.0, {}, {"cycA": "cycA"})
+        relaxed = parsing_blast_file_merged_grouped(
+            blast_file, 'CompTNs', 80.0, {}, {"cycA": "cycA"}, min_identity=80.0)
+        os.unlink(blast_file)
+
+        assert grouped == {}
+        assert relaxed["cycA"][0].fullname == "Tn5"
 
 
 class TestConcatFasta:

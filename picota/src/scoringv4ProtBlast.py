@@ -312,6 +312,27 @@ BLAST_THREADS = int(os.environ.get('PICOTA_BLAST_THREADS', '8'))
 BLAST_OUTFMT = ('6 qseqid sseqid pident length mismatch gapopen qstart qend '
                 'sstart send evalue bitscore slen qlen')
 
+# When is a candidate the same element as a named transposon?
+#
+# The convention for saying two mobile elements are the same: >=95% nucleotide
+# identity over >=80% of BOTH sequences. ISfinder separates insertion sequences
+# at 95% identity, and ANI-with-alignment-fraction comparisons of plasmids and
+# other mobile elements apply the coverage requirement to each sequence rather
+# than to one of them.
+#
+# The old criterion -- (coverage of the reference) x identity > 80 -- constrained
+# only the reference side, so a candidate that merely CONTAINED a named element
+# was reported as being it: a 30 kb cycle covering the 1,243 bp Tn5466_partial
+# record end to end scored 98. Measured over the phase-2 re-analysis, 91% of the
+# calls it made do not survive the criterion below, and the cost fell on the
+# novel set, which is what downstream selection draws from.
+#
+# Identity is not what changed: 98% of the calls already sat at >=95% identity
+# and 91% at >=99%. Reciprocal coverage is.
+COMPTN_MIN_IDENTITY    = 95.0
+COMPTN_MIN_QUERY_COV   = 0.80
+COMPTN_MIN_SUBJECT_COV = 0.80
+
 
 def run_blast(path_of_blast, query, database, output, threads=None, db_source=None):
     """
@@ -419,7 +440,10 @@ def parsing_blast_file(blast_result_file, r_type, threshold_blast, info_prod_dic
     return grouped.get(None, [])
 
 
-def parsing_blast_file_merged_grouped(blast_result_file, r_type, threshold_blast, info_prod_dict, owner=None):
+def parsing_blast_file_merged_grouped(blast_result_file, r_type, threshold_blast, info_prod_dict, owner=None,
+                                      min_query_cov=COMPTN_MIN_QUERY_COV,
+                                      min_subject_cov=COMPTN_MIN_SUBJECT_COV,
+                                      min_identity=COMPTN_MIN_IDENTITY):
     """
     The single best subject per cycle, HSPs merged before scoring.
 
@@ -445,11 +469,32 @@ def parsing_blast_file_merged_grouped(blast_result_file, r_type, threshold_blast
 
             score = (total_covered / slen) * mean_pident
 
-            if score > threshold_blast:
-                # query tarafında da aralıkları merge et
-                query_intervals = [(min(row.qstart, row.qend), max(row.qstart, row.qend)) for _, row in subframe.iterrows()]
-                merged_query = merge_intervals(query_intervals)
+            # query tarafında da aralıkları merge et
+            query_intervals = [(min(row.qstart, row.qend), max(row.qstart, row.qend)) for _, row in subframe.iterrows()]
+            merged_query = merge_intervals(query_intervals)
 
+            # How much of the CANDIDATE this reference accounts for. `score`
+            # above constrains only the subject side -- coverage of the
+            # reference times identity -- so a cycle that merely CONTAINS a
+            # short reference passed outright: a 30 kb candidate fully covering
+            # the 1,243 bp Tn5466_partial record scored 1.0 * 98 and was
+            # reported as Tn5466. Containment is not identity -- such a cycle
+            # carries a known element, it is not one -- and the cost falls on
+            # the novel set, which is what downstream work selects from. In the
+            # phase-2 re-analysis 139 of 377 named candidates came from a match
+            # covering under 80% of the candidate, 27 of them IS26-carrying.
+            qlen = int(subframe.iloc[0]['qlen'])
+            query_cov = (sum(e - s + 1 for s, e in merged_query) / qlen) if qlen else 0.0
+            subject_cov = total_covered / slen if slen else 0.0
+
+            # `score` is kept for ranking competing subjects, but it no longer
+            # decides membership: it cannot, because it folds the reference's
+            # coverage into a single number and says nothing about the query's.
+            # threshold_blast still gates every other database, which reaches
+            # this module through parsing_blast_file_grouped instead.
+            if (mean_pident >= min_identity
+                    and query_cov >= min_query_cov
+                    and subject_cov >= min_subject_cov):
                 # toplam aralığı belirle
                 start = merged_query[0][0]
                 end = merged_query[-1][1]
