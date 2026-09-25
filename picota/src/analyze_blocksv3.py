@@ -10,7 +10,10 @@ import logging
 from src.config_loader import ToleranceConfig
 from src.config_loader import Config
 
-logger: logging.Logger = None
+# A real logger, not None: analyze_blocks() overwrites this with the configured
+# one, but every helper here logs, so any direct call -- a test, or any caller
+# that is not analyze_blocks -- died on None.debug before reaching its logic.
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 # -------------------------
@@ -151,8 +154,6 @@ def check_adjacent(coords: List[Tuple[int,int]], types: List[str], gap_summary: 
         is_near_mode = abs(gap - mode_gap) <= cfg.mode_gap_tolerance
         if is_near_mode:
             logger.debug(f"Gap near mode accepted: {prev_type}->{next_type}, gap={gap}, mode={mode_gap}")
-            # 🔹 Mod civarında ise, boosted toleransı bir miktar arttır
-            boosted_tolerance = min(cfg.max_boost, cfg.boosted_tolerance + int(mode_gap * 0.5))
             continue
 
         # 🔹 Gap büyük mü?
@@ -192,7 +193,21 @@ def check_adjacent(coords: List[Tuple[int,int]], types: List[str], gap_summary: 
                 continue
 
         # 🔹 Mode etrafında değilse normal boost hesabı
-        final_boosted = min(cfg.max_boost, max(boosted_tolerance, int(mode_gap * 1.5)))
+        #
+        # The floor is the configured tolerance. It used to be a local assigned
+        # only inside the `is_near_mode` branch above -- immediately before that
+        # branch's `continue`, so it could never be set for the iteration that
+        # reads it here. The line below is reached only when is_near_mode is
+        # False, which made this an UnboundLocalError whenever no earlier pair in
+        # the same read had been near the mode: it took out the long-read step of
+        # 10 of 98 samples in phase 3 of the re-analysis.
+        #
+        # When an earlier pair had set it, the value leaked across iterations, so
+        # whether this gap was accepted depended on an unrelated earlier gap.
+        # Reading the floor from the config makes the decision per-pair and
+        # deterministic. It is also marginally stricter than the leaked value,
+        # which was always >= cfg.boosted_tolerance.
+        final_boosted = min(cfg.max_boost, max(cfg.boosted_tolerance, int(mode_gap * 1.5)))
         if gap > final_boosted:
             logger.debug(
                 f"Gap exceeds final_boosted: {prev_type}->{next_type}, "
