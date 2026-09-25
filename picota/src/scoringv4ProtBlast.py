@@ -390,12 +390,42 @@ def _owner_of(owner, qseqid):
     return None if owner is None else owner.get(qseqid)
 
 
+def _best_per_locus(frame, qualifying):
+    """One hit per position on the query, instead of one per query.
+
+    For the insertion-sequence set the query is the whole cycle, so keeping a
+    single best hit reports one IS for an element that may carry several. In the
+    phase-2 survey of the 2026 re-analysis, 7,036 of 12,877 candidates have two
+    or more IS at distinct coordinates, and 463 carry IS26 at a locus that was
+    discarded because a different insertion sequence scored higher elsewhere in
+    the same cycle. Membership of the "carries IS26" set is read from this field
+    and is what downstream selection draws on, so those 463 were lost from it.
+
+    Hits that overlap on the query are one physical element competing for a name
+    -- IS26, IS15DIV and IS26.var1 are near-identical, and a cycle carrying one
+    of them matches all three at the same coordinates -- so the best of those
+    wins its locus. Loci that do not overlap are separate elements and are
+    reported separately. Taken greedily from the best hit down, so a locus is
+    named by its strongest match.
+    """
+    picks, claimed = [], []
+    for score, idx in sorted(qualifying, key=lambda t: -t[0]):
+        qs, qe = sorted((int(frame.iloc[idx]['qstart']), int(frame.iloc[idx]['qend'])))
+        if any(qs <= e and qe >= s for s, e in claimed):
+            continue
+        claimed.append((qs, qe))
+        picks.append((score, idx))
+    return picks
+
+
 def parsing_blast_file_grouped(blast_result_file, r_type, threshold_blast, info_prod_dict, owner=None):
     """
-    Best hit per query, grouped by the cycle each query came from.
+    Hits per query, grouped by the cycle each query came from.
 
-    Same selection as parsing_blast_file -- this is where that logic now lives --
-    but able to read a result file holding every cycle's queries at once.
+    One per query for the protein sets, where a query is a single predicted
+    protein and a second hit to it would be a second name for one gene. One per
+    locus for the insertion sequences, where a query is the whole cycle -- see
+    _best_per_locus.
     """
     grouped = {}
     df_filtered = _load_blast_table(blast_result_file)
@@ -412,8 +442,15 @@ def parsing_blast_file_grouped(blast_result_file, r_type, threshold_blast, info_
             if score > threshold_blast:
 
                 the_best_list.append((score, idx))
-        if the_best_list:
-            best_score, best_idx = sorted(the_best_list, key=lambda x: x[0], reverse=True)[0]
+        if not the_best_list:
+            continue
+
+        if r_type == 'InsertionSequences':
+            picks = _best_per_locus(frame, the_best_list)
+        else:
+            picks = [max(the_best_list, key=lambda t: t[0])]
+
+        for best_score, best_idx in picks:
             start = int(frame.iloc[best_idx]['qstart'])
             end   = int(frame.iloc[best_idx]['qend'])
             fullname = frame.iloc[best_idx]['sseqid']

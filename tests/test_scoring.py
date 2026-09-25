@@ -482,6 +482,83 @@ class TestGroupedParsing:
         assert relaxed["cycA"][0].fullname == "Tn5"
 
 
+class TestInsertionSequenceLoci:
+    """One IS per position, not one per cycle.
+
+    For the IS set the query is the whole cycle, so keeping a single best hit
+    reported one insertion sequence for elements carrying several -- and the
+    "carries IS26" field that phase 2 and phase 3 select on is read from exactly
+    this output.
+    """
+
+    def _rows(self, *specs):
+        rows = []
+        for sseqid, pident, qstart, qend in specs:
+            rows.append(("cyc", sseqid, pident, 820, 0, 0, qstart, qend,
+                         1, 820, 1e-50, 800, 820, 30000))
+        return rows
+
+    def test_two_separate_loci_are_both_reported(self):
+        blast_file = _write_blast_file(self._rows(
+            ("IS26-MH257753", 99.0, 1000, 1819),
+            ("IS26-MH257753", 99.0, 20000, 20819),
+        ))
+        grouped = parsing_blast_file_grouped(
+            blast_file, 'InsertionSequences', 50.0, {}, {"cyc": "cyc"})
+        os.unlink(blast_file)
+
+        regions = grouped["cyc"]
+        assert len(regions) == 2
+        assert sorted(r.start for r in regions) == [1000, 20000]
+
+    def test_competing_names_at_one_locus_yield_one_region(self):
+        """IS26, IS15DIV and IS26.var1 are near-identical and match together."""
+        blast_file = _write_blast_file(self._rows(
+            ("IS26-MH257753", 99.0, 1000, 1819),
+            ("ISFinder_IS15DIV", 98.0, 1005, 1824),
+            ("IS26.var1-GU562437.2", 97.0, 1002, 1821),
+        ))
+        grouped = parsing_blast_file_grouped(
+            blast_file, 'InsertionSequences', 50.0, {}, {"cyc": "cyc"})
+        os.unlink(blast_file)
+
+        regions = grouped["cyc"]
+        assert len(regions) == 1
+        assert regions[0].fullname == "IS26-MH257753"
+
+    def test_a_second_locus_survives_a_higher_scoring_first_one(self):
+        """The case that cost 463 candidates their IS26 membership.
+
+        A cycle carrying IS26 at one position and a better-scoring different IS
+        at another reported only the latter, so the cycle did not count as
+        carrying IS26.
+        """
+        blast_file = _write_blast_file(self._rows(
+            ("IS6100-U12338.3", 100.0, 5000, 5819),
+            ("IS26-MH257753", 96.0, 25000, 25819),
+        ))
+        grouped = parsing_blast_file_grouped(
+            blast_file, 'InsertionSequences', 50.0, {}, {"cyc": "cyc"})
+        os.unlink(blast_file)
+
+        names = {r.fullname for r in grouped["cyc"]}
+        assert names == {"IS6100-U12338.3", "IS26-MH257753"}
+
+    def test_the_protein_path_still_keeps_one_hit_per_query(self):
+        """A query there is one predicted protein; a second hit is a second name."""
+        rows = [
+            ("q1", "db|product|geneA", 95.0, 270, 0, 0, 1, 90, 1, 90, 1e-30, 200, 300, 270),
+            ("q1", "db|product|geneB", 90.0, 270, 0, 0, 5, 95, 1, 90, 1e-20, 180, 300, 270),
+        ]
+        blast_file = _write_blast_file(rows)
+        grouped = parsing_blast_file_grouped(
+            blast_file, 'Antibiotics', 50.0, {"q1": (0, 1)}, {"q1": "cyc"})
+        os.unlink(blast_file)
+
+        assert len(grouped["cyc"]) == 1
+        assert grouped["cyc"][0].fullname == "db|product|geneA"
+
+
 class TestConcatFasta:
     def test_missing_trailing_newline_does_not_fuse_records(self, tmp_path):
         """split_fasta writes its records without a trailing newline."""
