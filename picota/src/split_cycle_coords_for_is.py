@@ -44,8 +44,23 @@ def split_cycles_from_picota(picota_tab, cycle_fasta_file, output_dir, split_min
         is_ranges = [tuple(map(int, c.split('-'))) for c in is_coords_list if "-" in c]
         if not is_ranges:
             continue
-        is_ranges_sorted = sorted(is_ranges)
-        trans_start, trans_end = is_ranges_sorted[0][0], is_ranges_sorted[-1][1]
+
+        # The strongest single locus, not the span of every locus.
+        #
+        # This used to take first-start to last-end, which was the same thing
+        # while the scorer reported one insertion sequence per cycle. Once it
+        # reported one per locus, that span reached from the first IS to the
+        # last and swallowed the cargo between them: measured over 2,192
+        # annotated elements, the transposon block covered a median 11% of the
+        # element at one locus, 74% at three and 87% at four or more, and the
+        # share of elements that still had a cargo block fell from 83% to 8%.
+        # Long-read validation looks for cargo flanked by transposon, so that
+        # silently removed the thing it looks for.
+        #
+        # IScoords is written best-scoring locus first, so [0] is the strongest
+        # one and reproduces the previous behaviour exactly where a cycle has a
+        # single IS.
+        trans_start, trans_end = is_ranges[0]
 
         # === Antibiotic + Xenobiotic koordinatları birleşimi ===
         ant_xeno_coords = []
