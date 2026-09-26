@@ -390,6 +390,13 @@ def _owner_of(owner, qseqid):
     return None if owner is None else owner.get(qseqid)
 
 
+# Scores are (aligned length / subject length) x identity, so two references
+# that align identically over the same stretch produce the same float. An
+# epsilon rather than equality only because the arithmetic is floating point.
+TIE_EPS = 1e-9
+TIE_SEP = "|"
+
+
 def _best_per_locus(frame, qualifying):
     """One hit per position on the query, instead of one per query.
 
@@ -408,14 +415,37 @@ def _best_per_locus(frame, qualifying):
     reported separately. Taken greedily from the best hit down, so a locus is
     named by its strongest match.
     """
+    def span(i):
+        return sorted((int(frame.iloc[i]['qstart']), int(frame.iloc[i]['qend'])))
+
     picks, claimed = [], []
     for score, idx in sorted(qualifying, key=lambda t: -t[0]):
-        qs, qe = sorted((int(frame.iloc[idx]['qstart']), int(frame.iloc[idx]['qend'])))
+        qs, qe = span(idx)
         if any(qs <= e and qe >= s for s, e in claimed):
             continue
+
+        # Every reference that ties with this one over this locus, not just the
+        # row BLAST happened to print first.
+        #
+        # At many loci the tie is exact and unbreakable: IS26, IS26.var1,
+        # IS15DII and IS15DIV align to the same 437 bp at 100% identity and
+        # score 53.2927 apiece. Keeping one of them silently made the reported
+        # name an artefact of row order -- the same pipeline over the same data,
+        # batched differently, named 22 of 1,158 loci differently and moved the
+        # "carries IS26" count by 2%. Naming all of them says what the data
+        # says: the locus is an IS26-family element and cannot be resolved
+        # further from sequence. Sorted, so the field does not depend on row
+        # order either.
+        tied = sorted({str(frame.iloc[j]['sseqid'])
+                       for s2, j in qualifying
+                       if abs(s2 - score) <= TIE_EPS and _overlaps(span(j), (qs, qe))})
         claimed.append((qs, qe))
-        picks.append((score, idx))
+        picks.append((score, idx, TIE_SEP.join(tied)))
     return picks
+
+
+def _overlaps(a, b):
+    return a[0] <= b[1] and a[1] >= b[0]
 
 
 def parsing_blast_file_grouped(blast_result_file, r_type, threshold_blast, info_prod_dict, owner=None):
@@ -448,12 +478,12 @@ def parsing_blast_file_grouped(blast_result_file, r_type, threshold_blast, info_
         if r_type == 'InsertionSequences':
             picks = _best_per_locus(frame, the_best_list)
         else:
-            picks = [max(the_best_list, key=lambda t: t[0])]
+            sc, ix = max(the_best_list, key=lambda t: t[0])
+            picks = [(sc, ix, frame.iloc[ix]['sseqid'])]
 
-        for best_score, best_idx in picks:
+        for best_score, best_idx, fullname in picks:
             start = int(frame.iloc[best_idx]['qstart'])
             end   = int(frame.iloc[best_idx]['qend'])
-            fullname = frame.iloc[best_idx]['sseqid']
 
             # Protein hits -> nucleotide koordinatına çevir
             if r_type != 'InsertionSequences' and r_type != 'CompTNs':

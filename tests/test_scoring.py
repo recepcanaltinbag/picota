@@ -544,6 +544,46 @@ class TestInsertionSequenceLoci:
         names = {r.fullname for r in grouped["cyc"]}
         assert names == {"IS6100-U12338.3", "IS26-MH257753"}
 
+    def test_an_exact_tie_reports_every_tied_reference(self):
+        """IS26, IS26.var1, IS15DII and IS15DIV are one element at such a locus.
+
+        They align to the same stretch at the same identity and score the same
+        float, so picking one made the reported name depend on which row BLAST
+        printed first -- worth 2% of the "carries IS26" count between two runs
+        of the same pipeline over the same data. All tied names are reported,
+        sorted, so the field is reproducible and says what the data supports.
+        """
+        rows = self._rows(
+            ("IS26-MH257753", 100.0, 1000, 1819),
+            ("IS26.var1-GU562437.2", 100.0, 1000, 1819),
+            ("ISFinder_IS15DIV", 100.0, 1000, 1819),
+        )
+        blast_file = _write_blast_file(rows)
+        grouped = parsing_blast_file_grouped(
+            blast_file, 'InsertionSequences', 50.0, {}, {"cyc": "cyc"})
+        os.unlink(blast_file)
+
+        regions = grouped["cyc"]
+        assert len(regions) == 1
+        assert regions[0].fullname == (
+            "IS26-MH257753|IS26.var1-GU562437.2|ISFinder_IS15DIV")
+        # and "carries IS26" still reads true off the field
+        assert "IS26" in regions[0].fullname
+
+    def test_a_tie_does_not_absorb_a_lower_scoring_overlap(self):
+        """Only references that actually tie are named together."""
+        rows = self._rows(
+            ("IS26-MH257753", 100.0, 1000, 1819),
+            ("ISFinder_IS15DIV", 100.0, 1000, 1819),
+            ("ISFinder_IS6770", 91.0, 1005, 1824),      # overlaps, does not tie
+        )
+        blast_file = _write_blast_file(rows)
+        grouped = parsing_blast_file_grouped(
+            blast_file, 'InsertionSequences', 50.0, {}, {"cyc": "cyc"})
+        os.unlink(blast_file)
+
+        assert grouped["cyc"][0].fullname == "IS26-MH257753|ISFinder_IS15DIV"
+
     def test_the_protein_path_still_keeps_one_hit_per_query(self):
         """A query there is one predicted protein; a second hit is a second name."""
         rows = [
