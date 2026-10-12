@@ -11,12 +11,10 @@ Status: 2026-09-01. Companion document: [ROADMAP.md](ROADMAP.md).
   IS database build.
 - **Simulated benchmark with exact ground truth** — 520 composite transposons
   implanted into 130 simulated genomes across six architectures and seven IS
-  copy levels, plus ten wild-type controls. Sensitivity 95.0% and precision
-  90.9% excluding the one architecture the method cannot solve; zero false
+  copy levels, plus ten wild-type controls. Sensitivity 98.5% and precision
+  91.2% excluding the one architecture the method cannot solve; zero false
   positives on the wild-type controls (§3.5–3.7).
-  Measured with the reference sets in use before 1.1.0; 1.1.0 replaced the IS
-  set and switched the shipped xenobiotic set, so these figures need
-  regenerating (`scripts/build_report.sh`) before they describe 1.1.0.
+  Measured with 1.1.0 and its reference sets.
 - **Head-to-head against MobileElementFinder** on the same genomes and the same
   matching criterion (§3.9).
 - **End-to-end tests** on the bundled `test_data/testNitro.gfa`, checking that the
@@ -237,18 +235,23 @@ matters — elements sharing a chromosome share its assembly and its read set, s
 they are not independent measurements, and forty elements in one genome makes it
 several times more repetitive than any real one.
 
-Scored under score3 at a threshold of 50.
+Scored under score3 at a threshold of 50, with PICOTA 1.1.0 and its reference
+sets. Up to 1.0.0-rc1 the shipped IS set lacked eight of the eighty insertion
+sequences the generator draws, which cost 7 elements in scoring (95.0%
+sensitivity at 90.9% PPV excluding `cargo_is_same`). The 1.1.0 set covers all
+eighty, and re-scoring the same cycles with 1.1.0 reproduces the earlier
+complete-reference re-scoring scenario by scenario.
 
 | scenario | structure | in graph | reported | lost detecting | lost scoring | FP | sensitivity | PPV |
 |---|---|---|---|---|---|---|---|---|
-| baseline | unique IS, CARD cargo | 40/40 | **37** | 0 | 3 | 1 | 92.5% | 97.4% |
-| novel_cargo | cargo in no database | 40/40 | **36** | 0 | 4 | 0 | 90.0% | 100% |
-| compact | small elements, one cargo gene | 40/40 | **39** | 0 | 1 | 0 | 97.5% | 100% |
+| baseline | unique IS, CARD cargo | 40/40 | **40** | 0 | 0 | 1 | 100% | 97.6% |
+| novel_cargo | cargo in no database | 40/40 | **39** | 0 | 1 | 0 | 97.5% | 100% |
+| compact | small elements, one cargo gene | 40/40 | **40** | 0 | 0 | 0 | 100% | 100% |
 | cargo_is_diff | a different IS inside the cargo | 38/40 | **38** | 2 | 0 | 13 | 95.0% | 74.5% |
 | shared_is | four elements per genome on one 16-copy IS | 40/40 | **40** | 0 | 0 | 5 | 100% | 88.9% |
-| cargo_is_same | flanking IS also inside the cargo | 2/40 | 2 | 38 | 0 | 77 | 5.0% | 2.5% |
-| **all six** | | 200/240 | **192** | 40 | 8 | 96 | 80.0% | 66.7% |
-| **excluding cargo_is_same** | | 198/200 | **190** | 2 | 8 | 19 | **95.0%** | **90.9%** |
+| cargo_is_same | flanking IS also inside the cargo | 2/40 | 2 | 38 | 0 | 83 | 5.0% | 2.4% |
+| **all six** | | 200/240 | **199** | 40 | 1 | 102 | 82.9% | 66.1% |
+| **excluding cargo_is_same** | | 198/200 | **197** | 2 | 1 | 19 | **98.5%** | **91.2%** |
 
 "In graph" counts elements covered at ≥95% by some candidate cycle before any
 scoring, so the two loss columns separate what detection lost from what scoring
@@ -256,13 +259,13 @@ lost. Four things this table is meant to show, including the ones that do not
 flatter the tool:
 
 **Scoring is not the bottleneck.** Of 240 implanted elements, scoring loses
-**eight**. The other 40 losses happen before scoring sees them, and 38 of those
+**one**. The other 40 losses happen before scoring sees them, and 38 of those
 are the single `cargo_is_same` architecture. Outside it, detection loses 2 of
-200 and scoring loses 8 of 198. Tuning the score would move eight elements; the
+200 and scoring loses 1 of 198. Tuning the score would move one element; the
 larger constraint is upstream, in what the assembly graph preserves.
 
 **novel_cargo is the case score2 cannot do at all.** Cargo matching nothing in
-CARD or the xenobiotic set is still recovered at 90%, because score3 applies a
+CARD or the xenobiotic set is still recovered at 97.5%, because score3 applies a
 floor of 0.30 when no database hit is found rather than zeroing the term. Under
 score2 these elements score in single digits against a threshold of 50 and are
 unreportable at any threshold.
@@ -274,7 +277,7 @@ recover none of these forty (§3.7).
 
 **cargo_is_same is a genuine failure, and it is a detection failure.** When the
 flanking IS also occurs inside the cargo, only 2 of 40 elements are covered by
-any candidate cycle at all. The 77 false positives are unrelated cycles the
+any candidate cycle at all. The 83 false positives are unrelated cycles the
 scorer accepted; no scoring change recovers an element detection never proposed.
 PICOTA should not be trusted on elements whose flanking IS recurs within their
 own cargo.
@@ -287,7 +290,7 @@ seed, through identical reads, assembly and pipeline.
 | stage | count |
 |---|---|
 | candidate cycles detected | 12–22 per genome, median 19 (180 total) |
-| reported under score3 at threshold 50 | **0 of 180** |
+| reported under score3 at threshold 50 | **0 of 180** (1.1.0 as well) |
 
 Running ten genomes rather than one mattered: the single genome originally used
 yielded 22 cycles, which turns out to be the top of the range rather than

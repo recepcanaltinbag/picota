@@ -32,12 +32,12 @@ recovered from draft assemblies that never resolved them into contigs.
                                 └─[cargo]┘   shorter than the element itself
 ```
 
-Measured on 520 implanted elements across 130 simulated genomes: **95.0%
-sensitivity at 90.9% precision across five of six scenarios**, and on ten
+Measured on 520 implanted elements across 130 simulated genomes: **98.5%
+sensitivity at 91.2% precision across five of six scenarios**, and on ten
 wild-type genomes with nothing implanted, none of the 180 candidate cycles clear
 the threshold. The sixth scenario — where the flanking IS also occurs inside the
 cargo — recovers 5%, and the loss is in detection rather than scoring. Per
-scenario numbers are in [Scoring](#scoring), measured before the 1.1.0 database update.
+scenario numbers are in [Scoring](#scoring).
 
 ### Contents
 
@@ -451,20 +451,23 @@ the value `threshold_final_score` ships with.
 Per architecture, after scoring at a threshold of 50. The routes table at the
 top of this README covers detection; this one covers what survives scoring.
 
-> [!NOTE]
-> These figures were measured before 1.1.0 replaced the IS set
-> (`picota_IS_db.fasta`) and switched the shipped xenobiotic set to the KEGG
-> build. `scripts/build_report.sh` regenerates them.
-
 | Scenario | Sensitivity | Precision |
 |---|---|---|
-| `baseline` — unique IS, CARD cargo | 92.5% | 97.4% |
-| `novel_cargo` — cargo in no database | 90.0% | 100% |
-| `compact` — small elements, one cargo gene | 97.5% | 100% |
+| `baseline` — unique IS, CARD cargo | 100% | 97.6% |
+| `novel_cargo` — cargo in no database | 97.5% | 100% |
+| `compact` — small elements, one cargo gene | 100% | 100% |
 | `shared_is` — four elements on one 16-copy IS | 100% | 88.9% |
 | `cargo_is_diff` — a different IS inside the cargo | 95.0% | 74.5% |
-| `cargo_is_same` — flanking IS repeated in the cargo | 5.0% | 2.5% |
-| **All but `cargo_is_same`** | **95.0%** | **90.9%** |
+| `cargo_is_same` — flanking IS repeated in the cargo | 5.0% | 2.4% |
+| **All but `cargo_is_same`** | **98.5%** | **91.2%** |
+
+Measured with 1.1.0. Up to 1.0.0-rc1 the shipped IS set lacked eight of the
+eighty insertion sequences the generator draws, and an element built on one of
+them could fail the IS gate. That cost 7 of 200 elements: 95.0% sensitivity at
+90.9% precision. The 1.1.0 IS set (`picota_IS_db.fasta`) contains all eighty
+(IS200G as `ISFinder_IS1541A`, the same sequence),
+and the 1.1.0 scoring of the same cycles reproduces the earlier
+"complete IS reference" re-scoring exactly, scenario by scenario.
 
 On ten wild-type genomes with nothing implanted, 180 candidate cycles are
 detected and **none** clear the threshold.
@@ -480,7 +483,7 @@ detected and **none** clear the threshold.
 >   definitionally required, not because it was shown to filter.
 
 Detection deliberately casts wide — about 23 candidates per genome to find 4
-elements, a precision of 17% — and scoring takes that to 90.9% while keeping 95%
+elements, a precision of 17% — and scoring takes that to 91.2% while keeping 98.5%
 of the elements. A stricter search would have to discard the very cycles that
 carry `shared_is` and `cargo_is_diff`.
 
