@@ -488,6 +488,12 @@ class TestE2E_OutputFormatter:
         assert group == 'IS1380|IS4'
         assert family == '|'.join(sorted({infer_is_family('ISEcp1')[1], 'IS10'}))
 
+    def test_is_family_inference_tied_names_with_an_unknown(self):
+        from src.output_formatter import infer_is_family
+        assert infer_is_family('ISFinder_IS26|XXXXXXXX') == ('IS6', 'IS26')
+        assert infer_is_family('XXXXXXXX|YYYYYYYY') == ('Unknown', 'Unknown')
+        assert infer_is_family('|') == ('Unknown', 'Unknown')
+
     def test_is_family_unknown(self):
         from src.output_formatter import infer_is_family
         group, family = infer_is_family('XXXXXXXX')

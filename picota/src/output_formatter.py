@@ -271,10 +271,14 @@ def infer_is_family(is_name: str) -> tuple:
     # fell through to the IS+digits fallback and came back as IS15. Resolve
     # each name; where they disagree, report every answer, sorted, as the
     # scoring step does.
+    # A name that resolves to nothing does not make the others less known.
     if '|' in name:
         resolved = [infer_is_family(n) for n in name.split('|') if n.strip()]
-        groups = sorted({g for g, _ in resolved})
-        families = sorted({f for _, f in resolved})
+        known = [r for r in resolved if r != ("Unknown", "Unknown")]
+        if not known:
+            return ("Unknown", "Unknown")
+        groups = sorted({g for g, _ in known})
+        families = sorted({f for _, f in known})
         return ('|'.join(groups), '|'.join(families))
 
     # Strip database source prefixes added by PICOTA's BLAST pipeline

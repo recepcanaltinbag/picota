@@ -85,3 +85,9 @@ def test_written_file_round_trips(tmp_path):
     assert text[0] == '>A-X1' and len(text[1]) == b.WRAP
     recs, _ = b.parse_merged(b.read_fasta_lines(str(out)))
     assert recs == [('A-X1', 'a' * 130)]
+
+
+def test_uppercase_base_in_a_glued_sequence_stops_the_build():
+    # 'N' would otherwise be taken as the end of the accession: B-X1acgtN.
+    with pytest.raises(b.BuildError):
+        b.parse_merged(lines(">A-X1\nac>B-X1acgtNacgt\n"))

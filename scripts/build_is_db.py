@@ -51,7 +51,9 @@ ISFINDER_PREFIX = 'ISFinder_'
 WRAP = 60
 
 _TRAILING_SEQ = re.compile(r'[acgtn]+$')
-_HEADER_END   = re.compile(r'[A-Z0-9]$')
+# Name-ACCESSION: the accession, after the last '-', is uppercase, digits,
+# '_' and '.', and ends in a digit or capital.
+_ACCESSION    = re.compile(r'-[A-Z0-9_.]*[A-Z0-9]$')
 _COMPLEMENT   = str.maketrans('ACGTN', 'TGCAN')
 
 
@@ -116,7 +118,7 @@ def split_glued(text):
     if not m or m.start() == 0:
         raise BuildError(f"cannot find the sequence in glued record: {text[:80]}")
     header, seq = text[:m.start()], text[m.start():]
-    if not _HEADER_END.search(header) or '-' not in header:
+    if not _ACCESSION.search(header):
         raise BuildError(f"recovered header is not Name-ACCESSION: {header!r}")
     return header, seq
 
