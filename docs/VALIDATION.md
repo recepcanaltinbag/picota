@@ -1,18 +1,19 @@
 # PICOTA Validation Status and Benchmark Design
 
-Status: 2026-09-01. Companion document: [ROADMAP.md](ROADMAP.md).
+Status: 2026-10-13 (PICOTA 1.1.0). Companion document: [ROADMAP.md](ROADMAP.md).
 
 ---
 
 ## 1. What has actually been validated
 
-- **Unit and smoke tests** — 573 tests over parsing, cycle construction,
+- **Unit and smoke tests** — 596 tests over parsing, cycle construction,
   deduplication helpers, scoring, output formatting, the command line and the
   IS database build.
 - **Simulated benchmark with exact ground truth** — 520 composite transposons
   implanted into 130 simulated genomes across six architectures and seven IS
-  copy levels, plus ten wild-type controls. Sensitivity 98.5% and precision
-  91.2% excluding the one architecture the method cannot solve; zero false
+  copy levels, plus ten wild-type controls. On the architecture benchmark (200
+  elements in 50 genomes, excluding the one architecture the method cannot
+  solve) sensitivity is 98.5% at 91.2% precision; zero false
   positives on the wild-type controls (§3.5–3.7).
   Measured with 1.1.0 and its reference sets.
 - **Head-to-head against MobileElementFinder** on the same genomes and the same
@@ -222,9 +223,9 @@ What strict mode actually buys on real data is **precision**: a higher fraction
 of reported cycles correspond to genuine composite transposons, with recall
 unchanged.
 
-#### Structural scenarios, twelve elements each
+#### Structural scenarios, forty elements each
 
-Six chromosomes, each implanting twelve elements into MG1655 and varying **one**
+Six architectures, each implanted into MG1655 and varying **one**
 structural property while holding everything else fixed, so a drop between rows
 is attributable to the structure rather than to chance. Scored under score3 at a
 threshold of 50.

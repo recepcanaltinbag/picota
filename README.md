@@ -8,7 +8,7 @@
   <b>Pipeline for Identification of Composite Transposons from Assembly graphs</b><br>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python 3.8+"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT"></a>
-  <a href="https://doi.org/10.5281/zenodo.21769753"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21769753-blue" alt="DOI"></a>
+  <a href="https://doi.org/10.5281/zenodo.21769752"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21769752-blue" alt="DOI"></a>
 </p>
 
 ---
@@ -32,9 +32,9 @@ recovered from draft assemblies that never resolved them into contigs.
                                 └─[cargo]┘   shorter than the element itself
 ```
 
-Measured on 520 implanted elements across 130 simulated genomes: **98.5%
-sensitivity at 91.2% precision across five of six scenarios**, and on ten
-wild-type genomes with nothing implanted, none of the 180 candidate cycles clear
+On simulated genomes with known implanted elements, PICOTA reports **98.5% of
+them at 91.2% precision** across five of six architectures (200 elements in 50
+genomes), and on ten wild-type genomes with nothing implanted, none of the 180 candidate cycles clear
 the threshold. The sixth scenario — where the flanking IS also occurs inside the
 cargo — recovers 5%, and the loss is in detection rather than scoring. Per
 scenario numbers are in [Scoring](#scoring).
@@ -79,7 +79,7 @@ scenario numbers are in [Scoring](#scoring).
 
 | | Stage | Tool | Produces |
 |---|---|---|---|
-| 1 | Read filtering | fastp | trimmed FASTQ |
+| 1 | Read filtering *(off by default)* | fastp | trimmed FASTQ |
 | 2 | Assembly | SPAdes (or MEGAHIT) | GFA graph |
 | 3 | Cycle detection | DFS over the graph | candidate FASTA |
 | 4 | Gene prediction | Prodigal (`-p meta`) | ORFs |
@@ -113,7 +113,8 @@ The gap is not uniform, and where it opens is the point. With two genomic copies
 of the flanking IS and nothing repeating inside the element, SPAdes contigs
 already recover 52–78%. **One additional copy of that IS takes them to 5–7.5%**,
 and a repeat inside the element takes them to zero. The graph holds 95–100%
-throughout.
+in each of these cases. The one architecture it does not hold, a flanking IS
+repeated inside the cargo, is covered under [Scoring](#scoring).
 
 ---
 
@@ -125,7 +126,8 @@ cd picota
 
 conda create -n picota -c bioconda -c conda-forge \
     python=3.9 prodigal blast spades megahit fastp \
-    minimap2 samtools biopython pandas pyyaml tqdm requests pysam matplotlib
+    sra-tools parallel-fastq-dump minimap2 samtools \
+    biopython pandas pyyaml tqdm requests pysam matplotlib
 conda activate picota
 pip install -r requirements.txt
 pip install -e .        # optional: puts a `picota` command on PATH
@@ -146,8 +148,9 @@ The reference databases are not in the git repository — see
 | required | BLAST+ | ≥ 2.12 | scoring |
 | required | Prodigal | ≥ 2.6 | gene prediction |
 | required | SPAdes | ≥ 3.13 | assembly |
-| optional | MEGAHIT | ≥ 1.2 | alternative assembler |
-| optional | fastp | — | read filtering |
+| required for SRA input | sra-tools, parallel-fastq-dump | — | downloading reads (`fastq_dump` in the config; falls back to `fasterq-dump`) |
+| optional | MEGAHIT | ≥ 1.2 | alternative assembler; also needs `fastg2gfa` (below) |
+| optional | fastp | — | read filtering, off by default (`skip_filtering: true`) |
 | optional | minimap2, samtools | — | long-read validation |
 
 Linux, Python ≥ 3.8, ≥ 8 GB RAM (16 GB for large genomes), and disk for the
@@ -268,7 +271,7 @@ tracked.
    candidate to score at all. Built by `scripts/build_is_db.py` from the merged
    TnCentral + ISfinder set (`_tncentral_nointegrall_isfinder-TNs.fasta`, the
    "-TNs" because the known composite transposons of set 3 were removed from
-   it by `DBs/CompTns/NoTns.py`, so a CT is not mistaken for its own IS) and
+   it by `picota/DBs/CompTns/NoTns.py`, so a CT is not mistaken for its own IS) and
    the ISfinder nucleotide release (`IS.fna`, as distributed by
    [thanhleviet/ISfinder-sequences](https://github.com/thanhleviet/ISfinder-sequences)):
    - 21 records of the merged set had lost the line breaks around their header,
@@ -290,14 +293,16 @@ tracked.
 3. **Known composite transposons** — nucleotide FASTA (`Known_Tns.fasta`, 146
    elements): the [TnCentral](https://tncentral.ncc.unesp.br/) GenBank records
    whose features give the family as compound or composite transposon,
-   selected by `DBs/CompTns/extract_composite.py` and converted to FASTA. A
+   selected by `picota/DBs/CompTns/extract_composite.py` and converted to FASTA. A
    cycle is reported as `Known` rather than `Novel` when it matches one at
    ≥ 95% identity over ≥ 80% of *both* sequences; a cycle that merely contains a
    known element stays `Novel`.
 
 4. **Xenobiotic degradation genes** (KEGG-derived)
    - Built by `picota/src/build_xenobiotic_db.py` from KEGG KO identifiers
-     resolved to UniProt sequences, then clustered
+     resolved to UniProt sequences, then clustered with `cd-hit` (needs network
+     access and `conda install -c bioconda cd-hit`); stages `kegg`, `specific`,
+     `seqs`, `filter`, `curated`, run in that order
    - Format: FASTA (proteins), 16,540 sequences: 16,539 from KEGG, plus the
      hand-picked enzymes in `picota/src/xenobiotics_curated.fasta` that KEGG
      assigns no KO, added by `--stage curated` and marked `PATH:curated`. That
@@ -329,8 +334,13 @@ output/
 │   ├── <cycle file>/         GenBank annotation per candidate (.gbk)
 │   └── Pico_Temp/            Intermediate BLAST / Prodigal files
 ├── annot/<accession>/        Split transposon/cargo FASTA
-└── mapping/<accession>/      BAM files and long-read analysis
+├── mapping/<long-read acc>/  BAM files and long-read analysis
+├── raw/, raw_long/           Downloaded reads, removed once assembled
+└── blast_temp/               BLAST databases built from the reference sets
 ```
+
+`cycles/` also holds a `<name>.depths.tsv` beside each cycle FASTA: per-cycle
+node depths, written for reference and read by no later stage.
 
 ### Raw results table (`picota_final_tab`)
 
@@ -382,7 +392,7 @@ multiple antibiotic classes it is expanded to one row per class.
 | `NumXeno` | Number of xenobiotic genes detected |
 | `Xenobiotic_Functions` | Semicolon-separated xenobiotic gene names |
 | `NumCompTN` | Number of known CompTn database matches |
-| `Known_CompTN` | Matched known composite transposon name(s) |
+| `Known_CompTN` | Name(s) of the matched known composite transposon, or `Novel`. `NumCompTN` can be non-zero on a `Novel` row: it counts hits, including ones that fail the identity/coverage criterion |
 
 </details>
 
@@ -425,7 +435,8 @@ Two **gates**, which multiply and can zero the score outright:
   length (`mean_of_CompTns`, `std_of_CompTns`). Under `dist_type: 1` anything
   shorter than the mean pays nothing, so the gate only penalises oversized
   cycles. This gate carries most of the specificity: without it, precision on
-  the benchmark falls from 69% to 47%.
+  the benchmark (excluding `cargo_is_same`) fell from 91% to 47% when measured
+  for 1.0.0-rc1.
 
 Two **weighted terms**, equally split:
 
@@ -441,8 +452,8 @@ Two **weighted terms**, equally split:
   carrying cargo absent from every database is still reportable. This is the one
   thing mode `2` cannot do.
 
-The 0.50/0.50 split is measured, not chosen: swept across 1272 benchmark
-candidates it gives the best F1, and its own optimal threshold lands on 50 —
+The 0.50/0.50 split is measured, not chosen: swept across the 1272 benchmark
+candidates of the 1.0.0-rc1 run, it gives the best F1, and its own optimal threshold lands on 50 —
 the value `threshold_final_score` ships with.
 
 ### What the benchmark says
@@ -477,9 +488,11 @@ detected and **none** clear the threshold.
 > - **`cargo_is_same` is not solved.** When the flanking IS also occurs inside
 >   the cargo, only 2 of 40 elements are covered by any candidate cycle at all.
 >   The loss is in detection, not scoring, so no threshold recovers it.
-> - **The IS gate did not discriminate here.** All 1272 candidate cycles carried
->   an IS hit, so the gate rejected nothing. It is kept because it is
->   definitionally required, not because it was shown to filter.
+> - **The IS gate filters, but only the host's cycles.** 255 of the 1,398
+>   candidate cycles (18%) carry no IS hit; the gate scores them 0 and they never
+>   reach the result table. None of them is an implanted element: of the 200
+>   elements a candidate covers, scoring loses one, and that one has an IS hit
+>   and scores 49.9, just under the threshold.
 
 Detection deliberately casts wide — about 23 candidates per genome to find 4
 elements, a precision of 17% — and scoring takes that to 91.2% while keeping 98.5%
@@ -498,7 +511,7 @@ walking its index — does not amortise over a query of five predicted proteins,
 so the cost was paid once per cycle per database. `blast_batch` (default true)
 sends every cycle in one query instead.
 
-Measured on 20 real cycles against the four bundled databases, BLAST at four
+Measured on 20 real cycles against the four reference databases, BLAST at four
 threads and the databases already built:
 
 | search | per cycle | batched |
@@ -509,13 +522,17 @@ threads and the databases already built:
 | blastp, xenobiotics | 14.01 s | 10.24 s |
 | **total** | **23.5 s** (80 invocations) | **13.1 s** (4) |
 
+Measured before 1.1.0, against the 82k-sequence xenobiotic set.
+
 `picota_final_tab` is byte-identical either way, checked on 4 and on 40 cycles.
 An E-value depends on the database and on the individual query, not on what else
 shares the query file, and the score is computed from alignment length, subject
 length and identity — none of which the batching touches.
 
 Threads follow from that: one large search parallelises where 160 tiny ones did
-not. On the batched query of 40 cycles against the 82k-sequence xenobiotic set,
+not. On the batched query of 40 cycles against the 82k-sequence xenobiotic set
+used before 1.1.0 (the KEGG set that replaced it is a fifth of the size, so
+these times are an upper bound),
 62.0 s at one thread, 15.4 s at four, 9.7 s at eight, 9.1 s at sixteen, 8.5 s at
 twenty-four. The default is **8**, where the curve flattens and there is still
 room for an assembler running beside it. `PICOTA_BLAST_THREADS` overrides it for
@@ -572,29 +589,30 @@ signature no longer matches and the work is redone.
 
 ## Configuration reference
 
-Every default below is the one in the shipped `config.yaml`.
+Every default below is the one in the shipped `config.yaml`. Keep each key in
+its section: an unknown key in `options:` or `paths:` stops the config from loading.
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `min_size_of_cycle` | 1000 | Minimum cycle length (bp). The graph cycle is IS + cargo, not IS + cargo + IS, so a compact element yields a shorter cycle than itself — see [ROADMAP §9](docs/ROADMAP.md) |
-| `max_size_of_cycle` | 40000 | Maximum cycle length (bp) |
-| `min_component_number` | 1 | Minimum contigs in cycle |
-| `max_component_number` | 25 | Maximum contigs in cycle |
-| `k_mer_sim` | 80 | K-mer size for similarity filtering |
-| `threshold_sim` | 80 | K-mer similarity threshold (%) |
-| `find_all_path` | true | Enumerate all paths (exponential — use with caution) |
-| `path_limit` | 25 | Maximum nodes in one enumerated path. Searches that hit it are cut short and counted; the run warns that the enumeration is not exhaustive |
-| `dedup_mode` | legacy | `legacy` reproduces the historical deduplication; `strict` never discards a candidate for merely sharing a repeat node — see [ROADMAP §2](docs/ROADMAP.md) |
-| `dedup_min_ani` | 99.0 | Identity (%) above which two same-sized candidates are one sequence. `strict` only |
-| `mean_of_CompTns` | 5850 | Mean composite transposon length (bp) |
-| `std_of_CompTns` | 2586 | Standard deviation of composite transposon length |
-| `max_z` | 20 | Length z-score at which the length term reaches zero |
-| `dist_type` | 1 | Length-fit distribution |
-| `total_score_type` | 3 | Which score the threshold applies to (0-3). All four are always written — see [Scoring](#scoring) |
-| `threshold_final_score` | 50 | Minimum score to report a cycle |
-| `split_min_score` | 92 | Minimum score for boundary annotation |
-| `assembler_type` | spades | Assembly tool (`spades` or `megahit`). SPAdes by measurement: 40/40 implanted elements recovered against 19/40 from the MEGAHIT graph of the same reads — see [ROADMAP §6](docs/ROADMAP.md) |
-| `blast_batch` | true | One BLAST search per database over every cycle at once, rather than one per cycle per database. Same hits either way — see [Performance](#performance) |
+| Parameter | Section | Default | Description |
+|-----------|---------|---------|-------------|
+| `min_size_of_cycle` | `options` | 1000 | Minimum cycle length (bp). The graph cycle is IS + cargo, not IS + cargo + IS, so a compact element yields a shorter cycle than itself — see [ROADMAP §9](docs/ROADMAP.md) |
+| `max_size_of_cycle` | `options` | 40000 | Maximum cycle length (bp) |
+| `min_component_number` | `options` | 1 | Minimum contigs in cycle |
+| `max_component_number` | `options` | 25 | Maximum contigs in cycle |
+| `k_mer_sim` | `options` | 80 | K-mer size for similarity filtering |
+| `threshold_sim` | `options` | 80 | K-mer similarity threshold (%) |
+| `find_all_path` | `paths` | true | Enumerate all paths (exponential — use with caution) |
+| `path_limit` | `paths` | 25 | Maximum nodes in one enumerated path. Searches that hit it are cut short and counted; the run warns that the enumeration is not exhaustive |
+| `dedup_mode` | `options` | legacy | `legacy` reproduces the historical deduplication; `strict` never discards a candidate for merely sharing a repeat node — see [ROADMAP §2](docs/ROADMAP.md) |
+| `dedup_min_ani` | `options` | 99.0 | Identity (%) above which two same-sized candidates are one sequence. `strict` only |
+| `mean_of_CompTns` | `options` | 5850 | Mean composite transposon length (bp) |
+| `std_of_CompTns` | `options` | 2586 | Standard deviation of composite transposon length |
+| `max_z` | `options` | 20 | Length z-score at which the length term reaches zero |
+| `dist_type` | `options` | 1 | Length-fit distribution |
+| `total_score_type` | `options` | 3 | Which score the threshold applies to (0-3). All four are always written — see [Scoring](#scoring) |
+| `threshold_final_score` | `options` | 50 | Minimum score to report a cycle |
+| `split_min_score` | `options` | 92 | Minimum score for boundary annotation |
+| `assembler_type` | `paths` | spades | Assembly tool (`spades` or `megahit`). SPAdes by measurement: 40/40 implanted elements recovered against 19/40 from the MEGAHIT graph of the same reads — see [ROADMAP §6](docs/ROADMAP.md) |
+| `blast_batch` | `options` | true | One BLAST search per database over every cycle at once, rather than one per cycle per database. Same hits either way — see [Performance](#performance) |
 
 Optional bounds, unset (unbounded) unless added to the config:
 
@@ -696,7 +714,8 @@ pipeline.
 
 Check the assembler log under `assembly/<accession>/`. With MEGAHIT the graph is
 converted from FASTG, so `gfa_tools_path` in `config.yaml` must point at a
-working `fastg2gfa`.
+working `fastg2gfa`. It is part of [lh3/gfa1](https://github.com/lh3/gfa1)
+(`misc/fastg2gfa.c`) and is not installed by conda; build it and set the path.
 
 </details>
 
@@ -730,7 +749,8 @@ own code.
 > transposons from assembly graphs reveals hidden antibiotic resistance gene
 > mobilization networks.* Manuscript in preparation.
 
-[10.5281/zenodo.21769753](https://doi.org/10.5281/zenodo.21769753)
+[10.5281/zenodo.21769752](https://doi.org/10.5281/zenodo.21769752) (all versions; v1.1.0 is
+[10.5281/zenodo.23327998](https://doi.org/10.5281/zenodo.23327998))
 
 ---
 
