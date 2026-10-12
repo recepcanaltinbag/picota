@@ -4,7 +4,7 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 
 ---
 
-## [1.1.0] — 2026-10-12
+## [1.1.0] — 2026-10-13
 
 Results written by 1.0.0-rc1 are not comparable with this release: defaults,
 scoring and several output fields changed. See **Output changes** under
