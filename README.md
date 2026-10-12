@@ -54,23 +54,22 @@ scenario numbers are in [Scoring](#scoring).
 
 ## Pipeline
 
-```mermaid
-flowchart LR
-    R([Reads]) --> A[Assembly]
-    A --> G[(Assembly graph)]
-    G --> C[Cycle detection]
-    C --> P[Gene prediction]
-    P --> B[Homology search]
-    C --> B
-    B --> S[Scoring]
-    S --> O([Ranked transposons])
-    L([Long reads]) -.-> O
-
-    %% explicit text colour: the fills are light, and GitHub's dark theme would
-    %% otherwise draw light labels on them
-    style G fill:#e8f0fe,stroke:#4285f4,color:#202124
-    style O fill:#e6f4ea,stroke:#34a853,color:#202124
-    style L stroke-dasharray: 4 4
+```
+  SRA accession ──► reads ──► assembly (SPAdes) ──► assembly graph (.gfa)
+                                                              │
+                                                              ▼
+                                                      cycle detection
+                                                              │  candidate cycles
+                                                              ▼
+  CARD · ISfinder/TnCentral ──────────────────► gene prediction + BLAST
+  KEGG xenobiotics · known CTs                                │
+                                                              ▼
+                                                           scoring
+                                                              │
+                                                              ▼
+                                ranked composite transposons (.tab · .csv · .gbk)
+                                                              ┆
+                                     long reads ┄┄┄┄┄┄► validation (optional)
 ```
 
 <details>
