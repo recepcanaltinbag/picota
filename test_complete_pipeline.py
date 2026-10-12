@@ -95,6 +95,9 @@ def step_cycle_detection(gfa_file: str, out_fasta: str, logger, cfg=None) -> int
         max_component_number = getattr(opt, 'max_component_number', 25),
         k_mer_sim         = getattr(opt, 'k_mer_sim',            200),
         threshold_sim     = getattr(opt, 'threshold_sim',        99),
+        dedup_mode        = getattr(opt, 'dedup_mode',           'legacy'),
+        dedup_min_ani     = getattr(opt, 'dedup_min_ani',        99.0),
+        max_expansions    = getattr(opt, 'max_path_expansions',  None),
     )
     if os.path.exists(out_fasta):
         with open(out_fasta) as _f:
@@ -119,12 +122,19 @@ def step_scoring(cycle_fasta: str, out_dir: str, logger, cfg=None) -> str:
     # Read scoring params from config if available
     opt = getattr(cfg, 'options', None) if cfg else None
     pth = getattr(cfg, 'paths',   None) if cfg else None
+    def database(attr, *default):
+        # Config DB paths are written relative to the repo root (picota_dir).
+        val = getattr(pth, attr, None)
+        if not val:
+            return db_path(*default)
+        return val if os.path.isabs(val) else os.path.join(os.path.dirname(os.path.dirname(DB_BASE)), val)
+
     scoring_main(
         cycle_fasta, out_dir,
-        db_path('Antibiotics', 'protein_fasta_protein_homolog_model.fasta'),
-        db_path('Xenobiotics', 'Xenobiotics_classified.fasta'),
-        db_path('ISes', '_tncentral_nointegrall_isfinder-TNs.fasta'),
-        db_path('CompTns', 'Known_Tns.fasta'),
+        os.path.normpath(database('path_to_antibiotics', 'Antibiotics', 'protein_fasta_protein_homolog_model.fasta')),
+        os.path.normpath(database('path_to_xenobiotics', 'Xenobiotics', 'Xenobiotics_classified.fasta')),
+        os.path.normpath(database('path_to_ises', 'ISes', '_tncentral_nointegrall_isfinder-TNs.fasta')),
+        os.path.normpath(database('path_to_TNs', 'CompTns', 'Known_Tns.fasta')),
         out_dir,
         mean_of_CompTns       = getattr(opt, 'mean_of_CompTns',       5850),
         std_of_CompTns        = getattr(opt, 'std_of_CompTns',        2586),
@@ -132,12 +142,13 @@ def step_scoring(cycle_fasta: str, out_dir: str, logger, cfg=None) -> str:
         threshold_final_score = getattr(opt, 'threshold_final_score', 0),
         max_z                 = getattr(opt, 'max_z',                 20),
         dist_type             = getattr(opt, 'dist_type',             1),
-        path_of_prodigal      = getattr(pth, 'path_of_prodigal',     'prodigal'),
-        path_of_blastn        = getattr(pth, 'path_of_blastn',       'blastn'),
-        path_of_makeblastdb   = getattr(pth, 'path_of_makeblastdb',  'makeblastdb'),
-        path_of_blastx        = getattr(pth, 'path_of_blastx',       'blastx'),
-        path_of_blastp        = getattr(pth, 'path_of_blastp',       'blastp'),
+        path_of_prodigal      = getattr(opt, 'path_of_prodigal',     'prodigal'),
+        path_of_blastn        = getattr(opt, 'path_of_blastn',       'blastn'),
+        path_of_makeblastdb   = getattr(opt, 'path_of_makeblastdb',  'makeblastdb'),
+        path_of_blastx        = getattr(opt, 'path_of_blastx',       'blastx'),
+        path_of_blastp        = getattr(opt, 'path_of_blastp',       'blastp'),
         logger_name           = 'picota_complete',
+        blast_batch           = getattr(opt, 'blast_batch',           True),
     )
     if os.path.exists(final_tab):
         with open(final_tab) as _f:
@@ -290,7 +301,9 @@ def step_assembly(short_id: str, raw_files: list, asm_dir: str,
         assembly_keep_temp_files,
         assembly_path_of_spades, assembly_path_of_fastp, assembly_skip_filtering,
         assembler_type, assembly_path_of_megahit,
-        gfa_tools_path, path_of_bandage, 'picota_complete'
+        gfa_tools_path, path_of_bandage, 'picota_complete',
+        spades_memory_gb=getattr(cfg.paths, 'spades_memory_gb', None),
+        spades_timeout_s=getattr(cfg.paths, 'spades_timeout_s', None),
     )
     return [str(f) for f in Path(asm_dir).glob('*.gfa')]
 

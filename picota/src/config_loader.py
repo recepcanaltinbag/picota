@@ -67,9 +67,9 @@ class PathsConfig:
     # it swaps -- so leaving these unset trades a recorded error for a hang.
     spades_memory_gb: int = None
     spades_timeout_s: int = None
-    # Second-attempt cap, used only after the first attempt fails. Sized for the
-    # whole machine rather than for one of several workers, because the retry
-    # runs on its own -- see run_phase.py. Leave unset for a single attempt.
+    # Second-attempt cap for a batch runner that retries a failed assembly on
+    # its own. Accepted so such configs load; the shipped runners make a single
+    # attempt and do not read it.
     spades_memory_gb_retry: int = None
 
 # -------------------------
@@ -102,7 +102,8 @@ class OptionsConfig:
     # find_all_path enumerates paths depth-first, so a dense graph can run for
     # hours while SPAdes -- which does have a cap -- finished in minutes. One
     # such graph holds the whole queue. None keeps the previous unbounded
-    # behaviour.
+    # behaviour. Accepted so such configs load; the shipped runners do not read
+    # it -- use max_path_expansions, which they do.
     cycle_timeout_s: int = None
     # Deterministic bound on graph traversal: how many DFS expansions one path
     # search may spend before it is abandoned. Preferred over cycle_timeout_s

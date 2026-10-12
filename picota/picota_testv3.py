@@ -144,7 +144,9 @@ def run_assembly(acc, raw_files, out_folder, cfg: Config, logger_name):
         cfg.paths.keep_temp_files, cfg.paths.path_of_spades,
         cfg.paths.path_of_fastp, cfg.paths.skip_filtering,
         cfg.paths.assembler_type, cfg.paths.path_of_megahit,
-        cfg.paths.gfa_tools_path, cfg.paths.path_of_bandage, logger_name
+        cfg.paths.gfa_tools_path, cfg.paths.path_of_bandage, logger_name,
+        spades_memory_gb=cfg.paths.spades_memory_gb,
+        spades_timeout_s=cfg.paths.spades_timeout_s,
     )
     return glob.glob(os.path.join(out_folder, "*.gfa"))
 
@@ -160,7 +162,8 @@ def run_cycle_analysis(acc, gfa_file, out_file, cfg: Config):
         cfg.options.min_size_of_cycle, cfg.options.max_size_of_cycle, cfg.options.name_prefix_cycle,
         cfg.options.min_component_number, cfg.options.max_component_number,
         cfg.options.k_mer_sim, cfg.options.threshold_sim,
-        cfg.options.dedup_mode, cfg.options.dedup_min_ani
+        cfg.options.dedup_mode, cfg.options.dedup_min_ani,
+        max_expansions=cfg.options.max_path_expansions,
     )
 
 
