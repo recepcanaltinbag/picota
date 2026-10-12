@@ -12,7 +12,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8") if (here / "
 
 setup(
     name="picota",
-    version="1.0.0-rc1",
+    version="1.1.0",
     description="Pipeline for Identification of Composite Transposons from Assembly graphs",
     long_description=long_description,
     long_description_content_type="text/markdown",
