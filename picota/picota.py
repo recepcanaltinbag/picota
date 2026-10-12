@@ -20,13 +20,22 @@ import sys
 
 # The stage modules import as "src.X" and "picota_testv3", both relative to
 # this directory, whether run from a checkout or from an installed package.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _HERE)
 
 import picota_testv3 as pipeline  # noqa: E402
+import src.scoringv4ProtBlast as scoring  # noqa: E402
 from src.config_loader import load_config  # noqa: E402
 from src.logger_setup import setup_logger_from_config  # noqa: E402
 
 __version__ = "1.1.0"
+
+# Paths in the shipped configs ("picota/DBs/...") are written relative to the
+# repository root, the directory above this one.
+REPO_ROOT = os.path.dirname(_HERE)
+
+DATABASES = ('path_to_antibiotics', 'path_to_xenobiotics', 'path_to_ises', 'path_to_TNs')
+SCORING_COMMANDS = ('analysis', 'scoring', 'all')
 
 def required_tools(command, cfg):
     """The executables `command` will call, as named in the config."""
@@ -50,16 +59,53 @@ def missing_tools(command, cfg):
     return [t for t in required_tools(command, cfg) if t and not shutil.which(t)]
 
 
+def resolve(path):
+    """A config path as given if it exists from here, else from the repo root."""
+    if not path or os.path.isabs(path) or os.path.exists(path):
+        return path
+    candidate = os.path.join(REPO_ROOT, path)
+    return candidate if os.path.exists(candidate) else path
+
+
+def sample_name(text):
+    """A sample name scoring can carry through.
+
+    Scoring takes SRAID from the cycle file name up to the first '_' or '.',
+    so either character would truncate the name in every result table.
+    """
+    return text.replace('_', '-').replace('.', '-')
+
+
 def prepare(args):
     """Load the config, apply command-line overrides and start the logger."""
-    if not os.path.exists(args.config):
+    config = resolve(args.config)
+    if not os.path.exists(config):
         sys.exit(f"Error: configuration file not found: {args.config}")
-    cfg = load_config(args.config)
+    cfg = load_config(config)
+
     cfg.paths.outdir = args.output
+    cfg.paths.sra_id_file = resolve(cfg.paths.sra_id_file)
+    # The config's log file belongs to whoever wrote the config; a CLI run
+    # logs next to its own output.
+    cfg.logging.log_file = os.path.join(args.output, 'picota.log')
+    for attr in DATABASES:
+        setattr(cfg.paths, attr, resolve(getattr(cfg.paths, attr)))
+
+    if args.command in SCORING_COMMANDS:
+        # Scoring skips a missing database with a warning and carries on, which
+        # for the IS set means every candidate scores 0 and the run "succeeds"
+        # with an empty table. Stop before that.
+        missing = [f"  {attr}: {getattr(cfg.paths, attr)}" for attr in DATABASES
+                   if not os.path.exists(getattr(cfg.paths, attr) or '')]
+        if missing:
+            sys.exit("Error: reference database(s) not found:\n" + "\n".join(missing) +
+                     "\nSee 'Reference databases' in README.md, or fix the paths in " + config)
+
     if args.threads is not None:
         cfg.paths.assembly_threads = args.threads
         cfg.options.mapping_threads = args.threads
-        os.environ['PICOTA_BLAST_THREADS'] = str(args.threads)
+        # Read once at import, so the environment variable is too late here.
+        scoring.BLAST_THREADS = args.threads
     os.makedirs(args.output, exist_ok=True)
     pipeline.logger = setup_logger_from_config(cfg)
     return cfg
@@ -74,13 +120,31 @@ def cmd_sra_download(args, cfg):
     return files
 
 
+def fastq_sample_name(fastq):
+    """SRR123_1.fastq.gz -> SRR123: the name before the read-pair suffix."""
+    base = os.path.basename(fastq)
+    for ext in ('.gz', '.fastq', '.fq'):
+        if base.endswith(ext):
+            base = base[:-len(ext)]
+    for suffix in ('_1', '_2', '_R1', '_R2', '_R1_001', '_R2_001'):
+        if base.endswith(suffix):
+            base = base[:-len(suffix)]
+            break
+    return base
+
+
 def cmd_assembly(args, cfg):
-    name = args.name or os.path.basename(args.fastq[0]).split('_')[0].split('.')[0]
+    for f in args.fastq:
+        if not os.path.exists(f):
+            sys.exit(f"Error: FASTQ file not found: {f}")
+    name = sample_name(args.name or fastq_sample_name(args.fastq[0]))
+    os.makedirs(args.output, exist_ok=True)     # assembly_main only mkdirs one level
+    # The reads are the user's: never let assembly cleanup delete them.
     gfa_files = pipeline.run_assembly(name, args.fastq, args.output, cfg,
-                                      cfg.logging.logger_name)
+                                      cfg.logging.logger_name, delete_inputs=False)
     if not gfa_files:
         sys.exit(f"Error: assembly produced no GFA in {args.output}")
-    return gfa_files
+    return name, gfa_files
 
 
 def cmd_scoring(args, cfg):
@@ -91,17 +155,25 @@ def cmd_scoring(args, cfg):
 
 
 def cmd_analysis(args, cfg):
-    """Cycle detection, scoring and transposon/cargo split on one GFA."""
+    """Cycle detection, scoring and transposon/cargo split on one GFA.
+
+    Laid out as the config-driven pipeline lays out a sample, so that a second
+    sample in the same --output gets its own directories rather than the first
+    sample's results, which every stage would otherwise reuse as "already done".
+    """
     if not os.path.exists(args.gfa):
         sys.exit(f"Error: GFA file not found: {args.gfa}")
-    name = os.path.splitext(os.path.basename(args.gfa))[0]
+    gfa_stem = os.path.splitext(os.path.basename(args.gfa))[0]
+    name = sample_name(getattr(args, 'name', None) or gfa_stem)
     cycle_dir = os.path.join(args.output, 'cycles')
-    scoring_dir = os.path.join(args.output, 'scoring')
-    annot_dir = os.path.join(args.output, 'annot')
+    scoring_dir = os.path.join(args.output, 'scoring', name)
+    annot_dir = os.path.join(args.output, 'annot', name)
     for d in (cycle_dir, scoring_dir, annot_dir):
         os.makedirs(d, exist_ok=True)
 
-    cycle_file = os.path.join(cycle_dir, f"{name}.fasta")
+    # <sample>_<graph>.fasta, as picota_testv3 names it: scoring reads SRAID and
+    # kmer back out of this name.
+    cycle_file = os.path.join(cycle_dir, f"{name}_{sample_name(gfa_stem)}.fasta")
     pipeline.run_cycle_analysis(name, args.gfa, cycle_file, cfg)
     if not os.path.exists(cycle_file):
         pipeline.logger.warning("No cycles detected in the assembly graph")
@@ -117,15 +189,21 @@ def cmd_analysis(args, cfg):
 def cmd_all(args, cfg):
     """Run every stage, from whichever input was given."""
     if args.gfa:
-        return cmd_analysis(argparse.Namespace(gfa=args.gfa, output=args.output), cfg)
+        return cmd_analysis(argparse.Namespace(gfa=args.gfa, output=args.output,
+                                               name=args.name), cfg)
     if args.fastq:
-        asm_out = os.path.join(args.output, 'assembly')
-        gfa_files = cmd_assembly(
-            argparse.Namespace(fastq=args.fastq, output=asm_out, name=None), cfg)
-        return cmd_analysis(argparse.Namespace(gfa=gfa_files[0], output=args.output), cfg)
+        name = sample_name(args.name or fastq_sample_name(args.fastq[0]))
+        asm_out = os.path.join(args.output, 'assembly', name)
+        name, gfa_files = cmd_assembly(
+            argparse.Namespace(fastq=args.fastq, output=asm_out, name=name), cfg)
+        return cmd_analysis(argparse.Namespace(gfa=gfa_files[0], output=args.output,
+                                               name=name), cfg)
     if args.sra:
         pipeline.process_accession(args.sra, args.long, cfg)
         return None
+    if not os.path.exists(cfg.paths.sra_id_file or ''):
+        sys.exit(f"Error: no --sra, --fastq or --gfa given, and the config's "
+                 f"sra_id_file does not exist: {cfg.paths.sra_id_file}")
     for short_id, long_id in pipeline.load_sra_pairs(cfg.paths.sra_id_file):
         pipeline.process_accession(short_id, long_id, cfg)
     return None
@@ -172,11 +250,13 @@ Examples:
 
     p = sub.add_parser('assembly', parents=[common], help='Assemble reads into a GFA graph')
     p.add_argument('--fastq', required=True, nargs='+', help='FASTQ file(s), paired files together')
-    p.add_argument('--name', help='Sample name (default: taken from the first FASTQ)')
+    p.add_argument('--name', help='Sample name (default: the first FASTQ name, '
+                                  'without its _1/_R1 suffix)')
 
     p = sub.add_parser('analysis', parents=[common],
                        help='Detect, score and split composite transposons in a GFA')
     p.add_argument('--gfa', required=True, help='Input GFA file')
+    p.add_argument('--name', help='Sample name written to the results (default: the GFA name)')
 
     p = sub.add_parser('scoring', parents=[common], help='Score existing cycles')
     p.add_argument('--cycle_folder', required=True,
@@ -189,6 +269,7 @@ Examples:
     src.add_argument('--fastq', nargs='+', help='FASTQ file(s); skips the download')
     src.add_argument('--gfa', help='GFA file; skips download and assembly')
     p.add_argument('--long', help='Long-read SRA accession for validation (with --sra)')
+    p.add_argument('--name', help='Sample name for --fastq or --gfa input')
     return parser
 
 
