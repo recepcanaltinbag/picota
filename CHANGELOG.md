@@ -343,16 +343,23 @@ An existing run re-executed with this release can write different results:
   by the new `scripts/build_is_db.py`. In the merged
   `_tncentral_nointegrall_isfinder-TNs.fasta` 21 records had lost the line
   breaks around their header, so BLAST searched each as the tail of the record
-  before it, under that record's name; they are split back out. 553 ISfinder
+  before it, under that record's name; they are split back out. 495 ISfinder
   elements present in the bundled `IS.fna` and absent from the merged set, by
   name and by sequence on either strand, are added as `ISFinder_<name>`
-  (5,409 → 5,962 records). Of the elements added, 355 had no BLAST hit at all
-  in the old set, so a cycle carrying one could not pass the IS gate. On
+  (5,409 → 5,904 records). Of the elements added, 298 had no BLAST hit at all
+  in the old set, so a cycle carrying one could not pass the IS gate. MITEs
+  are not added (`--include-mites` adds them): they encode no transposase and
+  cannot flank a composite transposon, but counted as IS hits they lift a
+  cycle through the IS gate. On the simulated benchmark, with them in, a
+  non-transposon cycle went from score3 17 to 29 on `MITEEc1` alone. The merged
+  set's own 2 MITEs stay. The set covers all eight insertion sequences the
+  benchmark generator draws that the old set lacked: seven by name, and
+  IS200G through `ISFinder_IS1541A`, which has the same sequence. On
   `testNitro.gfa` the report is unchanged. `config_IS26.yaml` and
   `config_random.yaml` named `tncentral_integrall_isfinder-TNs.fasta`, which
   does not exist; they now name `picota_IS_db_integrall.fasta`, the same repair
   applied to the INTEGRALL-inclusive `tncentral_integrall_isfinder.fa`
-  (6,094 → 6,647 records).
+  (6,094 → 6,589 records).
 - **IS families in `picota_enriched.csv`** come from the ISFinder taxonomy, and
   numbered ISCR and ISEcp members (ISCR4 to ISCR30, ISEcp2, ISEcp3), previously
   `Unknown`, are assigned.

@@ -274,8 +274,11 @@ tracked.
    [thanhleviet/ISfinder-sequences](https://github.com/thanhleviet/ISfinder-sequences)):
    - 21 records of the merged set had lost the line breaks around their header,
      so BLAST read each as part of the record before it; they are split back out.
-   - 553 ISfinder elements of `IS.fna` absent from the merged set, by name and by
+   - 495 ISfinder elements of `IS.fna` absent from the merged set, by name and by
      sequence on either strand, are added as `ISFinder_<name>`.
+   - MITEs are left out (`--include-mites` adds them). They encode no
+     transposase, so they cannot flank a composite transposon, and counted as IS
+     hits they would let a cycle through the IS gate on a MITE alone.
 
    ```bash
    python3 scripts/build_is_db.py      # writes picota/DBs/ISes/picota_IS_db.fasta

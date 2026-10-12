@@ -91,3 +91,13 @@ def test_uppercase_base_in_a_glued_sequence_stops_the_build():
     # 'N' would otherwise be taken as the end of the accession: B-X1acgtN.
     with pytest.raises(b.BuildError):
         b.parse_merged(lines(">A-X1\nac>B-X1acgtNacgt\n"))
+
+
+def test_mites_are_left_out_unless_asked_for():
+    merged = lines(">ISFinder_IS26\nacgtacgtaa\n")
+    is_fna = lines(">MITEEc1_IS630_unknown\nGGGGGTTTTT\n>IS100_IS21_unknown\nAAACCCGGG\n")
+    _, report = b.build(merged, is_fna)
+    assert report['added'] == ['ISFinder_IS100']
+    assert report['skipped_mites'] == ['MITEEc1']
+    _, report = b.build(merged, is_fna, include_mites=True)
+    assert report['added'] == ['ISFinder_MITEEc1', 'ISFinder_IS100']

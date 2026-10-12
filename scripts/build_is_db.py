@@ -28,6 +28,13 @@ Two things are wrong with the merged FASTA as distributed
    output_formatter.infer_is_family() resolves their family from
    isfinder_taxonomy.tsv.
 
+   MITEs are not added (--include-mites adds them). They are short,
+   non-autonomous elements that encode no transposase, so they cannot be the
+   flanking insertion sequences of a composite transposon. Counted as IS hits,
+   they let a cycle through score3's IS gate on the strength of a MITE: on the
+   simulated benchmark one non-transposon cycle rose from 17 to 29 that way.
+   The merged set carries 2 of ISfinder's 60 and keeps them.
+
 Usage (from the repository root):
   python scripts/build_is_db.py
   python scripts/build_is_db.py --merged A.fasta --isfinder IS.fna --out B.fasta
@@ -155,15 +162,22 @@ def merged_name(header):
     return header.rsplit('-', 1)[0] if '-' in header else header
 
 
-def build(merged_lines, is_fna_lines):
+def is_mite(name):
+    return name.upper().startswith('MITE')
+
+
+def build(merged_lines, is_fna_lines, include_mites=False):
     """Return (records, report) for the combined set."""
     merged, repaired = parse_merged(merged_lines)
     names = {merged_name(h).lower() for h, _ in merged}
     seqs = {canonical(s) for _, s in merged if s}
 
-    added = []
+    added, skipped_mites = [], []
     for name, seq in parse_is_fna(is_fna_lines):
         if not seq or name.lower() in names or canonical(seq) in seqs:
+            continue
+        if is_mite(name) and not include_mites:
+            skipped_mites.append(name)
             continue
         added.append((ISFINDER_PREFIX + name, seq))
         names.add(name.lower())
@@ -176,6 +190,7 @@ def build(merged_lines, is_fna_lines):
         'merged_records': len(merged),
         'repaired': repaired,
         'added': [h for h, _ in added],
+        'skipped_mites': skipped_mites,
         'total': len(merged) + len(added),
     }
     return merged + added, report
@@ -195,17 +210,21 @@ def main(argv=None):
     ap.add_argument('--merged', default=MERGED_PATH, help='Merged TnCentral + ISfinder FASTA')
     ap.add_argument('--isfinder', default=IS_FNA_PATH, help='ISfinder IS.fna')
     ap.add_argument('--out', default=OUT_PATH, help='Output FASTA. Default: %(default)s')
+    ap.add_argument('--include-mites', action='store_true',
+                    help='Also add the MITEs missing from the merged set')
     args = ap.parse_args(argv)
 
     try:
-        records, report = build(read_fasta_lines(args.merged), read_fasta_lines(args.isfinder))
+        records, report = build(read_fasta_lines(args.merged), read_fasta_lines(args.isfinder),
+                                include_mites=args.include_mites)
     except BuildError as e:
         sys.exit(f"build_is_db: {e}")
     write_fasta(records, args.out)
 
     print(f"merged set:          {report['merged_records']} records "
           f"({len(report['repaired'])} glued records repaired)", file=sys.stderr)
-    print(f"ISfinder added:      {len(report['added'])}", file=sys.stderr)
+    print(f"ISfinder added:      {len(report['added'])} "
+          f"({len(report['skipped_mites'])} MITEs left out)", file=sys.stderr)
     print(f"written:             {report['total']} records -> {args.out}", file=sys.stderr)
     return 0
 
