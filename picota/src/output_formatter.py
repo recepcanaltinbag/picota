@@ -266,6 +266,17 @@ def infer_is_family(is_name: str) -> tuple:
     if not name:
         return ("Unknown", "Unknown")
 
+    # A locus where several references tie is named "A|B|C" by the scoring
+    # step (scoringv4ProtBlast.TIE_SEP). Looked up whole, "IS15DII|IS26|..."
+    # fell through to the IS+digits fallback and came back as IS15. Resolve
+    # each name; where they disagree, report every answer, sorted, as the
+    # scoring step does.
+    if '|' in name:
+        resolved = [infer_is_family(n) for n in name.split('|') if n.strip()]
+        groups = sorted({g for g, _ in resolved})
+        families = sorted({f for _, f in resolved})
+        return ('|'.join(groups), '|'.join(families))
+
     # Strip database source prefixes added by PICOTA's BLAST pipeline
     # e.g. "ISFinder_IS26" → "IS26", "ISFinder_ISEcp1" → "ISEcp1"
     for _prefix in ('ISFinder_', 'ISFDB_', 'TNcentral_'):
@@ -472,7 +483,7 @@ def parse_max_is_length(is_coords_str: str) -> int:
 # ---------------------------------------------------------------------------
 _TAB_COLS = [
     'CycleID', 'SRAID', 'kmer',
-    'score0', 'score1', 'score2',
+    'score0', 'score1', 'score2', 'score3',
     'NumIS', 'ISproducts', 'IScoords',
     'NumAnt', 'Antproducts', 'Antcoords',
     'NumXeno', 'Xenoproducts', 'Xenocoords',

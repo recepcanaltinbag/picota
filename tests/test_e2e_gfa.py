@@ -473,6 +473,21 @@ class TestE2E_OutputFormatter:
         group, family = infer_is_family('ISCR3')
         assert group == 'IS91'
 
+    def test_is_family_inference_tied_names(self):
+        # Scoring joins references that tie at one locus with "|". Looked up
+        # whole, this group used to come back as IS15 instead of IS6.
+        from src.output_formatter import infer_is_family
+        group, family = infer_is_family(
+            'ISFinder_IS15DII|ISFinder_IS15DIV|ISFinder_IS26|ISFinder_IS26.var1')
+        assert group == 'IS6'
+        assert family == 'IS15DII|IS15DIV|IS26'
+
+    def test_is_family_inference_tied_names_disagree(self):
+        from src.output_formatter import infer_is_family
+        group, family = infer_is_family('ISFinder_ISEcp1|ISFinder_IS10')
+        assert group == 'IS1380|IS4'
+        assert family == '|'.join(sorted({infer_is_family('ISEcp1')[1], 'IS10'}))
+
     def test_is_family_unknown(self):
         from src.output_formatter import infer_is_family
         group, family = infer_is_family('XXXXXXXX')
