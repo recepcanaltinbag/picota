@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo/picota_logo.png" alt="PICOTA" width="180">
+  <img src="logo/picota_icon.png" alt="PICOTA logo" width="120">
 </p>
 
 <h1 align="center">PICOTA</h1>
