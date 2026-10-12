@@ -259,11 +259,11 @@ class TestStep4_Databases:
         assert os.path.getsize(p) > 1000
 
     def test_is_db_exists(self):
-        p = db_path('ISes/_tncentral_nointegrall_isfinder-TNs.fasta')
+        p = db_path('ISes/picota_IS_db.fasta')
         assert os.path.exists(p), f"IS DB bulunamadı: {p}"
 
     def test_xenobiotics_db_exists(self):
-        p = db_path('Xenobiotics/Xenobiotics_classified.fasta')
+        p = db_path('Xenobiotics/Xenobiotics_kegg.fasta')
         assert os.path.exists(p), f"Xenobiotics DB bulunamadı: {p}"
 
     def test_tn_db_exists(self):
@@ -358,8 +358,8 @@ class TestStep6_Scoring:
         scoring_main(
             cycle_fasta, str(tmp_path),
             db_path('Antibiotics/protein_fasta_protein_homolog_model.fasta'),
-            db_path('Xenobiotics/Xenobiotics_classified.fasta'),
-            db_path('ISes/_tncentral_nointegrall_isfinder-TNs.fasta'),
+            db_path('Xenobiotics/Xenobiotics_kegg.fasta'),
+            db_path('ISes/picota_IS_db.fasta'),
             db_path('CompTns/Known_Tns.fasta'),
             str(tmp_path),
             mean_of_CompTns=5850, std_of_CompTns=2586,

@@ -192,8 +192,8 @@ def score_cycles(args, case_dir, cycles_fasta, tag):
     dbs = os.path.join(PICOTA_DIR, "DBs")
     scoring_main(cycles_fasta, out_dir,
                  os.path.join(dbs, "Antibiotics/protein_fasta_protein_homolog_model.fasta"),
-                 os.path.join(dbs, "Xenobiotics/Xenobiotics_classified.fasta"),
-                 os.path.join(dbs, "ISes/_tncentral_nointegrall_isfinder-TNs.fasta"),
+                 os.path.join(dbs, "Xenobiotics/Xenobiotics_kegg.fasta"),
+                 os.path.join(dbs, "ISes/picota_IS_db.fasta"),
                  os.path.join(dbs, "CompTns/Known_Tns.fasta"),
                  os.path.join(case_dir, "blastdb_" + tag),
                  total_score_type=args.score_type,

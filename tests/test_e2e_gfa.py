@@ -139,8 +139,8 @@ class TestE2E_Scoring:
         scoring_main(
             cycle_fasta, str(tmp_path),
             db_path('Antibiotics', 'protein_fasta_protein_homolog_model.fasta'),
-            db_path('Xenobiotics', 'Xenobiotics_classified.fasta'),
-            db_path('ISes', '_tncentral_nointegrall_isfinder-TNs.fasta'),
+            db_path('Xenobiotics', 'Xenobiotics_kegg.fasta'),
+            db_path('ISes', 'picota_IS_db.fasta'),
             db_path('CompTns', 'Known_Tns.fasta'),
             str(tmp_path),
             mean_of_CompTns=5850, std_of_CompTns=2586,
@@ -168,8 +168,8 @@ class TestE2E_Scoring:
         scoring_main(
             cycle_fasta, str(tmp_path),
             db_path('Antibiotics', 'protein_fasta_protein_homolog_model.fasta'),
-            db_path('Xenobiotics', 'Xenobiotics_classified.fasta'),
-            db_path('ISes', '_tncentral_nointegrall_isfinder-TNs.fasta'),
+            db_path('Xenobiotics', 'Xenobiotics_kegg.fasta'),
+            db_path('ISes', 'picota_IS_db.fasta'),
             db_path('CompTns', 'Known_Tns.fasta'),
             str(tmp_path),
             mean_of_CompTns=5850, std_of_CompTns=2586,
@@ -221,8 +221,8 @@ class TestE2E_EnrichedCSV:
         scoring_main(
             cycle_fasta, str(out_dir),
             db_path('Antibiotics', 'protein_fasta_protein_homolog_model.fasta'),
-            db_path('Xenobiotics', 'Xenobiotics_classified.fasta'),
-            db_path('ISes', '_tncentral_nointegrall_isfinder-TNs.fasta'),
+            db_path('Xenobiotics', 'Xenobiotics_kegg.fasta'),
+            db_path('ISes', 'picota_IS_db.fasta'),
             db_path('CompTns', 'Known_Tns.fasta'),
             str(out_dir),
             mean_of_CompTns=5850, std_of_CompTns=2586,

@@ -132,8 +132,8 @@ def step_scoring(cycle_fasta: str, out_dir: str, logger, cfg=None) -> str:
     scoring_main(
         cycle_fasta, out_dir,
         os.path.normpath(database('path_to_antibiotics', 'Antibiotics', 'protein_fasta_protein_homolog_model.fasta')),
-        os.path.normpath(database('path_to_xenobiotics', 'Xenobiotics', 'Xenobiotics_classified.fasta')),
-        os.path.normpath(database('path_to_ises', 'ISes', '_tncentral_nointegrall_isfinder-TNs.fasta')),
+        os.path.normpath(database('path_to_xenobiotics', 'Xenobiotics', 'Xenobiotics_kegg.fasta')),
+        os.path.normpath(database('path_to_ises', 'ISes', 'picota_IS_db.fasta')),
         os.path.normpath(database('path_to_TNs', 'CompTns', 'Known_Tns.fasta')),
         out_dir,
         mean_of_CompTns       = getattr(opt, 'mean_of_CompTns',       5850),
