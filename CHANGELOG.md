@@ -4,9 +4,98 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 
 ---
 
-## [Unreleased] — v1.1.0 (in progress)
+## [1.1.0] — 2026-10-12
+
+Results written by 1.0.0-rc1 are not comparable with this release: defaults,
+scoring and several output fields changed. See **Output changes** under
+*Changed* before comparing old and new runs.
 
 ### Added
+- **`picota.py` command-line interface** — five subcommands (`sra_download`,
+  `assembly`, `analysis`, `scoring`, `all`), each a thin front end over the same
+  stage functions `picota_testv3.py` runs, so the CLI and the config-driven
+  pipeline execute the same code. `--config`, `--threads` and `--output` are
+  accepted after the subcommand; `all` takes one of `--sra`, `--fastq` or `--gfa`
+  (mutually exclusive) or, with none, runs the config's sample list; `--long`
+  names a long-read accession for validation; `--version` prints the version.
+  The tool check before any work starts is derived from the tool paths in the
+  config. Previously `picota/picota.py` was an empty file in rc1, and the first
+  version (4fdf66f) could not run any subcommand (see *Fixed*).
+- **`picota/__init__.py`**, so `setup.py`'s `find_packages()` finds the package.
+  Version is 1.1.0 in `setup.py`, `picota.py` and `picota/__init__.py`.
+- **`output_formatter.py`** — new module that generates `picota_enriched.csv` alongside
+  `picota_final_tab`. Each detected composite transposon receives a unique CT tag
+  (CT001, CT002, …). Rows are expanded one-per-antibiotic-class. Includes
+  antibiotic-class inference from 23 gene-name patterns (Beta-lactam,
+  Aminoglycoside, Tetracycline, MLS, …).
+- **`picota_enriched.csv`** output, columns `CT_Tag`, `Category` (Novel/Known),
+  `CycleID`, `SRA_ID`, `SRA_Organism`, `CT_Length_bp`, `Score`, `Score2`, `NumIS`,
+  `IS_Group`, `IS_Family`, `IS_Length_bp`, `IS_Names`, `NumAMR`,
+  `Antibiotic_Class`, `Resistance_Gene`, `ARO_ID`, `ARO_Name`, `ARO_Drug_Class`,
+  `NumXeno`, `Xenobiotic_Functions`, `NumCompTN`, `Known_CompTN`.
+- **IS-family lookup from the ISFinder taxonomy** — `infer_is_family()` resolves
+  names in three tiers: `DBs/ISes/isfinder_taxonomy.tsv` (5570 elements, built
+  from the bundled `IS.fna` by `scripts/build_isfinder_taxonomy.py`), a curated
+  exact-name table for elements absent from `IS.fna`, then regex rules for
+  variant suffixes. Database prefixes (`ISFinder_`, `ISFDB_`, `TNcentral_`) and
+  accession suffixes (`IS26-MH257753`) are stripped first; `Tn` + digits is
+  reported as `Composite`.
+- **`SRA_Organism`** — organism looked up from NCBI eUtils (esearch for the
+  UID, then esummary).
+- **`test_complete_pipeline.py` as a real pipeline runner** — replaced
+  `MockAnalysis` with real pipeline calls; `--gfa_mode` runs without SRA download
+  or assembly (`test_sra_ids.csv` is auto-created in that mode); `--config`
+  selects a YAML, from which `outdir`, `sra_id_file` and threads are read unless
+  given on the command line; every step reads its parameters from the config
+  rather than hardcoded values; completed steps are skipped when their outputs
+  exist (resume), and download is skipped when a GFA already exists; raw FASTQs
+  are deleted after a successful assembly when `delete_fastq_files: true`;
+  long-read validation downloads the long-read FASTQ when missing, then runs
+  `bam_file_analyze` and `analyze_blocks` after mapping, as `picota_testv3.py`
+  does.
+- **`picota_summary.csv`** (`test_complete_pipeline.py`) — one table over all
+  samples with a reduced column set, written by `write_summary_csv()`.
+- **Cross-sample novel CT clustering** (`src/ct_cluster.py`,
+  `test_complete_pipeline.py`) — novel CT sequences from all samples are compared
+  all-vs-all with blastn (identity ≥90%, coverage ≥80%) and grouped into
+  connected components, written to `picota_ct_clusters.tsv` with
+  `CTCluster001`, … tags (largest first) and `Unique` for singletons. Runs only
+  when more than one sample is processed; skipped when blastn/makeblastdb are
+  absent.
+- **`score3`** (`total_score_type: 3`) — a 0-100 score that gates on IS hit
+  quality (`0.5 + 0.5 × quality`; no IS scores zero) and on cycle length, then
+  weights a structural term against cargo, where `score2` put ninety of its
+  hundred points on whether the cargo hits a database. Cargo uses the best hit's
+  quality rather than the hit count, so cargo absent from CARD and the
+  xenobiotic set no longer caps the score at 10. Written as its own
+  `picota_final_tab` column. The default from this release (see *Changed*); `tests/test_score3.py` pins its behaviour.
+- **Bounds for unattended runs** — `max_path_expansions` (options) caps the DFS
+  expansions one path search may spend, and reports how many searches were
+  abandoned; deterministic, so the same graph gives the same cycles on any
+  machine. `spades_memory_gb` and `spades_timeout_s` (paths) pass `-m` and a wall
+  clock to SPAdes, which otherwise assumes 250 GB and swaps rather than fails on
+  a smaller machine. All default to `None`, the previous unbounded behaviour.
+  `cycle_timeout_s` and `spades_memory_gb_retry` are accepted by the config
+  loader but not read by the shipped runners.
+- **SPAdes failure reason** — the last fifteen lines of SPAdes' output now reach
+  the log and the raised error; previously only the exit status was logged.
+- **`blast_batch`** option (default `true`) — see *Performance*.
+- **Output provenance sidecars** (`src/stale_output.py`) — a BLAST result is
+  reused only when `<output>.picota-sig.json` records the same inputs (hashes of
+  the query and reference FASTA, program, output format). The sidecar is written
+  only after the search succeeds.
+- **`scripts/build_is_db.py`** — rebuilds the IS reference set from the merged
+  TnCentral + ISfinder FASTA and ISfinder's `IS.fna`: repairs glued records,
+  adds missing ISfinder elements, and stops on any record it cannot parse
+  rather than guessing. Deterministic. `tests/test_build_is_db.py` covers each
+  glued-record shape found in the distributed file. See *Output changes*.
+- **`src/build_xenobiotic_db.py`** — rebuilds the xenobiotic database from KEGG:
+  19 biodegradation pathways, keeping only KOs that BRITE br08901 places in
+  "Xenobiotics biodegradation and metabolism" and in no other metabolic
+  category, sequences from UniProt by EC, CARD overlap removed by homology.
+  16,539 sequences against the previous 82,164, with zero mobile-element and zero
+  non-enzymatic entries. `DBs/` is gitignored, so the script is shipped and the
+  database must be built (see *Output changes*).
 - **`docs/ROADMAP.md`** — development roadmap: table of six confirmed defects
   (D1-D6) in cycle detection and deduplication, the "no phase changes existing
   output silently" principle, and a phased plan with per-phase exit criteria.
@@ -44,11 +133,17 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   real chromosome (e.g. *E. coli* K-12 MG1655) instead of random filler, at the
   cost of the host's own IS elements appearing as apparent false positives.
   Emits `ground_truth.tsv`, `ground_truth_cts.fasta` and `ground_truth.json`.
+  Later options: `--novel-cts` (cargo built from random ORFs with no database
+  homology; ground truth gains `Cargo_Type`), `--cargo-repeats`,
+  `--cargo-is-mode different|same` (an IS inserted into the cargo), and
+  `--is-copies-per-element` (free-standing copies of each element's own IS, so
+  copy number varies without sharing).
 - **`tests/test_e2e_simulated_ct.py`** — end-to-end test of the claim the tool
-  makes: implant composite transposons, sequence with wgsim, assemble with
-  SPAdes, and check PICOTA recovers them, including that two CTs built on the
-  same IS element come back as separate candidates. ~13 s; skipped when wgsim,
-  spades.py or blastn are missing.
+  makes: implant composite transposons, sequence, assemble with SPAdes, and
+  check PICOTA recovers them, including that two CTs built on the same IS
+  element come back as separate candidates. ~13 s; reads come from ART, or
+  wgsim where ART is absent; skipped when neither simulator, spades.py or blastn
+  is available.
 - **D7, found by that test**: `min_size_of_cycle: 2000` silently drops compact
   composite transposons. The graph cycle is IS + cargo, not IS + cargo + IS, so
   an IS26-sized element with a single resistance gene produces a cycle under
@@ -57,20 +152,41 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 - **`scripts/run_ct_benchmark.py`** — sweeps the whole benchmark over several
   host chromosomes, CT counts, `min_size_of_cycle` values and seeds, writing one
   row per case to `summary.tsv`. Resumable: a case already in the summary is
-  skipped.
-- **Reads are simulated with ART by default** (Huang et al. 2012), profile
-  `HSXt` (HiSeqX TruSeq 150 bp PE). ART carries empirical per-cycle quality
-  profiles; wgsim, the previous default, applies one uniform error rate and
-  invents quality strings — measured mean Q per cycle is a flat 30 across all
-  150 cycles, against ART's 36 → 41 → 37. `--simulator wgsim` is kept for fast
-  development loops but must not be used for published numbers.
+  skipped. `--assemblers` takes SPAdes, MEGAHIT or both (reads simulated once
+  per case and reused), with older summaries migrated to the new `Assembler`
+  column; `--score` also runs the scoring stage and adds a `Stage`
+  (detection / scored) row per case. Rows carry `METRIC_VERSION`, and
+  `summarize_benchmark.py` refuses a file stamped with another one.
+- **Reads are simulated with ART** (Huang et al. 2012), profile `HSXt`
+  (HiSeqX TruSeq 150 bp PE). ART carries empirical per-cycle quality profiles;
+  wgsim applies one uniform error rate and invents quality strings — measured
+  mean Q per cycle is a flat 30 across all 150 cycles, against ART's
+  36 → 41 → 37. wgsim was first kept as `--simulator wgsim` and has since been
+  removed from the benchmark driver; ART is the only path.
 - **`--placement random`** (now the default in `simulate_ct_genome.py`) —
   implants are scattered subject to `--spacing` rather than evenly spaced.
   Even spacing put every CT the same distance apart, a systematic artefact.
 - **`scripts/score_picota_benchmark.py`** — scores reported cycles against that
   ground truth: CT recall, precision, and copy-distinctness recall (how many CTs
-  sharing an IS came back as *separate* cycles).
-- **`tests/test_simulate_ct_genome.py`** — 35 tests, the strictest being that
+  sharing an IS came back as *separate* cycles). A candidate counts as a true
+  positive only when it covers at least `min_coverage` of an element, the bar
+  recall uses; fragments no longer count.
+- **Benchmark harness and report** — `summarize_benchmark.py` (TP/FN/FP,
+  sensitivity and PPV per stage and by cargo type; specificity deliberately not
+  reported), `run_scenarios.py` (graded scenarios changing one structural
+  property at a time; `--min-cycle-size` defaults to 1000 with a test that it
+  matches `config.yaml`), `run_copy_sweep.py` / `score_copy_sweep.py` (IS copy
+  number 2, 3, 4, 5, 6, 8 on any architecture, graph and contig routes for both
+  assemblers; incomplete cases are skipped), `compare_contig_recovery.py`,
+  `compare_tools.py` (MobileElementFinder on the true chromosome and on SPAdes
+  and MEGAHIT contigs, scored by a single-alignment rule; PICOTA's collapsed
+  cycles keep the union rule), `funnel_analysis.py` (which stage lost each missed
+  element), `catalogue_elements.py`, `run_manifest.py` (per-case
+  `run_parameters.json` with run settings and tool versions),
+  `package_supplementary.py`, `score_one_case.py` (cases scored in parallel) and
+  `build_report.sh`, which produces every table from one invocation.
+  Scenarios use four elements per genome and one genome per seed.
+- **`tests/test_simulate_ct_genome.py`** — 74 tests, the strictest being that
   `genome[CT_Start-1:CT_End]` really is the CT sequence; every recall number
   depends on it.
 - **`estimated_ani()`** (roadmap phase 3) — Mash transform converting k-mer
@@ -97,7 +213,7 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   raising it to 50 truncates none and returns the same 35 paths, so nothing was
   lost there — but establishing that required a second run, which is the point
   of the warning.
-- **`tests/test_cycle_dedup.py`** — 55 tests pinning rotation and
+- **`tests/test_cycle_dedup.py`** — 61 tests pinning rotation and
   reverse-complement invariance, multiset counting, Jaccard symmetry, and that
   genuine duplicates are still removed, plus the identity estimate's stability
   across k and the two-criterion rule.
@@ -108,9 +224,15 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   `Depth` on both strands of each node; unknown depth is `None`, never `0`.
 - **`Cycle.depth_ratio`** — most-covered node depth over least-covered, which
   approximates the copy number of the repeated IS node collapsed into the bubble.
-- **`<cycles>.depths.tsv` sidecar** — per-cycle depth report written next to the
-  cycle FASTA by `cycle_analysis()`. **Report-only**: no detection, scoring or
-  filtering decision reads it, and cycle output is unchanged.
+- **`Cycle.node_spans`, `depth_at()` and `junction_depth_ratio()`** — depth over
+  the annotated IS divided by depth over the cargo. Not a copy-number estimate:
+  a genome with 16 copies of the shared element gives ratios of 1.8 to 3.8. It
+  carries a direction only (medians of roughly 2.3 for multi-copy against 1.6 for
+  two-copy IS across the scenarios) and feeds no scoring decision.
+- **`<cycles>.depths.tsv` sidecar** — per-cycle depth report, including node
+  spans, written next to the cycle FASTA by `cycle_analysis()`. **Report-only**:
+  no detection, scoring or filtering decision reads it, and cycle output is
+  unchanged.
 - **`scripts/select_benchmark_strains.py`** (roadmap phase 0.5, stage 1) —
   shortlists benchmark strains reproducibly: closed RefSeq genomes that also
   have public Illumina paired-end WGS runs from the same BioSample, with the
@@ -123,36 +245,30 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   strain name from BioSample (the only record that carries it); the `Instrument`
   column reports the sequencer model, which implies read length and therefore
   how well the assembly resolves repeats.
-- **`tests/test_select_benchmark_strains.py`** — 29 offline tests using record
+- **`tests/test_select_benchmark_strains.py`** — 45 offline tests using record
   shapes taken from live NCBI esummary responses.
-- **`tests/test_depth.py`** — 21 tests covering every depth encoding, the
+- **`tests/test_depth.py`** — 34 tests covering every depth encoding, the
   `depth_ratio` edge cases, the sidecar report, and a guard that depth tags do
   not change which cycles are reported.
-
-- **`output_formatter.py`** — new module that generates `picota_enriched.csv` alongside
-  `picota_final_tab`. Each detected composite transposon receives a unique CT tag
-  (CT001, CT002, …). Rows are expanded one-per-antibiotic-class. Includes IS-family
-  inference from 30+ IS superfamily prefixes and antibiotic-class inference from
-  23 gene-name patterns (Beta-lactam, Aminoglycoside, Tetracycline, MLS, …).
-- **`picota_enriched.csv`** output: `CT_Tag`, `Category` (Novel/Known), `IS_Group`,
-  `IS_Family`, `IS_Length_bp`, `Antibiotic_Class`, `Resistance_Gene`, `CT_Length_bp`,
-  `Score`, `SRA_ID`, `Xenobiotic_Functions`, `Known_CompTN`.
 - **Step-progress logging** in `picota_testv3.py` — five clearly labelled steps with
   elapsed time, step banners, and a per-sample summary block printed to stdout/log.
 - **`test_e2e_gfa.py`** — real end-to-end integration tests using bundled
   `testNitro.gfa`. Covers cycle detection, BLAST scoring, enriched CSV validation,
-  and unit tests for `output_formatter.py` (~25 tests, no mock data).
-- **`test_complete_pipeline.py`** rewritten — replaced `MockAnalysis` with real
-  pipeline calls (`cycle_analysis`, `scoring_main`, `output_formatter`). Supports
-  `--gfa_mode` flag to run without SRA download or assembly.
-- `test_sra_ids.csv` auto-created in `--gfa_mode` to avoid CLI errors.
-
-### Fixed
-- **`scoringv4ProtBlast.py:611`** — `IndexError: list index out of range` when the
-  cycle FASTA basename has no underscore (e.g., `cycles.fasta`). Now uses a safe
-  `_basename_parts[1] if len(...) > 1 else ''` guard.
+  and unit tests for `output_formatter.py` (31 tests, no mock data).
+- **`tests/test_cli.py`** — 21 tests. Stage functions are patched with
+  `autospec`, so a CLI call that does not bind to the real signature fails, plus
+  an end-to-end `analysis` run on `testNitro.gfa`.
+- **Tests for modules that had none** — `tests/test_split_cycle_coords.py` and
+  `tests/test_analyze_blocks.py`, each verified against the pre-fix module.
 
 ### Changed
+#### Output changes
+An existing run re-executed with this release can write different results:
+- **`total_score_type` defaults to 3** (`score3`), was 0, in `config.yaml` and in
+  `scoring_main()`'s own default. `threshold_final_score` now applies to `score3`;
+  all four scores are still written. `score0` is unbounded and sums hit scores,
+  so the same threshold meant something different in every run.
+- **`picota_final_tab` gains a `score3` column** after `score2`.
 - **`min_size_of_cycle` now defaults to 1000**, was 2000. The graph cycle of a
   composite transposon is IS + cargo rather than IS + cargo + IS, so a compact
   element yields a cycle far shorter than itself. Twelve implanted elements of
@@ -165,13 +281,176 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   MEGAHIT graph of the same reads. MEGAHIT simplifies repeats harder, so the
   bubbles are not in its graph to be found; its perfect precision reflects
   reporting less, not reporting better.
-- `scoring_main()` now calls `write_enriched_csv()` automatically at the end.
-  The enriched CSV is written to the same directory as `picota_final_tab`.
+- **One insertion sequence per IS locus, not per cycle** (52ec265). `NumIS`
+  counts IS loci; it could previously only be 0 or 1, and was 1 for every
+  reported candidate. `ISproducts`/`IScoords` list every non-overlapping locus,
+  best-scoring first; overlapping hits still compete for one locus. `score0`,
+  which sums IS scores, changes; `score3` uses the best hit and does not. In a
+  12,877-candidate survey 7,036 carry two or more IS at distinct coordinates, and
+  the candidates "carrying IS26" at score3 > 50 grow from 751 to 1,180.
+  Protein databases keep the single best hit.
+- **Tied IS references are all named** (18e597b). IS26, IS26.var1, IS15DII and
+  IS15DIV score identically at many loci; keeping one made the name depend on
+  BLAST row order (22 of 1,158 loci named differently between two batchings).
+  Every reference within `TIE_EPS` of the best score at a locus is reported,
+  joined with `|` and sorted, e.g.
+  `ISFinder_IS15DII|ISFinder_IS15DIV|ISFinder_IS26|ISFinder_IS26.var1`.
+- **`IS_Group`/`IS_Family` for tied names** in `picota_enriched.csv`: each name
+  in a `|`-joined tie is resolved separately and disagreeing answers are joined
+  with `|`, sorted. The tie above was reported as `IS15`/`IS15` and is now `IS6`.
+  Affects every locus where references tie.
+- **Known-transposon match requires ≥95% identity over ≥80% of both sequences**
+  (772180c). The old criterion, reference coverage × identity > 80, accepted a
+  candidate that merely contained a known element (a 30 kb cycle covering the
+  1,243 bp Tn5466_partial record was reported as Tn5466). Candidates with a
+  `Known_CompTN` name fall from 522 to 48 in a 13,390-candidate survey and from
+  1,696 to 243 in a 68-genome benchmark; there, name recall moves 68 → 52 of 89,
+  false names 112 → 46, PPV 0.378 → 0.531. Changes `Category` (Known/Novel).
+- **Transposon/cargo split uses one IS locus** (3d0ca5c). `split_cycles_from_picota`
+  bounds the transposon block by the best-scoring locus (`IScoords[0]`) instead
+  of the first start to the last end of all loci, which after 52ec265 swallowed
+  the cargo. Output is identical wherever a cycle has a single IS.
+- **Long-read gap acceptance** (b98f021) uses the configured floor per pair;
+  some gaps previously accepted are now rejected, so `analyze_blocks` pattern
+  counts are not directly comparable. They can be regenerated from existing
+  `_full`/`_partial` files without re-mapping.
+- **Xenobiotic database and its names** (d5fc75a, d8866b5). The database built by
+  `build_xenobiotic_db.py` replaces the keyword-matched set, in which 464
+  mobile-element proteins were 0.6% of the file but 29.3% of its xenobiotic
+  annotations and a further 28.3% were antibiotic resistance genes already in
+  CARD. Its headers spell description and organism with underscores, and
+  `Xenoproducts` reads `description|KO:…|EC:…` with the KO as the gene; the older
+  classified names pass through unchanged. Xenobiotic hits, and the scores built
+  from them, differ from rc1. The database was built in September but the
+  shipped configs kept pointing at `Xenobiotics_classified.fasta`; all three
+  (`config.yaml`, `config_IS26.yaml`, `config_random.yaml`) now name
+  `Xenobiotics_kegg.fasta`, as do `test_complete_pipeline.py`, the benchmark
+  drivers and the tests. On the bundled `testNitro.gfa` this takes the report
+  from two candidates to one: `Cycle_3`, whose only xenobiotic hit was a
+  recombinase-family protein, falls below the threshold, and `Cycle_2` keeps
+  its IS and drops from score3 85.5 to 55.7, because its aromatic
+  ring-hydroxylating dioxygenase and MFS transporter hits are not in the KEGG
+  set.
+- **IS reference set** — `path_to_ises` now names `picota_IS_db.fasta`, built
+  by the new `scripts/build_is_db.py`. In the merged
+  `_tncentral_nointegrall_isfinder-TNs.fasta` 21 records had lost the line
+  breaks around their header, so BLAST searched each as the tail of the record
+  before it, under that record's name; they are split back out. 553 ISfinder
+  elements present in the bundled `IS.fna` and absent from the merged set, by
+  name and by sequence on either strand, are added as `ISFinder_<name>`
+  (5,409 → 5,962 records). Of the elements added, 355 had no BLAST hit at all
+  in the old set, so a cycle carrying one could not pass the IS gate. On
+  `testNitro.gfa` the report is unchanged. `config_IS26.yaml` and
+  `config_random.yaml` named `tncentral_integrall_isfinder-TNs.fasta`, which
+  does not exist; they now name `picota_IS_db_integrall.fasta`, the same repair
+  applied to the INTEGRALL-inclusive `tncentral_integrall_isfinder.fa`
+  (6,094 → 6,647 records).
+- **IS families in `picota_enriched.csv`** come from the ISFinder taxonomy, and
+  numbered ISCR and ISEcp members (ISCR4 to ISCR30, ISEcp2, ISEcp3), previously
+  `Unknown`, are assigned.
+- **Existing GFAs are recomputed**, not reused: `assembly_main()` removes and
+  rebuilds a GFA it finds, since it may describe older reads or parameters.
+
+#### Other changes
+- **BLAST threads default to 8**, was 4; `PICOTA_BLAST_THREADS` overrides it, and
+  `picota.py --threads` sets it. Hits are identical at every thread count.
+- **First run after upgrading repeats BLAST searches**: outputs without a
+  `.picota-sig.json` sidecar are recomputed.
+- `assembly_main()` returns the path of the GFA it selected; Bandage scores are
+  cached in `gfa_scores.json` and reused only when the cached set matches the
+  input set.
+- `run_sra_down()` takes `expected_files` (default 2); pass 1 for single-end runs.
+- `scoring_main()` calls `write_enriched_csv()` at the end, writing
+  `picota_enriched.csv` next to `picota_final_tab` (effective from 126423a, see
+  *Fixed*). `test_complete_pipeline.py` always rewrites it from an existing
+  `picota_final_tab`.
 - README updated with enriched output column reference and E2E test instructions.
+
+### Fixed
+- **Every `picota.py` subcommand failed at run time** (4fdf66f): the CLI imported
+  `run_assembly_pipeline`, `run_scoring_pipeline` and `analyze_gfa_file`, which do
+  not exist, and read a nonexistent `args.sra_file`.
+- **`picota_enriched.csv` was never written** by a normal run: `scoring_main`
+  imported `output_formatter` as a top-level module, which fails when scoring is
+  imported as `src.scoringv4ProtBlast`, and a broad `except` logged it as a
+  warning. A missing formatter now fails loudly; a write error is still
+  tolerated.
+- **Config keys with no effect**: `max_path_expansions` now reaches
+  `cycle_analysis()` and `spades_memory_gb`/`spades_timeout_s` reach
+  `assembly_main()`, in both `picota_testv3.py` and `test_complete_pipeline.py`.
+  Defaults remain `None`, so default output is unchanged.
+- **`test_complete_pipeline.py` ignored parts of the config**: it read the
+  prodigal/blast tool paths from `paths` while `config.yaml` keeps them under
+  `options` (custom tool paths were replaced by bare names), hardcoded the four
+  database paths instead of `path_to_*`, and never passed `dedup_mode`,
+  `dedup_min_ani` or `blast_batch`. With the shipped config the result is
+  unchanged.
+- **`score3` wiring and design** — the dispatch list stopped at `score2`, so
+  `score3` raised `IndexError`, and the benchmark scripts' `--score-type`
+  rejected 3 (af53f46). Shared-IS
+  candidates scored 49.3 to 49.9 against a threshold of 50; component tolerance
+  now scales with multi-copy evidence and the IS gate no longer halves a weak
+  hit (7a7943a). Large wild-type cycles carrying one IS and one CARD hit about
+  30 kb apart scored 68.6 and 65.8; length now gates the score and they score
+  31.1 and 26.6 (e5c1776). The depth term never ran (every candidate took the
+  unknown-depth default, capping scores at 85) and no monotonic function of the
+  depth ratio separates real from spurious cycles, so it was removed and the
+  remaining weights renormalised (4d0b41c).
+- **A truncated or stale BLAST output was accepted as a result**, including after
+  the database was rebuilt (4b60831).
+- **Single-end SRA runs failed their own completeness check** (d58663e): two
+  FASTQ files were required, so every ONT and PacBio download was rejected as
+  incomplete after it finished.
+- **`analyze_blocks` gap floor** (b98f021): `UnboundLocalError` when no earlier
+  pair in a read was near the mode (10 of 98 samples in one run), and otherwise a
+  value leaked from an earlier gap (up to 5000 where the floor is 1000). The
+  module logger is no longer `None` before `analyze_blocks()` runs.
+- **Multi-k SPAdes assembly** could not work: input FASTQs were deleted after the
+  first k. Deleting inputs is now the last k's job.
+- **`fastq-dump` failures** — a four-step fallback (parallel-fastq-dump,
+  fasterq-dump on the local `.sra`, fasterq-dump by accession, prefetch +
+  fasterq-dump), and fasterq-dump temp files go to the output path rather than
+  `/tmp`.
+- **`test_complete_pipeline.py` runner errors**: `assembly_main` called with
+  keyword arguments it does not take (`TypeError`); long-read `run_sra_down` call
+  missing required arguments; `split_min_score` hardcoded to 0; long-read FASTQ
+  re-downloaded when present; a finished sample skipped wholesale, including
+  long-read validation; `ModuleNotFoundError` when run outside `picota/`;
+  `--sra_list` default broken from the script's own directory; bare tool names
+  (`megahit`) and `./picota/tools/...` paths resolved to nonexistent files
+  (exit 127).
+- **IS-family inference** — prefix rules matched IS10 as IS1 and IS21/IS26 as
+  IS3; replaced by the taxonomy lookup. `SRA_Organism` lookup passed the
+  accession to esummary, which needs a numeric UID.
+- **Benchmark ground truth** — IS copy number omitted the copy `--cargo-is-mode
+  same` inserts into the cargo; the interrupting IS in `different` mode could
+  equal a flanking one; `run_scenarios.py` hardcoded `min_size_of_cycle` 2000 and
+  did not copy the `.depths.tsv` sidecar beside `cycles.fasta`; half-finished
+  cases entered the copy-sweep aggregate. Benchmark precision fell from 96/97
+  (99.0%) to 92/97 (94.8%) once fragments stopped counting (3ac646b).
+- `output_formatter._TAB_COLS` lists `score3`, matching the header
+  `picota_final_tab` writes.
+
+### Performance
+- **One BLAST search per database, not one per cycle** (`blast_batch: true`).
+  Twenty cycles against the four bundled databases: 23.5 s over 80 invocations
+  against 13.1 s over 4. `picota_final_tab` is byte-identical, checked on 4 and
+  40 cycles; the transposon parser's best hit is now resolved per cycle rather
+  than per result file.
+- **Strict deduplication**: k-mer reverse complements computed once per window
+  with `str.translate`, `multiset_jaccard` walks only the smaller multiset, and
+  the length criterion is checked first. A graph that hit the 45-minute timeout
+  (ERR3053723) finishes in 1.8 minutes; results identical.
+- **Cycle duplicate check** uses a set of sequences instead of comparing each new
+  cycle with every accepted one, and reverse paths are deduplicated before their
+  sequences are assembled. `testNitro.gfa` gives a byte-identical cycles FASTA.
+- **Resumed runs skip BLAST** when the sidecar matches: 40 cycles took 16.8 s on
+  a first run and 5.8 s on a second.
+- **Bandage scores cached** in `gfa_scores.json` (see *Changed*).
 
 ---
 
-## [1.0.0] — 2026-03 (initial release)
+## [1.0.0-rc1] — 2026-04-02
 
 ### Core pipeline (`picota_testv3.py`)
 End-to-end workflow orchestrated per sample:
@@ -208,7 +487,6 @@ End-to-end workflow orchestrated per sample:
 - `test_kmer_hash.py` — 22 unit tests for k-mer filtering
 - `test_integration_gfa.py` — 19 integration tests using `testNitro.gfa`
 - `test_smoke.py` — 45 smoke tests across 8 pipeline steps
-- `test_e2e_gfa.py` — 25 E2E tests with real BLAST execution (new in v1.1)
 
 ---
 
@@ -248,7 +526,7 @@ Raw reads (FASTQ)
 [6] scoring_main      Z-score normalised composite score:
                         z = |len - μ_ct| / σ_ct   (μ=5850, σ=2586 bp)
                         score = (Σ_ant + Σ_is + Σ_xeno) ^ (1 - z/max_z)
-                      Three scoring modes (score0/1/2)
+                      Four scoring modes (score0/1/2/3; default score3)
                       Threshold filter → ranked hit list
                       GenBank annotation
                       ──►  picota_final_tab, picota_enriched.csv
@@ -278,7 +556,7 @@ class GeneticInfo:
     seq_id, seq_acc, seq_description
     feature_list: List[CodingRegion]
     nuc_seq: str
-    score0, score1, score2: float
+    score0, score1, score2, score3: float
 ```
 
 ---
@@ -291,7 +569,7 @@ class GeneticInfo:
   would cover edge cases.
 - Organism field in enriched CSV is currently the SRA accession; NCBI metadata lookup
   would populate species names.
-- `find_all_path=True` can be exponential for highly connected graph regions; a
-  heuristic path-budget would help.
+- `find_all_path=True` can be exponential for highly connected graph regions;
+  `max_path_expansions` bounds it, but is off by default.
 - `samtools` output requires `libncurses.so.5` on some Linux systems — install via
   `apt install libncurses5` or use the conda-forge build.

@@ -1,244 +1,65 @@
-# PICOTA GitHub Release Checklist & Guide
+# PICOTA release checklist
 
-## ✅ Pre-Release Verification
+The steps for cutting a release. Version history and what changed in each
+release are in [CHANGELOG.md](CHANGELOG.md).
 
-### Code Quality
-- [x] All 177 tests pass (3 expected skips)
-- [x] Type hints added to major functions
-- [x] Security: Shell injection vulnerabilities fixed
-- [x] Code duplication eliminated
-- [x] Performance optimizations verified
+## 1. Before tagging
 
-### Test Results Summary
-```
-======================== 177 passed, 3 skipped in 5.88s ========================
+- [ ] The full suite passes, with the BLAST databases in place, so the
+      end-to-end tests run instead of skipping:
 
-Module Coverage:
-- test_smoke.py (177 tests) ✅
-  - Imports & module loading
-  - Configuration validation
-  - GFA parsing & graph generation
-  - Cycle detection & deduplication
-  - Database integrity
-  - External tools verification
-  - Scoring functions
-  - File I/O operations
-  - Long-read mapping
-```
+      ```bash
+      conda run -n evobiomig python -m pytest -q
+      ```
 
-### Professional Infrastructure Created
-- [x] LICENSE (MIT License) - Permissive open source
-- [x] CHANGELOG.md - Version history & release notes
-- [x] CONTRIBUTING.md - Developer guidelines
-- [x] requirements.txt - Dependency management
-- [x] setup.py - pip installation support
-- [x] .gitignore - Comprehensive file exclusion (Python, IDE, data)
+      The `xfail` entries are the open defects in `tests/test_known_defects.py`
+      and are expected. An `XPASS` failure means a defect was fixed and its
+      marker has to be removed.
 
----
+- [ ] The version is the same in all three places, which `tests/test_cli.py`
+      checks for the first two:
+  - `setup.py`
+  - `picota/picota.py` (`__version__` and the docstring)
+  - `picota/__init__.py`
 
-## 🚀 How to Release on GitHub
+- [ ] `CHANGELOG.md` has a dated section for the release, and every change that
+      alters what an existing run writes is listed under **Output changes**.
 
-### Step 1: Verify Remote Configuration
+- [ ] Every path in `picota/config.yaml` exists, and the README's quick start
+      runs as written from the repository root:
+
+      ```bash
+      python3 picota/picota.py analysis --gfa picota/test_data/testNitro.gfa --output /tmp/picota_check
+      ```
+
+- [ ] If a reference database or the scoring changed, regenerate the benchmark
+      figures quoted in the README with `scripts/build_report.sh`, or mark them
+      as predating the change.
+
+- [ ] The package installs and its entry point imports:
+
+      ```bash
+      pip install --no-deps --target /tmp/picota_inst . && PYTHONPATH=/tmp/picota_inst /tmp/picota_inst/bin/picota --version
+      ```
+
+## 2. Tag and push
+
+The remote uses SSH (`git@github.com:recepcanaltinbag/picota.git`).
+
 ```bash
-cd /path/to/picota
-git remote -v
-# Should show: origin    https://github.com/recepcanaltinbag/picota.git (fetch/push)
-```
-
-### Step 2: Push to GitHub
-```bash
-# For first push or new branch:
 git push origin main
-
-# To set upstream (if needed):
-git push -u origin main
+git tag -a vX.Y.Z -m "PICOTA vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
-### Step 3: Create Release Tag
-```bash
-# Create tag locally
-git tag -a v1.0.0-rc1 -m "First release candidate
+## 3. GitHub release
 
-- Complete refactoring for production readiness
-- 6+ critical bug fixes and security hardening
-- Performance optimizations (2-10x speedup)
-- Comprehensive test suite (177 tests)
-- Professional documentation"
-
-# Push tag to GitHub
-git push origin v1.0.0-rc1
-```
-
-### Step 4: Create GitHub Release
-1. Go to: https://github.com/recepcanaltinbag/picota/releases
-2. Click "Draft a new release"
-3. Select tag: `v1.0.0-rc1`
-4. Release title: `PICOTA v1.0.0-rc1 - Release Candidate`
-5. Description:
-```markdown
-# PICOTA v1.0.0-rc1
-
-This release candidate includes major improvements for production readiness.
-
-## Highlights
-
-### 🔒 Security
-- Fixed shell injection vulnerabilities in subprocess calls
-- Added comprehensive input validation
-- Improved error handling
-
-### 🚀 Performance
-- 2-3x faster scoring calculations
-- 5x faster file I/O operations
-- Memory usage: -70%+ for large file decompression
-
-### 🛠️ Quality
-- 6+ critical bug fixes
-- Type hints for better IDE support
-- 177 passing tests
-
-### 📚 Documentation
-- MIT License
-- CONTRIBUTING.md for developers
-- Professional README with examples
-
-## Installation
-
-### From Source
-\`\`\`bash
-git clone https://github.com/recepcanaltinbag/picota.git
-cd picota
-pip install -r requirements.txt
-python -m pytest tests/ -v
-\`\`\`
-
-### Via pip (when published to PyPI)
-\`\`\`bash
-pip install picota
-\`\`\`
-
-## Testing
-\`\`\`bash
-# Run full test suite
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ --cov=picota --cov-report=term-missing
-\`\`\`
-
-## Known Limitations
-- Windows/macOS not fully tested (Linux recommended)
-- Prodigal required for ORF prediction
-- BLAST+ required for database searching
-- SPAdes or MEGAHIT needed for assembly
-
-## Contributors
-- Code refactoring & optimization
-- Bug fixes & security hardening
-- Professional infrastructure setup
-
-## Citation
-If you use PICOTA, please cite:
-\`\`\`
-[Citation information to be updated]
-\`\`\`
-```
-
-6. Check "This is a pre-release" (if rc1)
-7. Click "Publish release"
-
----
-
-## 📋 Post-Release Checklist
-
-- [ ] Verify release page shows on GitHub
-- [ ] Test pip installation (when ready): `pip install picota`
-- [ ] Check badges on README work correctly
-- [ ] Announce on relevant forums/communities
-- [ ] Update institutional websites/docs
-- [ ] Monitor issues for feedback
-
----
-
-## 📦 Publishing to PyPI (Optional, Later)
-
-When ready to publish to PyPI for easy installation:
-
-```bash
-# Install build tools
-pip install build twine
-
-# Build distribution
-python -m build
-
-# Test upload
-twine upload --repository testpypi dist/*
-
-# Verify on testpypi.python.org
-
-# Real upload
-twine upload dist/*
-```
-
-Then users can install via:
-```bash
-pip install picota
-```
-
----
-
-## 📊 Release Summary
-
-| Category | Count |
-|----------|-------|
-| **Tests Passing** | 177 ✅ |
-| **Critical Fixes** | 6 |
-| **Performance Improvements** | 4 |
-| **Security Issues** | 1 (Shell injection) |
-| **Code Quality** | Added type hints, improved docstrings |
-| **Documentation** | LICENSE, CHANGELOG, CONTRIBUTING |
-| **File Size Impact** | +3,447 lines (mostly tests & docs) |
-
----
-
-## 🎯 Version Roadmap
-
-```
-v1.0.0-rc1 (Current) - Release Candidate
-├── Security fixes ✅
-├── Performance optimizations ✅
-├── Test suite ✅
-└── Professional docs ✅
-
-v1.0.0 (Next) - Stable Release
-├── Community feedback integration
-├── CHANGELOG finalization
-└── Official announcement
-
-v1.1.0 (Future) - Algorithmic Enhancements
-├── MinHash for similarity (instead of O(n²))
-├── Tarjan's SCC algorithm
-├── Parallel BLAST support
-└── Advanced filtering options
-```
-
----
-
-## ❓ Support & Issues
-
-If users encounter issues:
-
-1. **Reproduce** with minimal example
-2. **Check** CONTRIBUTING.md for dev setup
-3. **File Issue** with system info, versions, traceback
-4. **Test Fix** locally before submitting PR
-
----
-
-**Ready to release! 🎉**
-
-Next steps:
-1. Execute Git commands above
-2. Create GitHub release
-3. Monitor for issues/feedback
-4. Consider PyPI publication
+1. <https://github.com/recepcanaltinbag/picota/releases> → *Draft a new release*.
+2. Select the tag and title the release `PICOTA vX.Y.Z`.
+3. Paste the release's CHANGELOG section as the description, with its
+   **Output changes** first.
+4. The reference databases are not in the repository. If they are distributed
+   with the release, check each source's terms (CARD, ISfinder, TnCentral,
+   KEGG, UniProt) before attaching them.
+5. If the Zenodo record in the README is linked to GitHub releases, check that
+   the new version appears there. Otherwise upload it to Zenodo by hand.

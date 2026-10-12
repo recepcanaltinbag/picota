@@ -37,7 +37,7 @@ sensitivity at 90.9% precision across five of six scenarios**, and on ten
 wild-type genomes with nothing implanted, none of the 180 candidate cycles clear
 the threshold. The sixth scenario — where the flanking IS also occurs inside the
 cargo — recovers 5%, and the loss is in detection rather than scoring. Per
-scenario numbers are in [Scoring](#scoring).
+scenario numbers are in [Scoring](#scoring), measured before the 1.1.0 database update.
 
 ### Contents
 
@@ -129,9 +129,14 @@ conda create -n picota -c bioconda -c conda-forge \
     minimap2 samtools biopython pandas pyyaml tqdm
 conda activate picota
 pip install -r requirements.txt
+pip install -e .        # optional: puts a `picota` command on PATH
 ```
 
-The pipeline runs from the source directory; there is nothing further to install.
+Every command below is run from the repository root. `pip install -e .` is
+optional; without it, `python3 picota/picota.py` does the same as `picota`.
+
+The reference databases are not in the git repository — see
+[Reference databases](#reference-databases) for what goes where.
 
 ### Requirements
 
@@ -154,13 +159,12 @@ reference sets. macOS and Windows are untested.
 ### From a GFA you already have
 
 ```bash
-cd picota/
-conda run -n picota python3 test_complete_pipeline.py --gfa_mode
+python3 picota/picota.py analysis --gfa picota/test_data/testNitro.gfa --output picota_results/
 ```
 
 Runs detection, scoring and annotation over the bundled *P. nitroreducens*
-graph (`picota/test_data/testNitro.gfa`) — no download, no assembly. Results
-land in `picota_results/`.
+graph — no download, no assembly — with the settings in `picota/config.yaml`.
+Results land in `picota_results/cycles/`, `scoring/` and `annot/`.
 
 ### From SRA accessions
 
@@ -169,10 +173,10 @@ land in `picota_results/`.
 ```yaml
 paths:
   outdir: "/path/to/output"
-  sra_id_file: "picota/sra_ids.csv"
+  sra_id_file: "picota/samples.csv"
   path_to_antibiotics: "picota/DBs/Antibiotics/protein_fasta_protein_homolog_model.fasta"
   path_to_xenobiotics: "picota/DBs/Xenobiotics/Xenobiotics_kegg.fasta"
-  path_to_ises: "picota/DBs/ISes/_tncentral_nointegrall_isfinder-TNs.fasta"
+  path_to_ises: "picota/DBs/ISes/picota_IS_db.fasta"
   path_to_TNs: "picota/DBs/CompTns/Known_Tns.fasta"
   assembler_type: "spades"
 
@@ -182,7 +186,7 @@ options:
   threshold_final_score: 50
 ```
 
-**2. List the samples** in `picota/sra_ids.csv`:
+**2. List the samples** in `picota/samples.csv`:
 
 ```csv
 sra_short_id,sra_long_id
@@ -196,23 +200,33 @@ is none.
 **3. Run:**
 
 ```bash
-cd picota/
-python3 picota/picota_testv3.py -c picota/config.yaml
+python3 picota/picota.py all --output /path/to/output
 ```
+
+With no input given, `all` processes every sample in `sra_id_file`.
+`python3 picota/picota_testv3.py -c picota/config.yaml` does the same, writing
+to `outdir` from the config.
 
 ### Individual stages
 
-`picota/picota.py` exposes the stages separately:
+Each subcommand runs the same stage code as the full pipeline. `--config`
+(default `picota/config.yaml`), `--threads` and `--output` are accepted by all
+of them; `--threads` overrides the assembly, mapping and BLAST thread counts.
 
 ```bash
-python picota/picota.py sra_download --sra SRR11362851 --output data/
-python picota/picota.py assembly     --fastq reads.fq  --output assembly/
-python picota/picota.py analysis     --gfa assembly.gfa --output results/
-python picota/picota.py scoring      --cycle_folder cycles/ --output results/
-python picota/picota.py all          --sra SRR11362851 --output results/
+picota sra_download --sra SRR11362851 --output data/
+picota assembly     --fastq SRR11362851_1.fastq SRR11362851_2.fastq --output assembly/ -t 8
+picota analysis     --gfa assembly.gfa --output results/        # detect, score, split
+picota scoring      --cycle_folder cycles/ --output results/    # a FASTA or a folder of them
+picota all          --sra SRR11362851 --long SRR11362852 --output results/
+picota all          --gfa assembly.gfa --output results/        # or --fastq ...
 ```
 
+`--long` adds long-read validation with an ONT run of the same isolate.
+
 ### Cycle detection as a library
+
+With `picota/` (the inner directory) on `sys.path`:
 
 ```python
 from src.cycle_finderv2 import cycle_analysis
@@ -231,18 +245,38 @@ cycle_analysis(
 
 ## Reference databases
 
-Four reference sets are searched, configured by path in `config.yaml`.
+Four reference sets are searched, configured by path in `config.yaml`. They are
+not in the git repository — they are large, and each carries its source's terms
+of use — so place them under `picota/DBs/` at the paths the config names. Only
+`picota/DBs/ISes/isfinder_taxonomy.tsv`, which the IS-family lookup reads, is
+tracked.
 
 1. **CARD** — antibiotic resistance genes.
    [card.mcmaster.ca](https://card.mcmaster.ca/), protein FASTA
    (`protein_fasta_protein_homolog_model.fasta`).
 
-2. **Insertion sequences** — ISfinder and TnCentral merged, nucleotide FASTA
-   (`_tncentral_nointegrall_isfinder-TNs.fasta`). Finding one is a necessary
-   condition for a candidate to score at all.
+2. **Insertion sequences** — ISfinder and TnCentral, nucleotide FASTA
+   (`picota_IS_db.fasta`). Finding one is a necessary condition for a
+   candidate to score at all. Built by `scripts/build_is_db.py` from the merged
+   TnCentral + ISfinder set (`_tncentral_nointegrall_isfinder-TNs.fasta`) and
+   the ISfinder nucleotide release (`IS.fna`):
+   - 21 records of the merged set had lost the line breaks around their header,
+     so BLAST read each as part of the record before it; they are split back out.
+   - 553 ISfinder elements of `IS.fna` absent from the merged set, by name and by
+     sequence on either strand, are added as `ISFinder_<name>`.
+
+   ```bash
+   python3 scripts/build_is_db.py      # writes picota/DBs/ISes/picota_IS_db.fasta
+   ```
+
+   `config_IS26.yaml` and `config_random.yaml` use the variant that keeps the
+   INTEGRALL integrons (`picota_IS_db_integrall.fasta`, built with
+   `--merged picota/DBs/ISes/tncentral_integrall_isfinder.fa --out ...`).
 
 3. **Known composite transposons** — nucleotide FASTA (`Known_Tns.fasta`). A
-   cycle matching one is reported as `Known` rather than `Novel`.
+   cycle is reported as `Known` rather than `Novel` when it matches one at
+   ≥ 95% identity over ≥ 80% of *both* sequences; a cycle that merely contains a
+   known element stays `Novel`.
 
 4. **Xenobiotic degradation genes** (KEGG-derived)
    - Built by `picota/src/build_xenobiotic_db.py` from KEGG KO identifiers
@@ -281,11 +315,12 @@ output/
 | Column | Description |
 |--------|-------------|
 | `CycleID` | Cycle identifier: `Cycle_N-lenXXXX-compY-` |
+| `SRAID` / `kmer` | Sample accession and the assembly k-mer, from the cycle file name |
 | `score0/1/2/3` | Four scoring strategies, all always written (see Scoring section) |
-| `NumIS` / `ISproducts` / `IScoords` | IS element count, names, coordinates |
+| `NumIS` / `ISproducts` / `IScoords` | Number of IS **loci** (one per position on the cycle, not one per reference that hit), their names and coordinates, `;`-separated. Where several references tie at one locus they are all named, sorted and joined by `\|` — e.g. `ISFinder_IS15DII\|ISFinder_IS26\|…`, which are one element deposited under several names |
 | `NumAnt` / `Antproducts` / `Antcoords` | AMR gene count, names, coordinates |
 | `NumXeno` / `Xenoproducts` / `Xenocoords` | Xenobiotic gene count, names, coordinates. With the KEGG-derived set a name reads `description\|KO:K16045\|EC:1.1.1.145` |
-| `NumCompTN` / `CompTN` | Known composite transposon matches |
+| `NumCompTN` / `CompTN` / `CompTNscoords` | Known composite transposon matches and their coordinates |
 
 ### Enriched output (`picota_enriched.csv`)
 
@@ -309,16 +344,19 @@ multiple antibiotic classes it is expanded to one row per class.
 | `Category` | `Novel` (not in CompTn DB) or `Known` |
 | `CycleID` | Original cycle identifier |
 | `SRA_ID` | Source sample accession |
+| `SRA_Organism` | Organism of the sample, from NCBI |
 | `CT_Length_bp` | Total cycle length in base pairs |
 | `Score` | Primary score — see the warning above |
-| `NumIS` | Number of IS elements detected |
-| `IS_Group` | IS superfamily group (e.g., `IS6`, `IS3`) |
-| `IS_Family` | IS family name (e.g., `IS26`, `ISEcp`) |
+| `Score2` | score2 |
+| `NumIS` | Number of IS loci detected |
+| `IS_Group` | IS superfamily group (e.g., `IS6`, `IS3`) of the first IS locus. When tied references disagree, every answer, sorted and `\|`-joined |
+| `IS_Family` | IS family name (e.g., `IS26`, `ISEcp`), same rule |
 | `IS_Length_bp` | Length of the longest IS element found |
-| `IS_Names` | Semicolon-separated IS element names |
+| `IS_Names` | IS names as in `ISproducts` |
 | `NumAMR` | Number of AMR genes detected |
 | `Antibiotic_Class` | Antibiotic class (one row per class) |
 | `Resistance_Gene` | Representative resistance gene for this class |
+| `ARO_ID` / `ARO_Name` / `ARO_Drug_Class` | CARD ontology entry for that gene |
 | `NumXeno` | Number of xenobiotic genes detected |
 | `Xenobiotic_Functions` | Semicolon-separated xenobiotic gene names |
 | `NumCompTN` | Number of known CompTn database matches |
@@ -389,6 +427,11 @@ the value `threshold_final_score` ships with.
 
 Per architecture, after scoring at a threshold of 50. The routes table at the
 top of this README covers detection; this one covers what survives scoring.
+
+> [!NOTE]
+> These figures were measured before 1.1.0 replaced the IS set
+> (`picota_IS_db.fasta`) and switched the shipped xenobiotic set to the KEGG
+> build. `scripts/build_report.sh` regenerates them.
 
 | Scenario | Sensitivity | Precision |
 |---|---|---|
@@ -527,6 +570,14 @@ Every default below is the one in the shipped `config.yaml`.
 | `split_min_score` | 92 | Minimum score for boundary annotation |
 | `assembler_type` | spades | Assembly tool (`spades` or `megahit`). SPAdes by measurement: 40/40 implanted elements recovered against 19/40 from the MEGAHIT graph of the same reads — see [ROADMAP §6](docs/ROADMAP.md) |
 | `blast_batch` | true | One BLAST search per database over every cycle at once, rather than one per cycle per database. Same hits either way — see [Performance](#performance) |
+
+Optional bounds, unset (unbounded) unless added to the config:
+
+| Parameter | Section | Description |
+|-----------|---------|-------------|
+| `max_path_expansions` | `options` | DFS expansions one path search may spend before it is abandoned. Deterministic, so the same graph gives the same answer on any machine |
+| `spades_memory_gb` | `paths` | SPAdes `-m`. Without it SPAdes assumes 250 GB, and on a smaller machine an over-covered run swaps instead of failing |
+| `spades_timeout_s` | `paths` | Wall-clock limit for one SPAdes run |
 
 ---
 

@@ -6,13 +6,17 @@ Status: 2026-09-01. Companion document: [ROADMAP.md](ROADMAP.md).
 
 ## 1. What has actually been validated
 
-- **Unit and smoke tests** — 530 tests over parsing, cycle construction,
-  deduplication helpers, scoring and output formatting.
+- **Unit and smoke tests** — 573 tests over parsing, cycle construction,
+  deduplication helpers, scoring, output formatting, the command line and the
+  IS database build.
 - **Simulated benchmark with exact ground truth** — 520 composite transposons
   implanted into 130 simulated genomes across six architectures and seven IS
   copy levels, plus ten wild-type controls. Sensitivity 95.0% and precision
   90.9% excluding the one architecture the method cannot solve; zero false
   positives on the wild-type controls (§3.5–3.7).
+  Measured with the reference sets in use before 1.1.0; 1.1.0 replaced the IS
+  set and switched the shipped xenobiotic set, so these figures need
+  regenerating (`scripts/build_report.sh`) before they describe 1.1.0.
 - **Head-to-head against MobileElementFinder** on the same genomes and the same
   matching criterion (§3.9).
 - **End-to-end tests** on the bundled `test_data/testNitro.gfa`, checking that the
