@@ -5,303 +5,212 @@ PICOTA - Pipeline for Identification of Composite Transposons from Assembly grap
 A bioinformatics pipeline for detecting composite transposons in bacterial genomes
 using assembly graph analysis and homology-based scoring.
 
+Every subcommand is a thin front end over the stage functions in
+picota_testv3.py, so the CLI and the config-driven pipeline run the same code.
+
 Author: Recep Canaltinbag
-Version: 1.0.0-rc1
+Version: 1.1.0
 License: MIT
 """
 
 import argparse
-import sys
 import os
-from pathlib import Path
-import yaml
-import logging
 import shutil
+import sys
 
-# Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# The stage modules import as "src.X" and "picota_testv3", both relative to
+# this directory, whether run from a checkout or from an installed package.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-def setup_logging(log_file: str = None, level: str = "INFO"):
-    """Setup logging configuration"""
-    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logging.basicConfig(
-        level=getattr(logging, level.upper()),
-        format=log_format,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(log_file) if log_file else logging.NullHandler()
-        ]
-    )
-    return logging.getLogger("picota")
+import picota_testv3 as pipeline  # noqa: E402
+from src.config_loader import load_config  # noqa: E402
+from src.logger_setup import setup_logger_from_config  # noqa: E402
 
-def load_config(config_path: str) -> dict:
-    """Load configuration from YAML file"""
-    try:
-        with open(config_path, 'r') as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        print(f"Error: Configuration file not found: {config_path}")
-        sys.exit(1)
-    except yaml.YAMLError as e:
-        print(f"Error parsing configuration file: {e}")
-        sys.exit(1)
+__version__ = "1.1.0"
 
-def validate_environment():
-    """Check if required tools are available"""
-    required_tools = ['blastn', 'blastp', 'prodigal', 'spades.py', 'megahit']
-    missing_tools = []
+def required_tools(command, cfg):
+    """The executables `command` will call, as named in the config."""
+    download = [cfg.paths.fastq_dump]
+    assembler = (cfg.paths.path_of_megahit if cfg.paths.assembler_type == 'megahit'
+                 else cfg.paths.path_of_spades)
+    assembly = ([] if cfg.paths.skip_filtering else [cfg.paths.path_of_fastp]) + [assembler]
+    scoring = [cfg.options.path_of_prodigal, cfg.options.path_of_blastn,
+               cfg.options.path_of_blastp, cfg.options.path_of_makeblastdb]
+    return {
+        'sra_download': download,
+        'assembly':     assembly,
+        'analysis':     scoring,
+        'scoring':      scoring,
+        'all':          download + assembly + scoring,
+    }[command]
 
-    for tool in required_tools:
-        if not shutil.which(tool):
-            missing_tools.append(tool)
 
-    if missing_tools:
-        print("Warning: Missing required tools:", ", ".join(missing_tools))
-        print("Please install via conda: conda install -c bioconda", " ".join(missing_tools))
-        return False
-    return True
+def missing_tools(command, cfg):
+    """Return the tools `command` needs that are not on PATH."""
+    return [t for t in required_tools(command, cfg) if t and not shutil.which(t)]
 
-def run_sra_download(args, config):
-    """Download data from NCBI SRA"""
-    try:
-        from src.sra_download import run_sra_down
-        logger = setup_logging(config.get('logging', {}).get('log_file'))
-        run_sra_down(
-            sra_acc_file=args.sra_file,
-            out_dir=args.output,
-            sra_folder=os.path.join(args.output, 'sra_files'),
-            path_of_fastq_dump=config['paths'].get('fastq_dump', 'parallel-fastq-dump'),
-            delete_fastq=config['options'].get('delete_fastq_files', True),
-            logger_name="picota_sra"
-        )
-        logger.info("SRA download completed successfully")
-    except Exception as e:
-        print(f"Error in SRA download: {e}")
-        sys.exit(1)
 
-def run_assembly(args, config):
-    """Run genome assembly"""
-    try:
-        from src.assembly import run_assembly_pipeline
-        logger = setup_logging(config.get('logging', {}).get('log_file'))
-        run_assembly_pipeline(
-            fastq_path=args.fastq,
-            output_dir=args.output,
-            threads=args.threads,
-            config=config
-        )
-        logger.info("Assembly completed successfully")
-    except Exception as e:
-        print(f"Error in assembly: {e}")
-        sys.exit(1)
+def prepare(args):
+    """Load the config, apply command-line overrides and start the logger."""
+    if not os.path.exists(args.config):
+        sys.exit(f"Error: configuration file not found: {args.config}")
+    cfg = load_config(args.config)
+    cfg.paths.outdir = args.output
+    if args.threads is not None:
+        cfg.paths.assembly_threads = args.threads
+        cfg.options.mapping_threads = args.threads
+        os.environ['PICOTA_BLAST_THREADS'] = str(args.threads)
+    os.makedirs(args.output, exist_ok=True)
+    pipeline.logger = setup_logger_from_config(cfg)
+    return cfg
 
-def run_analysis(args, config):
-    """Run cycle detection and scoring analysis"""
-    try:
-        from src.cycle_finder import GraphWork
-        from src.scoringv3_blast import run_scoring_pipeline
-        from src.analyze_blocks import analyze_gfa_file
 
-        logger = setup_logging(config.get('logging', {}).get('log_file'))
+def cmd_sra_download(args, cfg):
+    files = pipeline.run_sra_download(
+        args.sra, args.output, os.path.join(args.output, 'sra', args.sra),
+        cfg.paths.fastq_dump, cfg.logging.logger_name)
+    if not files:
+        sys.exit(f"Error: no FASTQ files were produced for {args.sra}")
+    return files
 
-        # Validate input files
-        if not os.path.exists(args.gfa):
-            print(f"Error: GFA file not found: {args.gfa}")
-            sys.exit(1)
 
-        # Create output directory
-        os.makedirs(args.output, exist_ok=True)
+def cmd_assembly(args, cfg):
+    name = args.name or os.path.basename(args.fastq[0]).split('_')[0].split('.')[0]
+    gfa_files = pipeline.run_assembly(name, args.fastq, args.output, cfg,
+                                      cfg.logging.logger_name)
+    if not gfa_files:
+        sys.exit(f"Error: assembly produced no GFA in {args.output}")
+    return gfa_files
 
-        # Run analysis
-        logger.info(f"Starting analysis on {args.gfa}")
 
-        # Parse GFA and find cycles
-        cycles = analyze_gfa_file(args.gfa, config)
+def cmd_scoring(args, cfg):
+    if not os.path.exists(args.cycle_folder):
+        sys.exit(f"Error: cycle file or folder not found: {args.cycle_folder}")
+    name = os.path.splitext(os.path.basename(os.path.normpath(args.cycle_folder)))[0]
+    return pipeline.run_scoring(name, args.cycle_folder, args.output, cfg)
 
-        if not cycles:
-            logger.warning("No cycles detected in assembly graph")
-            return
 
-        # Score cycles
-        results = run_scoring_pipeline(
-            cycle_data=cycles,
-            output_dir=args.output,
-            config=config
-        )
+def cmd_analysis(args, cfg):
+    """Cycle detection, scoring and transposon/cargo split on one GFA."""
+    if not os.path.exists(args.gfa):
+        sys.exit(f"Error: GFA file not found: {args.gfa}")
+    name = os.path.splitext(os.path.basename(args.gfa))[0]
+    cycle_dir = os.path.join(args.output, 'cycles')
+    scoring_dir = os.path.join(args.output, 'scoring')
+    annot_dir = os.path.join(args.output, 'annot')
+    for d in (cycle_dir, scoring_dir, annot_dir):
+        os.makedirs(d, exist_ok=True)
 
-        # Save results
-        results_file = os.path.join(args.output, 'transposon_candidates.tsv')
-        results.to_csv(results_file, sep='\t', index=False)
+    cycle_file = os.path.join(cycle_dir, f"{name}.fasta")
+    pipeline.run_cycle_analysis(name, args.gfa, cycle_file, cfg)
+    if not os.path.exists(cycle_file):
+        pipeline.logger.warning("No cycles detected in the assembly graph")
+        return None
 
-        logger.info(f"Analysis completed. Results saved to {results_file}")
-        print(f"Found {len(results)} potential composite transposons")
+    final_tab = pipeline.run_scoring(name, cycle_file, scoring_dir, cfg)
+    if final_tab and os.path.exists(final_tab):
+        pipeline.split_cycles_from_picota(final_tab, cycle_file, annot_dir,
+                                          cfg.options.split_min_score)
+    return final_tab
 
-    except Exception as e:
-        print(f"Error in analysis: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
 
-def run_scoring(args, config):
-    """Run scoring on existing cycle data"""
-    try:
-        from src.scoringv3_blast import run_scoring_pipeline
-        logger = setup_logging(config.get('logging', {}).get('log_file'))
+def cmd_all(args, cfg):
+    """Run every stage, from whichever input was given."""
+    if args.gfa:
+        return cmd_analysis(argparse.Namespace(gfa=args.gfa, output=args.output), cfg)
+    if args.fastq:
+        asm_out = os.path.join(args.output, 'assembly')
+        gfa_files = cmd_assembly(
+            argparse.Namespace(fastq=args.fastq, output=asm_out, name=None), cfg)
+        return cmd_analysis(argparse.Namespace(gfa=gfa_files[0], output=args.output), cfg)
+    if args.sra:
+        pipeline.process_accession(args.sra, args.long, cfg)
+        return None
+    for short_id, long_id in pipeline.load_sra_pairs(cfg.paths.sra_id_file):
+        pipeline.process_accession(short_id, long_id, cfg)
+    return None
 
-        if not os.path.exists(args.cycle_folder):
-            print(f"Error: Cycle folder not found: {args.cycle_folder}")
-            sys.exit(1)
 
-        results = run_scoring_pipeline(
-            cycle_folder=args.cycle_folder,
-            output_dir=args.output,
-            config=config
-        )
+COMMANDS = {
+    'sra_download': cmd_sra_download,
+    'assembly':     cmd_assembly,
+    'analysis':     cmd_analysis,
+    'scoring':      cmd_scoring,
+    'all':          cmd_all,
+}
 
-        results_file = os.path.join(args.output, 'transposon_candidates.tsv')
-        results.to_csv(results_file, sep='\t', index=False)
 
-        logger.info(f"Scoring completed. Results saved to {results_file}")
-
-    except Exception as e:
-        print(f"Error in scoring: {e}")
-        sys.exit(1)
-
-def run_all_pipeline(args, config):
-    """Run complete pipeline from SRA to results"""
-    try:
-        logger = setup_logging(config.get('logging', {}).get('log_file'))
-        logger.info("Starting complete PICOTA pipeline")
-
-        # Step 1: SRA download
-        if args.sra:
-            logger.info("Step 1: Downloading SRA data")
-            run_sra_download(args, config)
-
-        # Step 2: Assembly
-        fastq_path = args.fastq or os.path.join(args.output, 'fastq')
-        if os.path.exists(fastq_path):
-            logger.info("Step 2: Running genome assembly")
-            assembly_args = argparse.Namespace(
-                fastq=fastq_path,
-                output=os.path.join(args.output, 'assembly'),
-                threads=args.threads
-            )
-            run_assembly(assembly_args, config)
-
-        # Step 3: Analysis
-        gfa_path = args.gfa or os.path.join(args.output, 'assembly', 'assembly.gfa')
-        if os.path.exists(gfa_path):
-            logger.info("Step 3: Running transposon analysis")
-            analysis_args = argparse.Namespace(
-                gfa=gfa_path,
-                output=os.path.join(args.output, 'results'),
-                threads=args.threads
-            )
-            run_analysis(analysis_args, config)
-
-        logger.info("Complete pipeline finished successfully")
-
-    except Exception as e:
-        print(f"Error in complete pipeline: {e}")
-        sys.exit(1)
-
-def main():
-    """Main CLI entry point"""
+def build_parser():
     parser = argparse.ArgumentParser(
+        prog='picota',
         description="PICOTA - Pipeline for Identification of Composite Transposons",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Download and analyze from SRA
-  python picota.py all --sra SRR11362851 --output results/
-
-  # Analyze existing GFA file
-  python picota.py analysis --gfa assembly.gfa --output results/
-
-  # Download SRA data only
-  python picota.py sra_download --sra SRR11362851 --output data/
-
-  # Run assembly on FASTQ files
-  python picota.py assembly --fastq reads.fq --output assembly/ --threads 8
-
-  # Score existing cycles
-  python picota.py scoring --cycle_folder cycles/ --output results/
+  picota all          --sra SRR11362851 --output results/
+  picota analysis     --gfa assembly.gfa --output results/
+  picota sra_download --sra SRR11362851 --output data/
+  picota assembly     --fastq reads_1.fastq reads_2.fastq --output assembly/ -t 8
+  picota scoring      --cycle_folder cycles/ --output results/
         """
     )
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
 
-    parser.add_argument('--config', '-c',
-                       default='picota/config.yaml',
-                       help='Configuration file path (default: picota/config.yaml)')
+    # Shared by every subcommand, so they may follow the subcommand name.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument('--config', '-c', default='picota/config.yaml',
+                        help='Configuration file (default: picota/config.yaml)')
+    common.add_argument('--threads', '-t', type=int, default=None,
+                        help='Threads for assembly, mapping and BLAST '
+                             '(default: the values in the config)')
+    common.add_argument('--output', '-o', required=True, help='Output directory')
 
-    parser.add_argument('--threads', '-t', type=int, default=4,
-                       help='Number of threads to use (default: 4)')
+    sub = parser.add_subparsers(dest='command', metavar='COMMAND')
 
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    p = sub.add_parser('sra_download', parents=[common], help='Download reads from NCBI SRA')
+    p.add_argument('--sra', required=True, help='SRA run accession')
 
-    # SRA download command
-    sra_parser = subparsers.add_parser('sra_download', help='Download data from NCBI SRA')
-    sra_parser.add_argument('--sra', required=True, help='SRA accession number')
-    sra_parser.add_argument('--output', '-o', required=True, help='Output directory')
+    p = sub.add_parser('assembly', parents=[common], help='Assemble reads into a GFA graph')
+    p.add_argument('--fastq', required=True, nargs='+', help='FASTQ file(s), paired files together')
+    p.add_argument('--name', help='Sample name (default: taken from the first FASTQ)')
 
-    # Assembly command
-    assembly_parser = subparsers.add_parser('assembly', help='Run genome assembly')
-    assembly_parser.add_argument('--fastq', required=True, help='Input FASTQ file/directory')
-    assembly_parser.add_argument('--output', '-o', required=True, help='Output directory')
+    p = sub.add_parser('analysis', parents=[common],
+                       help='Detect, score and split composite transposons in a GFA')
+    p.add_argument('--gfa', required=True, help='Input GFA file')
 
-    # Analysis command
-    analysis_parser = subparsers.add_parser('analysis', help='Detect and score transposons')
-    analysis_parser.add_argument('--gfa', required=True, help='Input GFA file')
-    analysis_parser.add_argument('--output', '-o', required=True, help='Output directory')
-    analysis_parser.add_argument('--threads', '-t', type=int, default=4, help='Number of threads')
+    p = sub.add_parser('scoring', parents=[common], help='Score existing cycles')
+    p.add_argument('--cycle_folder', required=True,
+                   help='Cycle FASTA file, or a folder of *.fasta files')
 
-    # Scoring command
-    scoring_parser = subparsers.add_parser('scoring', help='Score existing cycles')
-    scoring_parser.add_argument('--cycle_folder', required=True, help='Cycle data folder')
-    scoring_parser.add_argument('--output', '-o', required=True, help='Output directory')
+    p = sub.add_parser('all', parents=[common],
+                       help='Run every stage (no input: the samples in sra_id_file)')
+    src = p.add_mutually_exclusive_group()
+    src.add_argument('--sra', help='Short-read SRA run accession')
+    src.add_argument('--fastq', nargs='+', help='FASTQ file(s); skips the download')
+    src.add_argument('--gfa', help='GFA file; skips download and assembly')
+    p.add_argument('--long', help='Long-read SRA accession for validation (with --sra)')
+    return parser
 
-    # Complete pipeline
-    all_parser = subparsers.add_parser('all', help='Run complete pipeline')
-    all_parser.add_argument('--sra', help='SRA accession number')
-    all_parser.add_argument('--fastq', help='Input FASTQ file/directory')
-    all_parser.add_argument('--gfa', help='Input GFA file')
-    all_parser.add_argument('--output', '-o', required=True, help='Output directory')
 
-    # Parse arguments
-    args = parser.parse_args()
-
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
-        sys.exit(1)
+        return 1
 
-    # Load configuration
-    config = load_config(args.config)
+    cfg = prepare(args)
+    missing = missing_tools(args.command, cfg)
+    if missing:
+        print("Warning: tools not found on PATH: " + ", ".join(missing), file=sys.stderr)
 
-    # Validate environment
-    if not validate_environment():
-        print("Warning: Some tools are missing. Pipeline may fail.")
-
-    # Execute command
     try:
-        if args.command == 'sra_download':
-            run_sra_download(args, config)
-        elif args.command == 'assembly':
-            run_assembly(args, config)
-        elif args.command == 'analysis':
-            run_analysis(args, config)
-        elif args.command == 'scoring':
-            run_scoring(args, config)
-        elif args.command == 'all':
-            run_all_pipeline(args, config)
-
+        COMMANDS[args.command](args, cfg)
     except KeyboardInterrupt:
-        print("\nInterrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        print("\nInterrupted by user", file=sys.stderr)
+        return 130
+    return 0
+
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
