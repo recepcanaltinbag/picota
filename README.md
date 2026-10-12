@@ -267,8 +267,11 @@ tracked.
 2. **Insertion sequences** — ISfinder and TnCentral, nucleotide FASTA
    (`picota_IS_db.fasta`). Finding one is a necessary condition for a
    candidate to score at all. Built by `scripts/build_is_db.py` from the merged
-   TnCentral + ISfinder set (`_tncentral_nointegrall_isfinder-TNs.fasta`) and
-   the ISfinder nucleotide release (`IS.fna`):
+   TnCentral + ISfinder set (`_tncentral_nointegrall_isfinder-TNs.fasta`, the
+   "-TNs" because the known composite transposons of set 3 were removed from
+   it by `DBs/CompTns/NoTns.py`, so a CT is not mistaken for its own IS) and
+   the ISfinder nucleotide release (`IS.fna`, as distributed by
+   [thanhleviet/ISfinder-sequences](https://github.com/thanhleviet/ISfinder-sequences)):
    - 21 records of the merged set had lost the line breaks around their header,
      so BLAST read each as part of the record before it; they are split back out.
    - 553 ISfinder elements of `IS.fna` absent from the merged set, by name and by
@@ -282,7 +285,10 @@ tracked.
    INTEGRALL integrons (`picota_IS_db_integrall.fasta`, built with
    `--merged picota/DBs/ISes/tncentral_integrall_isfinder.fa --out ...`).
 
-3. **Known composite transposons** — nucleotide FASTA (`Known_Tns.fasta`). A
+3. **Known composite transposons** — nucleotide FASTA (`Known_Tns.fasta`, 146
+   elements): the [TnCentral](https://tncentral.ncc.unesp.br/) GenBank records
+   whose features give the family as compound or composite transposon,
+   selected by `DBs/CompTns/extract_composite.py` and converted to FASTA. A
    cycle is reported as `Known` rather than `Novel` when it matches one at
    ≥ 95% identity over ≥ 80% of *both* sequences; a cycle that merely contains a
    known element stays `Novel`.
@@ -290,7 +296,12 @@ tracked.
 4. **Xenobiotic degradation genes** (KEGG-derived)
    - Built by `picota/src/build_xenobiotic_db.py` from KEGG KO identifiers
      resolved to UniProt sequences, then clustered
-   - Format: FASTA (proteins), 16,539 sequences
+   - Format: FASTA (proteins), 16,540 sequences: 16,539 from KEGG, plus the
+     hand-picked enzymes in `picota/src/xenobiotics_curated.fasta` that KEGG
+     assigns no KO, added by `--stage curated` and marked `PATH:curated`. That
+     is currently one, the aromatic ring-hydroxylating dioxygenase of
+     *Pseudomonas* sp. BIOMIG1BAC carried by the bundled `testNitro.gfa`
+     candidate
    - Header: `accession|KO:K16045|EC:1.1.1.145|PATH:map00984|description|organism`
 
 > [!IMPORTANT]

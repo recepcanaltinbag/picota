@@ -49,7 +49,16 @@ Usage
     build_xenobiotic_db.py --stage kegg      # KO metadata  -> kegg_ko.tsv
     build_xenobiotic_db.py --stage seqs      # UniProt      -> raw.fasta
     build_xenobiotic_db.py --stage filter    # filters+cdhit-> Xenobiotics_kegg.fasta
+    build_xenobiotic_db.py --stage curated   # + xenobiotics_curated.fasta
     build_xenobiotic_db.py --stage report
+
+The curated stage appends hand-picked enzymes that KEGG does not reach, from
+xenobiotics_curated.fasta next to this script (tracked in git, unlike DBs/).
+Each carries the KEGG-style header with empty KO/EC and PATH:curated, so a
+hit reads as its description and is distinguishable from a KEGG-derived one.
+Currently one sequence: QIH10984.1, the aromatic ring-hydroxylating
+dioxygenase alpha subunit of Pseudomonas sp. BIOMIG1BAC, which sits in the
+cargo of the bundled test_data/testNitro.gfa candidate and has no KO.
 
 Stages are separate because the first two are network-bound and slow; each
 writes its output and the next reads it, so an interrupted run resumes.
@@ -432,6 +441,22 @@ def stage_filter(raw_fasta, card_fasta, out_fasta, identity):
     print(f"  verified: 0 mobile-element and 0 non-enzymatic sequences in {out_fasta}")
 
 
+def stage_curated(final_fasta, curated_fasta):
+    """Append curated sequences to the final set, once each."""
+    present = {seq for _, seq in read_fasta(final_fasta)}
+    present_ids = {name.split('|')[0] for name, _ in read_fasta(final_fasta)}
+    added = 0
+    with open(final_fasta, "a") as out:
+        for name, seq in read_fasta(curated_fasta):
+            if seq in present or name.split('|')[0] in present_ids:
+                continue
+            if ' ' in name:
+                sys.exit(f"curated header has a space, BLAST would cut it: {name}")
+            out.write(f">{name}\n{seq}\n")
+            added += 1
+    print(f"{final_fasta}: {added} curated sequence(s) added")
+
+
 def stage_report(fasta, ko_tsv):
     from collections import Counter
     paths = Counter()
@@ -454,7 +479,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stage", required=True,
-                    choices=["kegg", "specific", "seqs", "filter", "report"])
+                    choices=["kegg", "specific", "seqs", "filter", "curated", "report"])
     ap.add_argument("--workdir", default=os.path.join(here, "xenodb"))
     ap.add_argument("--include-cyp450", action="store_true",
                     help="add the drug-metabolism P450 pathways (mostly vertebrate)")
@@ -484,6 +509,9 @@ def main():
                    raw, args.max_unreviewed)
     elif args.stage == "filter":
         stage_filter(raw, args.card, final, args.identity)
+    elif args.stage == "curated":
+        stage_curated(final, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                          "xenobiotics_curated.fasta"))
     else:
         stage_report(final, ko_tsv)
 

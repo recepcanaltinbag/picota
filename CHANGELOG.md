@@ -89,6 +89,12 @@ scoring and several output fields changed. See **Output changes** under
   adds missing ISfinder elements, and stops on any record it cannot parse
   rather than guessing. Deterministic. `tests/test_build_is_db.py` covers each
   glued-record shape found in the distributed file. See *Output changes*.
+- **Curated xenobiotic additions** — `build_xenobiotic_db.py --stage curated`
+  appends `picota/src/xenobiotics_curated.fasta` (tracked in git) to the KEGG
+  set, once each, with `PATH:curated` in the header. It holds one enzyme,
+  QIH10984.1, the aromatic ring-hydroxylating dioxygenase alpha subunit of
+  *Pseudomonas* sp. BIOMIG1BAC, which KEGG assigns no KO. 16,539 → 16,540
+  sequences. `tests/test_xenobiotic_curated.py`.
 - **`src/build_xenobiotic_db.py`** — rebuilds the xenobiotic database from KEGG:
   19 biodegradation pathways, keeping only KOs that BRITE br08901 places in
   "Xenobiotics biodegradation and metabolism" and in no other metabolic
@@ -326,11 +332,13 @@ An existing run re-executed with this release can write different results:
   (`config.yaml`, `config_IS26.yaml`, `config_random.yaml`) now name
   `Xenobiotics_kegg.fasta`, as do `test_complete_pipeline.py`, the benchmark
   drivers and the tests. On the bundled `testNitro.gfa` this takes the report
-  from two candidates to one: `Cycle_3`, whose only xenobiotic hit was a
-  recombinase-family protein, falls below the threshold, and `Cycle_2` keeps
-  its IS and drops from score3 85.5 to 55.7, because its aromatic
-  ring-hydroxylating dioxygenase and MFS transporter hits are not in the KEGG
-  set.
+  from two candidates to one. `Cycle_3`, whose only xenobiotic hit was a
+  recombinase-family protein, falls below the threshold. `Cycle_2` lost its
+  aromatic ring-hydroxylating dioxygenase hit, which has no KO, and dropped
+  from score3 85.5 to 55.7. That enzyme is now in the set as a curated
+  addition (below), which brings `Cycle_2` back to 84.4; the remaining
+  difference is its MFS transporter, a transporter rather than a degradation
+  enzyme, which stays out.
 - **IS reference set** — `path_to_ises` now names `picota_IS_db.fasta`, built
   by the new `scripts/build_is_db.py`. In the merged
   `_tncentral_nointegrall_isfinder-TNs.fasta` 21 records had lost the line
