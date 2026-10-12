@@ -131,7 +131,7 @@ def run_longread_download(acc, out_dir, sra_folder, fastq_dump_path, logger_name
 
 
 # --- Assembly ---
-def run_assembly(acc, raw_files, out_folder, cfg: Config, logger_name):
+def run_assembly(acc, raw_files, out_folder, cfg: Config, logger_name, delete_inputs=True):
     gfa_files = glob.glob(os.path.join(out_folder, "*.gfa"))
     if gfa_files:
         logger.info(f"[{acc}] Assembly zaten var, atlandı.")
@@ -147,6 +147,7 @@ def run_assembly(acc, raw_files, out_folder, cfg: Config, logger_name):
         cfg.paths.gfa_tools_path, cfg.paths.path_of_bandage, logger_name,
         spades_memory_gb=cfg.paths.spades_memory_gb,
         spades_timeout_s=cfg.paths.spades_timeout_s,
+        delete_inputs=delete_inputs,
     )
     return glob.glob(os.path.join(out_folder, "*.gfa"))
 

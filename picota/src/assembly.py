@@ -77,7 +77,8 @@ def _run_spades_assembly(spades_path: str, file_path: List[str], out_folder: str
         cmd.extend(['-m', str(int(memory_gb))])
     
     if len(file_path) == 1:
-        cmd.extend(['-1', file_path[0]])
+        # Single-end reads: SPAdes rejects -1 without its -2 mate.
+        cmd.extend(['-s', file_path[0]])
     elif len(file_path) == 2:
         cmd.extend(['-1', file_path[0], '-2', file_path[1]])
     else:
@@ -141,7 +142,11 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
         assembly_quiet, assembly_keep_temp_files,
         assembly_path_of_spades, assembly_path_of_fastp, assembly_skip_filtering, 
         assembler_type="spades", assembly_path_of_megahit=None, gfa_tools_path="gfatools", path_of_bandage="bandage", logger_name="picota_analysis",
-        spades_memory_gb=None, spades_timeout_s=None):
+        spades_memory_gb=None, spades_timeout_s=None, delete_inputs=True):
+    """delete_inputs=False keeps raw_file_list on disk. Reads fastp wrote are
+    intermediate and still removed with the other temporary files; the caller's
+    own reads are removed only when delete_inputs is true, which suits reads
+    the pipeline downloaded itself but not reads a user pointed it at."""
 
     global logger
     logger = logging.getLogger(logger_name)
@@ -169,6 +174,10 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
         else:
             the_final_file_list = filtered_file_list
     
+    # Without filtering (or when fastp wrote nothing) the assembler reads the
+    # caller's files directly, so cleanup must not touch them unless asked.
+    delete_assembled_inputs = delete_inputs or the_final_file_list is not raw_file_list
+
     gfa_folder = os.path.join(main_out_folder, 'gfa_files')
     if not os.path.exists(gfa_folder):
         os.mkdir(gfa_folder)
@@ -189,7 +198,8 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
             print(f'GFA File exists, removing and recomputing: {gfa_folder}/{gfa_name}')
             os.remove(gfa_folder + '/' + gfa_name)
 
-        best_gfa = assembly_driver_megahit(assembly_path_of_megahit, the_final_file_list, out_assembly, main_out_folder, gfa_folder, gfa_name, assembly_threads, assembly_quiet, assembly_keep_temp_files, gfa_tools_path, path_of_bandage)
+        best_gfa = assembly_driver_megahit(assembly_path_of_megahit, the_final_file_list, out_assembly, main_out_folder, gfa_folder, gfa_name, assembly_threads, assembly_quiet, assembly_keep_temp_files, gfa_tools_path, path_of_bandage,
+                                           delete_inputs=delete_assembled_inputs)
         return best_gfa
     else:
         gfa_files = []
@@ -207,7 +217,7 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
             assembly_driver_spades(assembly_path_of_spades, the_final_file_list, out_assembly, gfa_folder, \
                 gfa_name, assembly_threads, k_mer_l, assembly_quiet, assembly_keep_temp_files,
                 memory_gb=spades_memory_gb, timeout_s=spades_timeout_s,
-                delete_inputs=(k_index == len(k_list) - 1))
+                delete_inputs=delete_assembled_inputs and k_index == len(k_list) - 1)
 
         best_gfa = process_gfa_files(gfa_files, path_of_bandage)
         if best_gfa:
@@ -228,7 +238,8 @@ def assembly_main(name_for_assembly, raw_file_list, main_out_folder, assembly_th
 #MEGAHIT
 
 
-def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder, gfa_folder, gfa_name, threads, quiet_mode, assembly_keep_temp_files, gfa_tools_path, path_of_bandage):
+def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder, gfa_folder, gfa_name, threads, quiet_mode, assembly_keep_temp_files, gfa_tools_path, path_of_bandage,
+                            delete_inputs=True):
     
     
     
@@ -288,9 +299,10 @@ def assembly_driver_megahit(megahit_path, file_path, out_folder, main_out_folder
 
     if assembly_keep_temp_files == False:
         shutil.rmtree(out_folder)
-        for file_pt in file_path:
-            if os.path.exists(file_pt):
-                os.remove(file_pt)
+        if delete_inputs:
+            for file_pt in file_path:
+                if os.path.exists(file_pt):
+                    os.remove(file_pt)
         logger.info('Temp Files deleted., if you want to keep them use --keep_temp_files')
 
     return result_gfa
