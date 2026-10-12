@@ -37,6 +37,8 @@ setup(
         "pyyaml>=6.0",
         "tqdm>=4.0",
         "requests>=2.27",
+        "pysam>=0.19",
+        "matplotlib>=3.3",
     ],
     
     extras_require={

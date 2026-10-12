@@ -2,7 +2,7 @@
 # Logging
 # -------------------------
 logging:
-  log_file: "/media/lin-bio/back2/picota_project_RandomSRA/picota.log"
+  log_file: "picota_results/picota.log"
   level: "INFO"
   logger_name: "picota_analysis"
 
@@ -11,8 +11,8 @@ logging:
 # -------------------------
 paths:
   # Pipeline
-  outdir: "/media/lin-bio/back2/picota_project_RandomSRA"
-  sra_id_file: "picota/RandomSRA.csv"
+  outdir: "picota_results"
+  sra_id_file: "picota/samples.csv"   # sra_short_id,sra_long_id -- see README
   fastq_dump: "parallel-fastq-dump"
 
   # Assembly

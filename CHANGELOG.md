@@ -352,6 +352,11 @@ An existing run re-executed with this release can write different results:
   rebuilds a GFA it finds, since it may describe older reads or parameters.
 
 #### Other changes
+- **`config.yaml` no longer carries one machine's paths.** `outdir` and
+  `log_file` pointed at `/media/lin-bio/back2/picota_project_RandomSRA`, and
+  `sra_id_file` at that project's sample sheet. They are now
+  `picota_results`, `picota_results/picota.log` and `picota/samples.csv`.
+  `config_random.yaml` keeps the RandomSRA project's settings.
 - **BLAST threads default to 8**, was 4; `PICOTA_BLAST_THREADS` overrides it, and
   `picota.py --threads` sets it. Hits are identical at every thread count.
 - **First run after upgrading repeats BLAST searches**: outputs without a
@@ -370,6 +375,51 @@ An existing run re-executed with this release can write different results:
 - **Every `picota.py` subcommand failed at run time** (4fdf66f): the CLI imported
   `run_assembly_pipeline`, `run_scoring_pipeline` and `analyze_gfa_file`, which do
   not exist, and read a nonexistent `args.sra_file`.
+- **Assembly deleted the reads it was given.** With `skip_filtering: true`
+  (the shipped setting) SPAdes and MEGAHIT read the caller's FASTQs directly,
+  and cleanup removed them unless `keep_temp_files` was set: right for reads the
+  pipeline downloaded, destructive for reads a user pointed it at.
+  `assembly_main(delete_inputs=)` now decides that, default true, so the SRA
+  pipeline behaves as before. `picota assembly` and `picota all --fastq` pass
+  false. Reads fastp wrote are intermediates and are still removed.
+- **Single-end assembly passed SPAdes `-1` without `-2`**, which SPAdes rejects.
+  A single file now goes in as `-s`. Single-end downloads were fixed in d58663e,
+  but their assembly still failed.
+- **`picota` subcommands, found in pre-release review:**
+  - **Missing database:** a run with a missing reference database finished with
+    exit 0 and an empty table, because scoring only warns. The CLI now stops
+    first and names the missing path.
+  - **Relative database paths:** these were resolved against the working
+    directory only, so every one was "missing" when `picota` ran outside the
+    repository root. They now also resolve against the repository root.
+  - **Log file:** logging went to the config's `log_file`, a path on the
+    config author's machine, and crashed when its directory did not exist. A CLI
+    run now logs to `<output>/picota.log`.
+  - **Samples sharing one `--output`:** two samples shared one `scoring/`
+    directory, and every stage skips work whose output exists. A second sample
+    therefore got the first one's `picota_final_tab`, split against its own
+    cycles. Each sample now has `scoring/<sample>/` and `annot/<sample>/`, and
+    `all --fastq` assembles into `assembly/<sample>/`.
+  - **Sample name:** cycle files were named after the GFA. SPAdes names its best
+    graph by k (`99.gfa`), so `SRAID` came out as `99`. Cycle files are now
+    `<sample>_<graph>.fasta`, as `picota_testv3.py` names them. `--name`
+    overrides the sample name; `_` and `.`, which would truncate it in
+    `SRAID`, become `-`.
+  - **`--threads`** set `PICOTA_BLAST_THREADS` after the scoring module had
+    already read it at import, so BLAST kept 8 threads. It now sets the thread
+    count directly.
+  - **Nested output:** `all --fastq` failed on the nested output directory,
+    because `assembly_main` creates only one level.
+  - **`all` without input:** with no input and no sample sheet, `all` raised a
+    traceback; it now prints an error naming `sra_id_file`.
+- **Tied IS names with an unresolvable member**: `IS26|<unknown>` reported
+  `IS6|Unknown` and a bare `|` reported an empty group. Unresolvable names are
+  now ignored when any other name resolves, and the result is `Unknown` when
+  none does.
+- **`pysam` and `matplotlib` were missing from `requirements.txt`, `setup.py`
+  and the README's conda command.** `picota_testv3.py` imports both at start-up,
+  for long-read validation, so a fresh install failed on the first command even
+  without long reads.
 - **`picota_enriched.csv` was never written** by a normal run: `scoring_main`
   imported `output_formatter` as a top-level module, which fails when scoring is
   imported as `src.scoringv4ProtBlast`, and a broad `except` logged it as a

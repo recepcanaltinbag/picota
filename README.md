@@ -126,14 +126,16 @@ cd picota
 
 conda create -n picota -c bioconda -c conda-forge \
     python=3.9 prodigal blast spades megahit fastp \
-    minimap2 samtools biopython pandas pyyaml tqdm
+    minimap2 samtools biopython pandas pyyaml tqdm requests pysam matplotlib
 conda activate picota
 pip install -r requirements.txt
 pip install -e .        # optional: puts a `picota` command on PATH
 ```
 
-Every command below is run from the repository root. `pip install -e .` is
-optional; without it, `python3 picota/picota.py` does the same as `picota`.
+The commands below are written from the repository root. Relative paths in a
+config (`picota/DBs/...`) are looked up from the working directory and then
+from the repository root, so `picota` also runs from elsewhere. `pip install -e .`
+is optional; without it, `python3 picota/picota.py` does the same as `picota`.
 
 The reference databases are not in the git repository — see
 [Reference databases](#reference-databases) for what goes where.
@@ -164,7 +166,9 @@ python3 picota/picota.py analysis --gfa picota/test_data/testNitro.gfa --output 
 
 Runs detection, scoring and annotation over the bundled *P. nitroreducens*
 graph — no download, no assembly — with the settings in `picota/config.yaml`.
-Results land in `picota_results/cycles/`, `scoring/` and `annot/`.
+Results land in `picota_results/cycles/`, `scoring/testNitro/` and
+`annot/testNitro/`, and the log in `picota_results/picota.log`. If a reference
+database is missing the command stops and names it, before doing any work.
 
 ### From SRA accessions
 
@@ -223,6 +227,11 @@ picota all          --gfa assembly.gfa --output results/        # or --fastq ...
 ```
 
 `--long` adds long-read validation with an ONT run of the same isolate.
+`--name` sets the sample name written to the results (`SRAID`); by default it
+comes from the FASTQ or GFA file name. Each sample gets its own `scoring/` and
+`annot/` subdirectory, so several can share one `--output`. FASTQ files given
+with `--fastq` are never deleted; reads the pipeline downloads itself are, once
+assembled, unless `keep_temp_files` is set.
 
 ### Cycle detection as a library
 
@@ -304,7 +313,7 @@ output/
 ├── scoring/<accession>/
 │   ├── picota_final_tab      Tab-delimited raw results
 │   ├── picota_enriched.csv   Enriched CT-tagged results
-│   ├── genbank/              GenBank annotations
+│   ├── <cycle file>/         GenBank annotation per candidate (.gbk)
 │   └── Pico_Temp/            Intermediate BLAST / Prodigal files
 ├── annot/<accession>/        Split transposon/cargo FASTA
 └── mapping/<accession>/      BAM files and long-read analysis
@@ -606,9 +615,10 @@ loaded machine without anything being wrong.
 <details>
 <summary><b>Nothing is reported, or every score is 0.</b></summary>
 
-Check the four database paths in `config.yaml`. A path that does not resolve is
-skipped with a warning in the log rather than failing the run, and for the IS
-set that is fatal to the output: no IS hit means `IS_gate` is 0, so every
+Check the four database paths in `config.yaml`. The `picota` command stops when
+one is missing, but the scoring stage itself, called from a script or from
+`picota_testv3.py`, skips it with a warning and carries on, and for the IS set
+that is fatal to the output: no IS hit means `IS_gate` is 0, so every
 candidate scores 0 and the table comes back empty. `Found Cycle Files` in the
 log confirms detection ran; an empty result under a populated `cycles/` points
 at the databases, not at the graph.

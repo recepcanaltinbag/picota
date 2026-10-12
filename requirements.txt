@@ -4,6 +4,10 @@ pandas>=1.3
 pyyaml>=6.0
 tqdm>=4.0
 requests>=2.27
+# Imported by the pipeline at start-up (long-read validation and its plots),
+# so needed even when no long reads are given
+pysam>=0.19
+matplotlib>=3.3
 
 # Assembly & Analysis
 # Note: External tools required (see README.md for installation)
