@@ -262,6 +262,12 @@ of use — so place them under `picota/DBs/` at the paths the config names. Only
 `picota/DBs/ISes/isfinder_taxonomy.tsv`, which the IS-family lookup reads, is
 tracked.
 
+**The prepared databases are available from the authors on request**, ready to
+place under `picota/DBs/`. That includes the merged TnCentral + ISfinder set
+that `scripts/build_is_db.py` starts from and `Known_Tns.fasta`, which are not
+otherwise published. Open an [issue](https://github.com/recepcanaltinbag/picota/issues)
+or write to the corresponding author.
+
 1. **CARD** — antibiotic resistance genes.
    [card.mcmaster.ca](https://card.mcmaster.ca/), protein FASTA
    (`protein_fasta_protein_homolog_model.fasta`).
